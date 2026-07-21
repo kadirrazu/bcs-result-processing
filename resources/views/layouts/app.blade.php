@@ -45,6 +45,15 @@
                 </h1>
 
                 <div class="navbar-nav flex-row order-md-last">
+
+                    <li class="nav-item {{ request()->routeIs('users.*') ? 'active' : '' }} me-2">
+                        <a class="nav-link" href="{{ route('users.index') }}">
+                            <span class="nav-link-title">
+                                Users
+                            </span>
+                        </a>
+                    </li>
+
                     <div class="nav-item dropdown">
                         <a
                             href="#"
@@ -57,12 +66,18 @@
                             </span>
 
                             <div class="d-none d-xl-block ps-2">
-                                <div>
-                                    {{ auth()->user()->name }}
-                                </div>
+                                <div class="d-none d-xl-block ps-2">
+                                    <div>
+                                        {{ auth()->user()->name }}
+                                    </div>
 
-                                <div class="mt-1 small text-secondary">
-                                    {{ auth()->user()->email }}
+                                    <div class="mt-1 small text-secondary">
+                                        {{ auth()->user()->designation?->name ?? 'Designation not assigned' }}
+                                    </div>
+
+                                    <div class="mt-1 small text-secondary">
+                                        {{ auth()->user()->email }}
+                                    </div>
                                 </div>
                             </div>
                         </a>
@@ -140,8 +155,13 @@
 
             <footer class="footer footer-transparent d-print-none">
                 <div class="container-xl">
-                    <div class="text-center text-secondary">
-                        Md. Abdul Kadir - Programmer - BPSC
+                    <div class="row">
+                        <div class="col-md-6">
+                            Crafted with ❤️ by "Md. Abdul Kadir - Programmer - BPSC";
+                        </div>
+                        <div class="col-md-6 text-end">
+                            Version - Baseline 1.0
+                        </div>
                     </div>
                 </div>
             </footer>
