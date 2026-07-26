@@ -45,7 +45,11 @@ class UpdateUserRequest extends FormRequest
             'designation_id' => [
                 'required',
                 'integer',
-                Rule::exists('designations', 'id')->where('is_active', true),
+                Rule::exists('designations', 'id')->where(
+                    fn ($query) => $query
+                        ->where('is_active', true)
+                        ->orWhere('id', $user->designation_id)
+                ),
             ],
             'role' => ['required', Rule::enum(UserRole::class)],
             'password' => ['nullable', 'confirmed', Password::min(8)],

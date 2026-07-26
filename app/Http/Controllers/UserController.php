@@ -2,24 +2,31 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Users\CreateUserAction;
+use App\Actions\Users\UpdateUserAction;
+use App\Data\UserData;
 use App\Enums\UserRole;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
-use App\Models\Designation;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Collection;
+use App\Queries\Designations\GetAssignableDesignationsQuery;
+use App\Queries\Users\ListUsersQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * Manage authenticated central application users.
- *
- * Business operations will be moved into application actions in the next
- * milestone. This step first establishes an enforceable authorization boundary.
+ * Coordinate HTTP requests for central application user administration.
  */
-class UserController extends Controller
+final class UserController extends Controller
 {
+    public function __construct(
+        private readonly ListUsersQuery $listUsers,
+        private readonly GetAssignableDesignationsQuery $assignableDesignations,
+        private readonly CreateUserAction $createUser,
+        private readonly UpdateUserAction $updateUser,
+    ) {}
+
     /**
      * Display the paginated user directory.
      */
@@ -29,23 +36,10 @@ class UserController extends Controller
 
         $search = trim((string) $request->query('search'));
 
-        $users = User::query()
-            ->with('designation')
-            ->when($search !== '', function ($query) use ($search): void {
-                $query->where(function ($query) use ($search): void {
-                    $query
-                        ->where('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhereHas('designation', function ($query) use ($search): void {
-                            $query->where('name', 'like', "%{$search}%");
-                        });
-                });
-            })
-            ->latest('id')
-            ->paginate(10)
-            ->withQueryString();
-
-        return view('users.index', compact('users', 'search'));
+        return view('users.index', [
+            'users' => $this->listUsers->execute($search),
+            'search' => $search,
+        ]);
     }
 
     /**
@@ -56,7 +50,7 @@ class UserController extends Controller
         $this->authorize('create', User::class);
 
         return view('users.create', [
-            'designations' => $this->activeDesignations(),
+            'designations' => $this->assignableDesignations->execute(),
             'roles' => UserRole::options(),
         ]);
     }
@@ -66,16 +60,9 @@ class UserController extends Controller
      */
     public function store(StoreUserRequest $request): RedirectResponse
     {
-        $validated = $request->validated();
-
-        User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'designation_id' => $validated['designation_id'],
-            'role' => $validated['role'],
-            'password' => $validated['password'],
-            'is_active' => $request->boolean('is_active'),
-        ]);
+        $this->createUser->execute(
+            UserData::fromValidated($request->validated(), $request->boolean('is_active'))
+        );
 
         return redirect()
             ->route('users.index')
@@ -103,7 +90,7 @@ class UserController extends Controller
 
         return view('users.edit', [
             'user' => $user,
-            'designations' => $this->activeDesignations($user),
+            'designations' => $this->assignableDesignations->execute($user),
             'roles' => UserRole::options(),
         ]);
     }
@@ -113,53 +100,14 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
-        $validated = $request->validated();
-        $isActive = $request->boolean('is_active');
-
-        if ($request->user()->is($user) && ! $isActive) {
-            return back()
-                ->withInput()
-                ->withErrors([
-                    'is_active' => 'You cannot deactivate your own account.',
-                ]);
-        }
-
-        $data = [
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'designation_id' => $validated['designation_id'],
-            'role' => $validated['role'],
-            'is_active' => $isActive,
-        ];
-
-        if (! empty($validated['password'])) {
-            $data['password'] = $validated['password'];
-        }
-
-        $user->update($data);
+        $this->updateUser->execute(
+            actor: $request->user(),
+            target: $user,
+            data: UserData::fromValidated($request->validated(), $request->boolean('is_active')),
+        );
 
         return redirect()
             ->route('users.index')
             ->with('success', 'User updated successfully.');
-    }
-
-    /**
-     * Return active designations, retaining the target user's current value.
-     *
-     * @return Collection<int, Designation>
-     */
-    private function activeDesignations(?User $user = null): Collection
-    {
-        return Designation::query()
-            ->where(function ($query) use ($user): void {
-                $query->where('is_active', true);
-
-                if ($user?->designation_id) {
-                    $query->orWhere('id', $user->designation_id);
-                }
-            })
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->get();
     }
 }
