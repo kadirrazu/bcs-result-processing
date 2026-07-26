@@ -3,31 +3,28 @@
 namespace App\Queries\Designations;
 
 use App\Models\Designation;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 
-/**
- * Retrieve designations that may be assigned from a user form.
- */
-final class GetAssignableDesignationsQuery
+class GetAssignableDesignationsQuery
 {
     /**
-     * Include an inactive current designation so an existing user remains
-     * editable without silently forcing an unrelated designation change.
+     * Retrieve active designations available for assignment.
+     *
+     * When editing a user, the user's currently assigned designation remains
+     * available even if that designation has subsequently been deactivated.
      *
      * @return Collection<int, Designation>
      */
-    public function execute(?User $user = null): Collection
+    public function execute(?int $currentDesignationId = null): Collection
     {
         return Designation::query()
-            ->where(function ($query) use ($user): void {
+            ->where(function ($query) use ($currentDesignationId): void {
                 $query->where('is_active', true);
 
-                if ($user?->designation_id !== null) {
-                    $query->orWhereKey($user->designation_id);
+                if ($currentDesignationId !== null) {
+                    $query->orWhere('id', $currentDesignationId);
                 }
             })
-            ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
     }
