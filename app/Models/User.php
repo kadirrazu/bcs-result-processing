@@ -2,25 +2,29 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\UserRole;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-use App\Enums\UserRole;
-
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+/**
+ * Central application user.
+ *
+ * Examination candidates are not represented by this model. This model is
+ * reserved for authenticated application operators and administrators.
+ */
 class User extends Authenticatable
 {
-
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    /**
+     * Attributes that may be mass assigned.
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'name',
         'email',
@@ -28,15 +32,21 @@ class User extends Authenticatable
         'designation_id',
         'role',
         'is_active',
+        'last_login_at',
     ];
 
+    /**
+     * Attributes hidden during serialization.
+     *
+     * @var list<string>
+     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
     /**
-     * Get the attributes that should be cast.
+     * Attribute casts used by the model.
      *
      * @return array<string, string>
      */
@@ -51,9 +61,19 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * The user's organizational designation.
+     */
     public function designation(): BelongsTo
     {
         return $this->belongsTo(Designation::class);
     }
 
+    /**
+     * Determine whether the user has administrator authority.
+     */
+    public function isAdmin(): bool
+    {
+        return $this->role === UserRole::Admin;
+    }
 }

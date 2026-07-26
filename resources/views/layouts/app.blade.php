@@ -46,6 +46,7 @@
 
                 <div class="navbar-nav flex-row order-md-last">
 
+                    @can('viewAny', \App\Models\User::class)
                     <li class="nav-item {{ request()->routeIs('users.*') ? 'active' : '' }} me-2">
                         <a class="nav-link" href="{{ route('users.index') }}">
                             <span class="nav-link-title">
@@ -53,6 +54,7 @@
                             </span>
                         </a>
                     </li>
+                    @endcan
 
                     <div class="nav-item dropdown">
                         <a
