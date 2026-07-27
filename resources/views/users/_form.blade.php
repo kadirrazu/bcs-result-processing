@@ -1,9 +1,11 @@
 @php
+    use App\Enums\UserRole;
+
     $editing = isset($user);
-    $selectedRole = old(
-        'role',
-        $editing ? $user->role->value : 'operator'
-    );
+    $currentRole = $editing
+        ? ($user->role instanceof UserRole ? $user->role->value : (string) $user->role)
+        : UserRole::Operator->value;
+    $selectedRole = old('role', $currentRole);
 @endphp
 
 <div class="row g-3">
@@ -23,9 +25,7 @@
         >
 
         @error('name')
-            <div class="invalid-feedback">
-                {{ $message }}
-            </div>
+            <div class="invalid-feedback">{{ $message }}</div>
         @enderror
     </div>
 
@@ -44,9 +44,7 @@
         >
 
         @error('email')
-            <div class="invalid-feedback">
-                {{ $message }}
-            </div>
+            <div class="invalid-feedback">{{ $message }}</div>
         @enderror
     </div>
 
@@ -66,12 +64,7 @@
             @foreach ($designations as $designation)
                 <option
                     value="{{ $designation->id }}"
-                    @selected(
-                        old(
-                            'designation_id',
-                            $user->designation_id ?? ''
-                        ) == $designation->id
-                    )
+                    @selected(old('designation_id', $user->designation_id ?? '') == $designation->id)
                 >
                     {{ $designation->name }}
                 </option>
@@ -79,9 +72,7 @@
         </select>
 
         @error('designation_id')
-            <div class="invalid-feedback">
-                {{ $message }}
-            </div>
+            <div class="invalid-feedback">{{ $message }}</div>
         @enderror
     </div>
 
@@ -96,20 +87,17 @@
             class="form-select @error('role') is-invalid @enderror"
             required
         >
+            <option value="">Select a role</option>
+
             @foreach ($roles as $role)
-                <option
-                    value="{{ $role['value'] }}"
-                    @selected($selectedRole === $role['value'])
-                >
-                    {{ $role['label'] }}
+                <option value="{{ $role->value }}" @selected($selectedRole === $role->value)>
+                    {{ $role->label() }}
                 </option>
             @endforeach
         </select>
 
         @error('role')
-            <div class="invalid-feedback">
-                {{ $message }}
-            </div>
+            <div class="invalid-feedback">{{ $message }}</div>
         @enderror
     </div>
 
@@ -130,22 +118,16 @@
         >
 
         @if ($editing)
-            <small class="form-hint">
-                Leave blank to keep the current password.
-            </small>
+            <small class="form-hint">Leave blank to keep the current password.</small>
         @endif
 
         @error('password')
-            <div class="invalid-feedback">
-                {{ $message }}
-            </div>
+            <div class="invalid-feedback">{{ $message }}</div>
         @enderror
     </div>
 
     <div class="col-md-6">
-        <label for="password_confirmation" class="form-label">
-            Confirm Password
-        </label>
+        <label for="password_confirmation" class="form-label">Confirm Password</label>
 
         <input
             type="password"
@@ -158,34 +140,21 @@
 
     <div class="col-12">
         <label class="form-check form-switch">
-            <input
-                type="hidden"
-                name="is_active"
-                value="0"
-            >
+            <input type="hidden" name="is_active" value="0">
 
             <input
                 type="checkbox"
                 name="is_active"
                 value="1"
                 class="form-check-input"
-                @checked(
-                    old(
-                        'is_active',
-                        isset($user) ? $user->is_active : true
-                    )
-                )
+                @checked(old('is_active', $user->is_active ?? true))
             >
 
-            <span class="form-check-label">
-                Active user
-            </span>
+            <span class="form-check-label">Active user</span>
         </label>
 
         @error('is_active')
-            <div class="text-danger small mt-1">
-                {{ $message }}
-            </div>
+            <div class="text-danger small mt-1">{{ $message }}</div>
         @enderror
     </div>
 </div>

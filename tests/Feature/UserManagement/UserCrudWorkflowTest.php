@@ -110,6 +110,50 @@ class UserCrudWorkflowTest extends TestCase
             ->assertDontSee('Other User');
     }
 
+    public function test_admin_can_render_the_user_creation_form(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $this->createDesignation('Assistant Director');
+
+        $this->actingAs($admin)
+            ->get(route('users.create'))
+            ->assertOk()
+            ->assertSee('Administrator')
+            ->assertSee('Operator')
+            ->assertSee('Viewer');
+    }
+
+    public function test_admin_can_render_the_user_edit_form(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $designation = $this->createDesignation('Programmer');
+        $user = User::factory()->create([
+            'designation_id' => $designation->id,
+            'role' => UserRole::Viewer,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('users.edit', $user))
+            ->assertOk()
+            ->assertSee($user->name)
+            ->assertSee('Viewer');
+    }
+
+    public function test_edit_form_retains_an_inactive_current_designation(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $designation = $this->createDesignation('Legacy Officer');
+        $designation->update(['is_active' => false]);
+        $user = User::factory()->create([
+            'designation_id' => $designation->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('users.edit', $user))
+            ->assertOk()
+            ->assertSee('Legacy Officer');
+    }
+
     private function createDesignation(string $name): Designation
     {
         return Designation::query()->create([

@@ -51,7 +51,7 @@ final class UserController extends Controller
 
         return view('users.create', [
             'designations' => $this->assignableDesignations->execute(),
-            'roles' => UserRole::options(),
+            'roles' => UserRole::cases(),
         ]);
     }
 
@@ -80,18 +80,16 @@ final class UserController extends Controller
     }
 
     /**
-     * Display the user edit form.
+     * Display the form for editing an existing user.
      */
     public function edit(User $user): View
     {
         $this->authorize('update', $user);
 
-        $user->load('designation');
-
         return view('users.edit', [
             'user' => $user,
-            'designations' => $this->assignableDesignations->execute($user),
-            'roles' => UserRole::options(),
+            'designations' => $this->assignableDesignations->execute($user->designation_id),
+            'roles' => UserRole::cases(),
         ]);
     }
 

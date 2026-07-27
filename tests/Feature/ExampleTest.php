@@ -7,12 +7,15 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     /**
-     * Confirm that unauthenticated users are redirected to the login page.
+     * Confirm that the application entry point redirects to the dashboard
+     * and that guests cannot access the protected dashboard.
      */
     public function test_the_application_redirects_guests_to_login(): void
     {
-        $response = $this->get('/');
+        $this->get('/')
+            ->assertRedirect(route('dashboard'));
 
-        $response->assertRedirect(route('login'));
+        $this->get(route('dashboard'))
+            ->assertRedirect(route('login'));
     }
 }
