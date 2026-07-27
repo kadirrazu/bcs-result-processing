@@ -46,6 +46,33 @@
 
                 <div class="navbar-nav flex-row order-md-last">
 
+                    @php
+                        $activeExamination = app(
+                            \App\Support\Examinations\ExaminationContext::class
+                        )->current();
+                    @endphp
+
+                    @if ($activeExamination)
+                        <div class="nav-item me-3">
+                            <span class="badge bg-success-lt">
+                                {{ $activeExamination->name }}
+                            </span>
+                        </div>
+                    @endif
+
+                    @can('viewAny', \App\Models\Examination::class)
+                        <li class="nav-item {{ request()->routeIs('examinations.*') ? 'active' : '' }} me-2">
+                            <a
+                                class="nav-link"
+                                href="{{ route('examinations.index') }}"
+                            >
+                                <span class="nav-link-title">
+                                    Examinations
+                                </span>
+                            </a>
+                        </li>
+                    @endcan
+
                     @can('viewAny', \App\Models\User::class)
                     <li class="nav-item {{ request()->routeIs('users.*') ? 'active' : '' }} me-2">
                         <a class="nav-link" href="{{ route('users.index') }}">

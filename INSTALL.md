@@ -1,51 +1,72 @@
-# User Module Enterprise Refactor v2 — Installation
+# Dynamic Examination Database Manager — Installation
 
-## 1. Back up or commit current work
+Copy this package into the Laravel project root and overwrite matching files.
 
-```bash
-git status
-git add .
-git commit -m "chore: checkpoint before user module v2 patch"
+## 1. Environment
+
+Optional when examination databases use the same MySQL server and credentials as CENTRAL:
+
+```env
+EXAM_DB_BASE_CONNECTION=mysql
 ```
 
-## 2. Copy the patch
+Create each registered physical database manually, for example:
 
-Copy every directory from this package into the Laravel project root and allow the four code/test files to be replaced.
+```sql
+CREATE DATABASE bcs_exam_47 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
-Files replaced:
+The configured application database user must have access to it. The application never stores database passwords in the central registry.
 
-- `app/Enums/UserRole.php`
-- `app/Http/Controllers/UserController.php`
-- `resources/views/users/_form.blade.php`
-- `tests/Feature/UserManagement/UserCrudWorkflowTest.php`
+## 2. Route middleware for future examination modules
 
-File added:
+Use the middleware classes directly on examination-domain route groups:
 
-- `docs/16-user-module-v2-audit-and-fixes.md`
+```php
+use App\Http\Middleware\ConfigureExaminationConnection;
+use App\Http\Middleware\EnsureExaminationSelected;
 
-## 3. Clear generated state
+Route::middleware([
+    'auth',
+    EnsureExaminationSelected::class,
+    ConfigureExaminationConnection::class,
+])->group(function (): void {
+    // Candidate, Cadre, Subject, Marks, Merit and Allocation routes.
+});
+```
+
+Do not apply these middleware to central routes such as users or examinations.
+
+## 3. Commands
 
 ```bash
 composer dump-autoload
 php artisan optimize:clear
-```
-
-## 4. Format and test
-
-```bash
+php artisan migrate
 php vendor/bin/pint --dirty
-php artisan test tests/Feature/UserManagement
+php artisan test tests/Unit/Examinations
+php artisan test tests/Feature/Examinations
 php artisan test
 ```
 
-## 5. Manual checks
+## 4. Manual verification
 
-1. Open Users > Create and confirm all three roles render.
-2. Open Users > Edit and confirm the current role is selected.
-3. Edit a user without entering a password and confirm the old password remains valid.
-4. Confirm an inactive current designation remains visible on its user's edit form.
-5. Confirm an administrator cannot deactivate their own account.
+1. Create the physical database matching `database_name`.
+2. Open **Examinations**.
+3. Click **Check DB**; health should become **Connected**.
+4. Click **Select**; the examination should become **Active context**.
+5. Temporarily rename the database and confirm selection fails without replacing the previous active context.
 
-## Expected result
+## 5. Model rule
 
-The full suite should pass, and create/edit forms should load without enum, object-as-array, missing-method, or query-argument errors.
+Central models extend `Illuminate\Database\Eloquent\Model`.
+Operational examination models extend:
+
+```php
+use App\Models\ExaminationModel;
+
+final class Candidate extends ExaminationModel
+{
+    // Uses the active physical BCS database automatically.
+}
+```
