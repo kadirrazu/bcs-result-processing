@@ -9,6 +9,7 @@ use App\Http\Requests\StorePostRelatedSubjectRequest;
 use App\Http\Requests\UpdatePostRelatedSubjectRequest;
 use App\Models\PostRelatedSubject;
 use App\Queries\PostRelatedSubjects\ListPostRelatedSubjectsQuery;
+use App\Support\Pagination\PaginationSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -16,14 +17,30 @@ use Illuminate\View\View;
 /** Coordinate central post-related subject master administration. */
 final class PostRelatedSubjectController extends Controller
 {
-    public function __construct(private readonly ListPostRelatedSubjectsQuery $list, private readonly CreatePostRelatedSubjectAction $createAction, private readonly UpdatePostRelatedSubjectAction $updateAction) {}
+    public function __construct(
+        private readonly ListPostRelatedSubjectsQuery $list,
+        private readonly CreatePostRelatedSubjectAction $createAction,
+        private readonly UpdatePostRelatedSubjectAction $updateAction,
+    ) {}
 
     public function index(Request $request): View
     {
         $this->authorize('viewAny', PostRelatedSubject::class);
-        $search = trim((string) $request->query('search'));
 
-        return view('master-data.subjects.index', ['records' => $this->list->execute($search), 'search' => $search, 'title' => 'Post-related Subjects', 'pretitle' => 'Master Data', 'routePrefix' => 'post-related-subjects', 'codeHelp' => 'Code used by the post-related written examination.']);
+        $search = trim((string) $request->query('search'));
+        $pagination = PaginationSettings::fromRequest($request);
+
+        return view('master-data.subjects.index', [
+            'records' => $this->list->execute($search, $pagination->perPage),
+            'search' => $search,
+            'perPage' => $pagination->perPage,
+            'pageSizes' => PaginationSettings::ALLOWED_PER_PAGE,
+            'title' => 'Post-related Subjects',
+            'pretitle' => 'Master Data',
+            'routePrefix' => 'post-related-subjects',
+            'importType' => 'post-related-subjects',
+            'codeHelp' => 'Code used by the post-related written examination.',
+        ]);
     }
 
     public function create(): View
@@ -58,6 +75,6 @@ final class PostRelatedSubjectController extends Controller
     {
         $this->updateAction->execute($postRelatedSubject, SubjectMasterData::fromValidated($request->validated(), $request->boolean('is_active')));
 
-        return redirect()->route('post-related-subjects.index')->with('success','Post-related subject updated successfully.');
+        return redirect()->route('post-related-subjects.index')->with('success', 'Post-related subject updated successfully.');
     }
 }

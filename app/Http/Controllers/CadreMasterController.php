@@ -10,6 +10,7 @@ use App\Http\Requests\StoreCadreMasterRequest;
 use App\Http\Requests\UpdateCadreMasterRequest;
 use App\Models\CadreMaster;
 use App\Queries\CadreMasters\ListCadreMastersQuery;
+use App\Support\Pagination\PaginationSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -17,14 +18,25 @@ use Illuminate\View\View;
 /** Coordinate central cadre master administration. */
 final class CadreMasterController extends Controller
 {
-    public function __construct(private readonly ListCadreMastersQuery $list, private readonly CreateCadreMasterAction $createAction, private readonly UpdateCadreMasterAction $updateAction) {}
+    public function __construct(
+        private readonly ListCadreMastersQuery $list,
+        private readonly CreateCadreMasterAction $createAction,
+        private readonly UpdateCadreMasterAction $updateAction,
+    ) {}
 
     public function index(Request $request): View
     {
         $this->authorize('viewAny', CadreMaster::class);
-        $search = trim((string) $request->query('search'));
 
-        return view('master-data.cadres.index', ['records' => $this->list->execute($search), 'search' => $search]);
+        $search = trim((string) $request->query('search'));
+        $pagination = PaginationSettings::fromRequest($request);
+
+        return view('master-data.cadres.index', [
+            'records' => $this->list->execute($search, $pagination->perPage),
+            'search' => $search,
+            'perPage' => $pagination->perPage,
+            'pageSizes' => PaginationSettings::ALLOWED_PER_PAGE,
+        ]);
     }
 
     public function create(): View
@@ -59,6 +71,6 @@ final class CadreMasterController extends Controller
     {
         $this->updateAction->execute($cadreMaster, CadreMasterData::fromValidated($request->validated(), $request->boolean('is_active')));
 
-        return redirect()->route('cadre-masters.index')->with('success','Cadre master updated successfully.');
+        return redirect()->route('cadre-masters.index')->with('success', 'Cadre master updated successfully.');
     }
 }

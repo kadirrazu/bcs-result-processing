@@ -9,6 +9,7 @@ use App\Http\Requests\StoreBachelorSubjectRequest;
 use App\Http\Requests\UpdateBachelorSubjectRequest;
 use App\Models\BachelorSubject;
 use App\Queries\BachelorSubjects\ListBachelorSubjectsQuery;
+use App\Support\Pagination\PaginationSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -16,14 +17,30 @@ use Illuminate\View\View;
 /** Coordinate central bachelor subject master administration. */
 final class BachelorSubjectController extends Controller
 {
-    public function __construct(private readonly ListBachelorSubjectsQuery $list, private readonly CreateBachelorSubjectAction $createAction, private readonly UpdateBachelorSubjectAction $updateAction) {}
+    public function __construct(
+        private readonly ListBachelorSubjectsQuery $list,
+        private readonly CreateBachelorSubjectAction $createAction,
+        private readonly UpdateBachelorSubjectAction $updateAction,
+    ) {}
 
     public function index(Request $request): View
     {
         $this->authorize('viewAny', BachelorSubject::class);
-        $search = trim((string) $request->query('search'));
 
-        return view('master-data.subjects.index', ['records' => $this->list->execute($search), 'search' => $search, 'title' => 'Bachelor Subjects', 'pretitle' => 'Master Data', 'routePrefix' => 'bachelor-subjects', 'codeHelp' => 'Official bachelor or equivalent subject code.']);
+        $search = trim((string) $request->query('search'));
+        $pagination = PaginationSettings::fromRequest($request);
+
+        return view('master-data.subjects.index', [
+            'records' => $this->list->execute($search, $pagination->perPage),
+            'search' => $search,
+            'perPage' => $pagination->perPage,
+            'pageSizes' => PaginationSettings::ALLOWED_PER_PAGE,
+            'title' => 'Bachelor Subjects',
+            'pretitle' => 'Master Data',
+            'routePrefix' => 'bachelor-subjects',
+            'importType' => 'bachelor-subjects',
+            'codeHelp' => 'Official bachelor or equivalent subject code.',
+        ]);
     }
 
     public function create(): View
@@ -58,6 +75,6 @@ final class BachelorSubjectController extends Controller
     {
         $this->updateAction->execute($bachelorSubject, SubjectMasterData::fromValidated($request->validated(), $request->boolean('is_active')));
 
-        return redirect()->route('bachelor-subjects.index')->with('success','Bachelor subject updated successfully.');
+        return redirect()->route('bachelor-subjects.index')->with('success', 'Bachelor subject updated successfully.');
     }
 }
