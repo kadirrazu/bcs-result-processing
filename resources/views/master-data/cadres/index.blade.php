@@ -9,6 +9,8 @@
                 <h2 class="page-title">Cadre Masters</h2>
             </div>
             <div class="col-auto ms-auto d-flex gap-2">
+                <a href="{{ route('master-data.exports.pdf', 'cadre-masters') }}" class="btn btn-outline-danger">Export PDF</a>
+                <a href="{{ route('master-data.exports.excel', 'cadre-masters') }}" class="btn btn-outline-success">Export Excel</a>
                 <a href="{{ route('master-data.imports.template', 'cadre-masters') }}" class="btn btn-outline-secondary">Download Template</a>
                 <a href="{{ route('master-data.imports.create', 'cadre-masters') }}" class="btn btn-outline-primary">Import Excel</a>
                 <a href="{{ route('cadre-masters.create') }}" class="btn btn-primary">Add Cadre</a>
@@ -33,12 +35,12 @@
             </div>
             <div class="table-responsive">
                 <table class="table table-vcenter card-table">
-                    <thead><tr><th>Order</th><th>Code</th><th>Abbreviation</th><th>English title</th><th>বাংলা নাম</th><th>Type</th><th>Status</th><th></th></tr></thead>
+                    <thead><tr><th>SL</th><th>Order</th><th>Code</th><th>Abbreviation</th><th>English title</th><th>বাংলা নাম</th><th>Type</th><th>Status</th><th></th></tr></thead>
                     <tbody>
                     @forelse($records as $record)
-                        <tr><td>{{ $record->display_order }}</td><td>{{ $record->cadre_code }}</td><td><code>{{ $record->cadre_abbr }}</code></td><td>{{ $record->cadre_title }}</td><td>{{ $record->cadre_title_bn }}</td><td>{{ $record->cadre_type->value }}</td><td><span class="badge {{ $record->is_active ? 'bg-success-lt' : 'bg-secondary-lt' }}">{{ $record->is_active ? 'Active' : 'Inactive' }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="{{ route('cadre-masters.edit', $record) }}">Edit</a></td></tr>
+                        <tr><td>{{ ($records->firstItem() ?? 1) + $loop->index }}</td><td>{{ $record->display_order }}</td><td>{{ $record->cadre_code }}</td><td><code>{{ $record->cadre_abbr }}</code></td><td>{{ $record->cadre_title }}</td><td>{{ $record->cadre_title_bn }}</td><td>{{ $record->cadre_type->value }}</td><td><span class="badge {{ $record->is_active ? 'bg-success-lt' : 'bg-secondary-lt' }}">{{ $record->is_active ? 'Active' : 'Inactive' }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="{{ route('cadre-masters.edit', $record) }}">Edit</a></td></tr>
                     @empty
-                        <tr><td colspan="8" class="text-center text-secondary py-4">No cadres found.</td></tr>
+                        <tr><td colspan="9" class="text-center text-secondary py-4">No cadres found.</td></tr>
                     @endforelse
                     </tbody>
                 </table>
