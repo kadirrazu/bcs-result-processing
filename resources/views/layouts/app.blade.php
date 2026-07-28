@@ -73,6 +73,17 @@
                         </li>
                     @endcan
 
+                    @can('viewAny', \App\Models\CadreMaster::class)
+                        <li class="nav-item dropdown me-2">
+                            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><span class="nav-link-title">Master Data</span></a>
+                            <div class="dropdown-menu">
+                                <a class="dropdown-item" href="{{ route('cadre-masters.index') }}">Cadre Masters</a>
+                                <a class="dropdown-item" href="{{ route('bachelor-subjects.index') }}">Bachelor Subjects</a>
+                                <a class="dropdown-item" href="{{ route('post-related-subjects.index') }}">Post-related Subjects</a>
+                            </div>
+                        </li>
+                    @endcan
+
                     @can('viewAny', \App\Models\User::class)
                     <li class="nav-item {{ request()->routeIs('users.*') ? 'active' : '' }} me-2">
                         <a class="nav-link" href="{{ route('users.index') }}">

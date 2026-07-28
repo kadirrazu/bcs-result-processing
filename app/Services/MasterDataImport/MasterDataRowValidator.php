@@ -1,0 +1,57 @@
+<?php
+
+namespace App\Services\MasterDataImport;
+
+use App\Enums\CadreType;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
+
+/** Normalize and validate one spreadsheet row without mutating the database. */
+final class MasterDataRowValidator
+{
+    public function validate(MasterDataImportDefinition $definition, array $row): array
+    {
+        $data = collect($row)->map(fn ($value) => is_string($value) ? trim($value) : $value)->all();
+        $data['is_active'] = $this->boolean($data['is_active'] ?? true);
+
+        $rules = match ($definition->key) {
+            'cadre-masters' => [
+                'cadre_code' => ['required', 'integer', 'min:1'],
+                'cadre_abbr' => ['required', 'string', 'max:20'],
+                'cadre_title' => ['required', 'string', 'max:255'],
+                'cadre_title_bn' => ['required', 'string', 'max:255'],
+                'cadre_type' => ['required', Rule::enum(CadreType::class)],
+                'display_order' => ['nullable', 'integer', 'min:0'],
+                'is_active' => ['boolean'],
+            ],
+            default => [
+                'subject_code' => ['required', 'string', 'max:30'],
+                'subject_name' => ['required', 'string', 'max:255'],
+                'is_active' => ['boolean'],
+            ],
+        };
+
+        $validator = Validator::make($data, $rules);
+
+        return ['valid' => ! $validator->fails(), 'data' => $this->normalize($definition, $data), 'errors' => $validator->errors()->all()];
+    }
+
+    private function normalize(MasterDataImportDefinition $definition, array $data): array
+    {
+        if ($definition->key === 'cadre-masters') {
+            $data['cadre_abbr'] = strtoupper($data['cadre_abbr']);
+            $data['cadre_type'] = strtoupper($data['cadre_type']);
+            $data['display_order'] = (int) ($data['display_order'] ?? 0);
+            $data['cadre_code'] = (int) $data['cadre_code'];
+        } else {
+            $data['subject_code'] = strtoupper((string) $data['subject_code']);
+        }
+
+        return $data;
+    }
+
+    private function boolean(mixed $value): bool
+    {
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'active'], true);
+    }
+}

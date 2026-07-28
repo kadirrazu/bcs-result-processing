@@ -1,0 +1,5 @@
+<?php
+namespace App\Queries\CadreMasters;
+use App\Models\CadreMaster; use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+/** Build the searchable central cadre master directory. */
+final class ListCadreMastersQuery { public function execute(string $search):LengthAwarePaginator { return CadreMaster::query()->when($search!=='',fn($q)=>$q->where(function($q)use($search){$q->where('cadre_code','like',"%{$search}%")->orWhere('cadre_abbr','like',"%{$search}%")->orWhere('cadre_title','like',"%{$search}%")->orWhere('cadre_title_bn','like',"%{$search}%");}))->orderBy('display_order')->orderBy('cadre_code')->paginate(20)->withQueryString(); } }
