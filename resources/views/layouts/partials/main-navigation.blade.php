@@ -11,12 +11,23 @@
         @endcan
 
         @can('viewAny', \App\Models\CadreMaster::class)
-            <li class="nav-item dropdown {{ request()->routeIs(['cadre-masters.*', 'bachelor-subjects.*', 'post-related-subjects.*', 'master-data.*']) ? 'active' : '' }}">
-                <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false"><span class="nav-link-title">Master Data</span></a>
+            <li class="nav-item dropdown {{ request()->routeIs(['cadre-masters.*', 'bachelor-subjects.*', 'post-related-subjects.*', 'master-data.*', 'registration-masters.*']) ? 'active' : '' }}">
+                <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">
+                    <span class="nav-link-title">Master Data</span>
+                </a>
+
                 <div class="dropdown-menu">
                     <a class="dropdown-item {{ request()->routeIs('cadre-masters.*') ? 'active' : '' }}" href="{{ route('cadre-masters.index') }}">Cadre Masters</a>
                     <a class="dropdown-item {{ request()->routeIs('bachelor-subjects.*') ? 'active' : '' }}" href="{{ route('bachelor-subjects.index') }}">Bachelor Subjects</a>
                     <a class="dropdown-item {{ request()->routeIs('post-related-subjects.*') ? 'active' : '' }}" href="{{ route('post-related-subjects.index') }}">Post-related Subjects</a>
+
+                    {{-- Registration reference masters live in the central database. --}}
+                    <div class="dropdown-divider"></div>
+                    <h6 class="dropdown-header">Registration Masters</h6>
+                    <a class="dropdown-item {{ request()->routeIs('registration-masters.*') && request()->route('type') === 'genders' ? 'active' : '' }}" href="{{ route('registration-masters.index', 'genders') }}">Genders</a>
+                    <a class="dropdown-item {{ request()->routeIs('registration-masters.*') && request()->route('type') === 'divisions' ? 'active' : '' }}" href="{{ route('registration-masters.index', 'divisions') }}">Divisions</a>
+                    <a class="dropdown-item {{ request()->routeIs('registration-masters.*') && request()->route('type') === 'districts' ? 'active' : '' }}" href="{{ route('registration-masters.index', 'districts') }}">Districts</a>
+                    <a class="dropdown-item {{ request()->routeIs('registration-masters.*') && request()->route('type') === 'universities' ? 'active' : '' }}" href="{{ route('registration-masters.index', 'universities') }}">Universities</a>
                 </div>
             </li>
         @endcan

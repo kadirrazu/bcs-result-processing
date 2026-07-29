@@ -17,4 +17,8 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/master-data.php';
 
+    require __DIR__.'/registration-masters.php';
+
+    require __DIR__.'/registrations.php';
+
 });

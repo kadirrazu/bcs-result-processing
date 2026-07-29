@@ -14,3 +14,9 @@
 - Action, Service, Domain Rule, Repository, Model, and DTO boundaries.
 - Database design principles.
 - Standard module development workflow.
+
+## v1.8 - Registration Module
+- Added central gender, division, district and university masters.
+- Added examination-specific registration and import-batch schema.
+- Added high-volume Excel import, CRUD, filters, reports and tests.
+- Corrected processing navigation to Registration → Preliminary → Written → Viva → Choices.

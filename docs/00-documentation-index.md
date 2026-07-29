@@ -30,3 +30,5 @@
 
 ## Change History
 See [CHANGELOG.md](CHANGELOG.md).
+
+27. [Registration Module](27-registration-module.md)
