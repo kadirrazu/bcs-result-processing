@@ -8,7 +8,7 @@
                 <div class="page-pretitle">Master Data</div>
                 <h2 class="page-title">Cadre Masters</h2>
             </div>
-            <div class="col-auto ms-auto d-flex gap-2">
+            <div class="col-auto ms-auto d-flex flex-wrap gap-2">
                 <a href="{{ route('master-data.exports.pdf', 'cadre-masters') }}" class="btn btn-outline-danger">Export PDF</a>
                 <a href="{{ route('master-data.exports.excel', 'cadre-masters') }}" class="btn btn-outline-success">Export Excel</a>
                 <a href="{{ route('master-data.imports.template', 'cadre-masters') }}" class="btn btn-outline-secondary">Download Template</a>
@@ -45,9 +45,9 @@
                     </tbody>
                 </table>
             </div>
-            <div class="card-footer d-flex align-items-center justify-content-between">
-                <div class="text-secondary">Showing {{ $records->firstItem() ?? 0 }}–{{ $records->lastItem() ?? 0 }} of {{ $records->total() }}</div>
-                <div>{{ $records->links() }}</div>
+            <div class="card-footer app-table-footer">
+                <div class="app-table-summary">Showing {{ $records->firstItem() ?? 0 }}–{{ $records->lastItem() ?? 0 }} of {{ $records->total() }}</div>
+                {{ $records->onEachSide(1)->links() }}
             </div>
         </div>
     </div>

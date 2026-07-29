@@ -5,7 +5,7 @@
     <div class="container-xl">
         <div class="row g-2 align-items-center">
             <div class="col"><div class="page-pretitle">{{ $pretitle }}</div><h2 class="page-title">{{ $title }}</h2></div>
-            <div class="col-auto ms-auto d-flex gap-2">
+            <div class="col-auto ms-auto d-flex flex-wrap gap-2">
                 <a href="{{ route('master-data.exports.pdf', $importType) }}" class="btn btn-outline-danger">Export PDF</a>
                 <a href="{{ route('master-data.exports.excel', $importType) }}" class="btn btn-outline-success">Export Excel</a>
                 <a href="{{ route('master-data.imports.template', $importType) }}" class="btn btn-outline-secondary">Download Template</a>
@@ -31,7 +31,7 @@
                 </form>
             </div>
             <div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>SL</th><th>Code</th><th>Name</th><th>Status</th><th class="w-1"></th></tr></thead><tbody>@forelse($records as $record)<tr><td>{{ ($records->firstItem() ?? 1) + $loop->index }}</td><td><code>{{ $record->subject_code }}</code></td><td>{{ $record->subject_name }}</td><td><span class="badge {{ $record->is_active ? 'bg-success-lt' : 'bg-secondary-lt' }}">{{ $record->is_active ? 'Active' : 'Inactive' }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="{{ route($routePrefix.'.edit', $record) }}">Edit</a></td></tr>@empty<tr><td colspan="5" class="text-center text-secondary py-4">No records found.</td></tr>@endforelse</tbody></table></div>
-            <div class="card-footer d-flex align-items-center justify-content-between"><div class="text-secondary">Showing {{ $records->firstItem() ?? 0 }}–{{ $records->lastItem() ?? 0 }} of {{ $records->total() }}</div><div>{{ $records->links() }}</div></div>
+            <div class="card-footer app-table-footer"><div class="app-table-summary">Showing {{ $records->firstItem() ?? 0 }}–{{ $records->lastItem() ?? 0 }} of {{ $records->total() }}</div>{{ $records->onEachSide(1)->links() }}</div>
         </div>
     </div>
 </div>

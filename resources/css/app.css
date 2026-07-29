@@ -36,3 +36,23 @@ body {
     color: var(--tblr-danger);
     content: "*";
 }
+/* Application shell and navigation */
+.app-topbar { position: relative; z-index: 1030; }
+.app-active-examination { max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-examination-nav { position: relative; z-index: 1020; border-top: 1px solid var(--tblr-border-color); border-bottom: 1px solid var(--tblr-border-color); background: var(--tblr-bg-surface); }
+.app-examination-nav .navbar { min-height: 3.25rem; padding-top: 0; padding-bottom: 0; }
+.app-examination-menu { gap: .25rem; }
+.app-examination-menu .nav-link { min-height: 3.25rem; display: flex; align-items: center; padding-right: .75rem; padding-left: .75rem; }
+.app-examination-menu .nav-item.active .nav-link { color: var(--tblr-primary); font-weight: 600; }
+.app-examination-menu .nav-link.disabled { cursor: not-allowed; opacity: .5; }
+
+/* Reusable table footer and pagination */
+.app-table-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1rem; }
+.app-table-summary { flex: 1 1 auto; min-width: 12rem; color: var(--tblr-secondary-color); white-space: nowrap; }
+.app-pagination { flex: 0 1 auto; max-width: 100%; overflow-x: auto; padding-bottom: 1px; }
+.app-pagination .pagination { flex-wrap: nowrap; }
+.app-pagination .page-link { min-width: 2.35rem; text-align: center; }
+@media (max-width: 767.98px) {
+    .app-table-footer { align-items: flex-start; flex-direction: column; }
+    .app-pagination { width: 100%; }
+}
