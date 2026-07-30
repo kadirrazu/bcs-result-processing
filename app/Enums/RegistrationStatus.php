@@ -2,14 +2,12 @@
 
 namespace App\Enums;
 
-/**
- * Administrative lifecycle state of a registration record.
- */
+/** Administrative lifecycle state of a candidate registration. */
 enum RegistrationStatus: string
 {
     case Active = 'active';
-    case Inactive = 'inactive';
     case Cancelled = 'cancelled';
+    case Withheld = 'withheld';
 
     /** @return list<string> */
     public static function values(): array

@@ -89,7 +89,7 @@ final class MasterDataImportController extends Controller
             Storage::disk('local')->delete($payload['path']);
         }
 
-        return redirect()->route($definition->route())->with(
+        return redirect()->route($definition->route(), $definition->routeParameters())->with(
             'success',
             "Import complete: {$summary['inserted']} inserted, {$summary['updated']} updated, {$summary['skipped']} skipped, {$summary['failed']} failed.",
         );

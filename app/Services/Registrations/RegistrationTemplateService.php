@@ -1,9 +1,35 @@
 <?php
+
 namespace App\Services\Registrations;
+
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-/** Build the official Excel template; headers are intentionally fixed for deterministic imports. */
+
+/** Build the official template; fixed headers make validation deterministic. */
 final class RegistrationTemplateService
 {
- public function create(string $path): void{$s=new Spreadsheet();$sh=$s->getActiveSheet();$sh->setTitle('Registrations');$sh->fromArray(config('registrations.headers'),null,'A1');$sh->fromArray(['U000000001','12345678','Example Candidate','','','1995-05-02',1,1,1,1,101,201,2,'','',null,null,null,'1234567890',3,'active','Sample row - delete before import'],null,'A2');$sh->getStyle('A1:V1')->getFont()->setBold(true);$sh->freezePane('A2');foreach(range('A','V') as $c)$sh->getColumnDimension($c)->setAutoSize(true);(new Xlsx($s))->save($path);}
+    public function create(string $path): void
+    {
+        $headers = config('registrations.headers');
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Registrations');
+        $sheet->fromArray($headers, null, 'A1');
+        $sheet->fromArray([
+            'U000000001', '12345678', 'Example Candidate', '', '', '02-05-1995',
+            1, 1, '', 101, 201, 2, '', '', null, null, null, '1234567890',
+            3, 'active', 'Sample row - delete before import',
+        ], null, 'A2');
+        $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
+        $sheet->freezePane('A2');
+
+        for ($index = 1; $index <= count($headers); $index++) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($index))->setAutoSize(true);
+        }
+
+        (new Xlsx($spreadsheet))->save($path);
+    }
 }

@@ -28,4 +28,5 @@ final readonly class MasterDataImportDefinition
     public function allUniqueColumns(): array { return [$this->uniqueBy(), ...$this->additionalUniqueBy()]; }
     public function label(): string { return $this->config['label']; }
     public function route(): string { return $this->config['route']; }
+    public function routeParameters(): array { return $this->config['route_parameters'] ?? []; }
 }

@@ -32,3 +32,5 @@
 See [CHANGELOG.md](CHANGELOG.md).
 
 27. [Registration Module](27-registration-module.md)
+
+- [30 — Registration R3 Import Engine](30-registration-r3-import-engine.md)

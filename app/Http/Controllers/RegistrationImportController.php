@@ -1,14 +1,83 @@
 <?php
+
 namespace App\Http\Controllers;
+
 use App\Models\Registration;
-use App\Services\Registrations\{RegistrationImportService,RegistrationTemplateService};
-use Illuminate\Http\{RedirectResponse,Request};
+use App\Models\RegistrationImportBatch;
+use App\Services\Registrations\RegistrationImportRollbackService;
+use App\Services\Registrations\RegistrationImportService;
+use App\Services\Registrations\RegistrationTemplateService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
-/** Registration Excel import endpoints. */
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+/** Registration spreadsheet import, reporting and rollback endpoints. */
 final class RegistrationImportController extends Controller
 {
- public function create(){ $this->authorize('import',Registration::class);return view('registrations.import');}
- public function store(Request $r,RegistrationImportService $service): RedirectResponse{$this->authorize('import',Registration::class);$r->validate(['file'=>['required','file','mimes:xlsx,xls','max:51200']]);$batch=$service->import($r->file('file'),$r->user()->id);return redirect()->route('registrations.import-result',$batch)->with('success','Import completed.');}
- public function template(RegistrationTemplateService $service): BinaryFileResponse{$this->authorize('viewAny',Registration::class);$path=storage_path('app/registration-template.xlsx');$service->create($path);return response()->download($path,'registration-import-template.xlsx')->deleteFileAfterSend();}
- public function result(int $batch){$this->authorize('viewAny',Registration::class);$record=\App\Models\RegistrationImportBatch::query()->findOrFail($batch);$errors=session('registration_import_errors_'.$batch,[]);return view('registrations.import-result',compact('record','errors'));}
+    public function create()
+    {
+        $this->authorize('import', Registration::class);
+        $batches = RegistrationImportBatch::query()->latest('id')->paginate(20);
+
+        return view('registrations.import', compact('batches'));
+    }
+
+    public function store(Request $request, RegistrationImportService $service): RedirectResponse
+    {
+        $this->authorize('import', Registration::class);
+        $validated = $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls', 'max:51200']]);
+        $batch = $service->import($validated['file'], $request->user()->id);
+
+        return redirect()->route('registrations.import-result', $batch)->with('success', 'Import completed.');
+    }
+
+    public function template(RegistrationTemplateService $service): BinaryFileResponse
+    {
+        $this->authorize('viewAny', Registration::class);
+        $path = storage_path('app/registration-template.xlsx');
+        $service->create($path);
+
+        return response()->download($path, 'registration-import-template.xlsx')->deleteFileAfterSend();
+    }
+
+    public function result(RegistrationImportBatch $batch)
+    {
+        $this->authorize('viewAny', Registration::class);
+        $rows = $batch->rows()->whereIn('action', ['rejected', 'identity_conflict'])->orderBy('source_row')->paginate(100);
+
+        return view('registrations.import-result', ['record' => $batch, 'rows' => $rows]);
+    }
+
+    public function report(RegistrationImportBatch $batch): StreamedResponse
+    {
+        $this->authorize('viewAny', Registration::class);
+
+        return response()->streamDownload(function () use ($batch): void {
+            $stream = fopen('php://output', 'wb');
+            fputcsv($stream, ['source_row', 'reg', 'user_id', 'action', 'warnings', 'errors']);
+            $batch->rows()->orderBy('source_row')->chunkById(1000, function ($rows) use ($stream): void {
+                foreach ($rows as $row) {
+                    fputcsv($stream, [
+                        $row->source_row,
+                        $row->reg,
+                        $row->user_id,
+                        $row->action,
+                        implode(' | ', $row->warnings ?? []),
+                        implode(' | ', $row->errors ?? []),
+                    ]);
+                }
+            });
+            fclose($stream);
+        }, "registration-import-batch-{$batch->id}.csv", ['Content-Type' => 'text/csv']);
+    }
+
+    public function rollback(Request $request, RegistrationImportBatch $batch, RegistrationImportRollbackService $service): RedirectResponse
+    {
+        $this->authorize('import', Registration::class);
+        $validated = $request->validate(['reason' => ['nullable', 'string', 'max:2000']]);
+        $service->rollback($batch, $request->user()->id, $validated['reason'] ?? null);
+
+        return redirect()->route('registrations.import-result', $batch)->with('success', 'Import batch rolled back successfully.');
+    }
 }

@@ -6,7 +6,7 @@
         <div class="row g-2 align-items-center">
             <div class="col"><div class="page-pretitle">Master Data</div><h2 class="page-title">Import {{ $definition->label() }}</h2></div>
             <div class="col-auto ms-auto d-flex gap-2">
-                <a class="btn btn-outline-secondary" href="{{ route($definition->route()) }}">Back to List</a>
+                <a class="btn btn-outline-secondary" href="{{ route($definition->route(), $definition->routeParameters()) }}">Back to List</a>
                 <a class="btn btn-outline-primary" href="{{ route('master-data.imports.template', $definition->key) }}">Download Template</a>
             </div>
         </div>

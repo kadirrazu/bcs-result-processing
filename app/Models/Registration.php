@@ -14,7 +14,7 @@ final class Registration extends ExaminationModel
         'user_id', 'reg', 'national_id', 'name', 'father_name', 'mother_name',
         'name_bn', 'father_name_bn', 'mother_name_bn', 'birth_date', 'sex_code',
         'district_code', 'division_code', 'university_code', 'bachelor_subject_code',
-        'related_subject_code', 'cadre_category', 'has_ff_quota', 'has_em_quota',
+        'post_related_subject_code', 'cadre_category', 'has_ff_quota', 'has_em_quota',
         'has_phc_quota', 'has_quota', 'status', 'validation_status', 'comment',
         'source_batch_id',
     ];
