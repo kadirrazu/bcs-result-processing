@@ -3,6 +3,7 @@
 namespace App\Services\Registrations;
 
 use DateTimeImmutable;
+use DateTimeInterface;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
 /** Normalize one source row without database access. */
@@ -77,52 +78,39 @@ final class RegistrationRowNormalizer
 
     private function date(mixed $value): ?string
     {
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
         if ($value === null) {
             return null;
         }
 
-        $rawValue = trim((string) $value);
-
-        if ($rawValue === '') {
+        $raw = trim((string) $value);
+        if ($raw === '') {
             return null;
         }
 
-        /*
-        * Important:
-        * An 8-digit numeric value such as 21031996 means DDMMYYYY.
-        * It must be checked before treating numeric values as Excel serial dates.
-        */
-        if (preg_match('/^\d{8}$/', $rawValue) === 1) {
-            $date = $this->createStrictDate('dmY', $rawValue);
-
+        // Eight numeric digits represent DDMMYYYY, not an Excel serial number.
+        if (preg_match('/^\d{8}$/', $raw) === 1) {
+            $date = $this->strictDate('dmY', $raw);
             if ($date !== null) {
                 return $date;
             }
         }
 
-        foreach ([
-            'Y-m-d',
-            'd/m/Y',
-            'd-m-Y',
-        ] as $format) {
-            $date = $this->createStrictDate($format, $rawValue);
-
+        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y'] as $format) {
+            $date = $this->strictDate($format, $raw);
             if ($date !== null) {
                 return $date;
             }
         }
 
-        /*
-        * Excel date serials are normally comparatively small numbers.
-        * Do not interpret an 8-digit DDMMYYYY value as an Excel serial.
-        */
         if (is_numeric($value)) {
             $serial = (float) $value;
-
             if ($serial >= 1 && $serial <= 100000) {
                 try {
-                    return ExcelDate::excelToDateTimeObject($serial)
-                        ->format('Y-m-d');
+                    return ExcelDate::excelToDateTimeObject($serial)->format('Y-m-d');
                 } catch (\Throwable) {
                     return null;
                 }
@@ -132,7 +120,7 @@ final class RegistrationRowNormalizer
         return null;
     }
 
-    private function createStrictDate(string $format, string $value): ?string
+    private function strictDate(string $format, string $value): ?string
     {
         $date = DateTimeImmutable::createFromFormat('!'.$format, $value);
         $errors = DateTimeImmutable::getLastErrors();
@@ -141,10 +129,7 @@ final class RegistrationRowNormalizer
             return null;
         }
 
-        if (
-            $errors !== false
-            && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)
-        ) {
+        if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
             return null;
         }
 
