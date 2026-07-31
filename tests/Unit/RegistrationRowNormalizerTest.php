@@ -51,4 +51,60 @@ final class RegistrationRowNormalizerTest extends TestCase
 
         $this->assertFalse($result['attributes']['has_quota']);
     }
+
+    public function test_ddmmyyyy_birth_date_is_not_treated_as_excel_serial(): void
+    {
+        $result = $this->normalizer()->normalize([
+            'user' => 'U1',
+            'reg' => '1',
+            'name' => 'A',
+            'cadre_category' => 1,
+            'b_date' => '21031996',
+        ], 9);
+
+        $this->assertSame(
+            '1996-03-21',
+            $result['attributes']['birth_date']
+        );
+    }
+
+    public function test_supported_birth_date_formats_are_normalized(): void
+    {
+        $formats = [
+            '1996-03-21',
+            '21/03/1996',
+            '21-03-1996',
+            '21031996',
+        ];
+
+        foreach ($formats as $date) {
+            $result = $this->normalizer()->normalize([
+                'user' => 'U1',
+                'reg' => '1',
+                'name' => 'A',
+                'cadre_category' => 1,
+                'b_date' => $date,
+            ], 9);
+
+            $this->assertSame(
+                '1996-03-21',
+                $result['attributes']['birth_date'],
+                "Failed for date format: {$date}"
+            );
+        }
+    }
+
+    public function test_invalid_birth_date_becomes_null(): void
+    {
+        $result = $this->normalizer()->normalize([
+            'user' => 'U1',
+            'reg' => '1',
+            'name' => 'A',
+            'cadre_category' => 1,
+            'b_date' => '31021996',
+        ], 9);
+
+        $this->assertNull($result['attributes']['birth_date']);
+    }
+    
 }

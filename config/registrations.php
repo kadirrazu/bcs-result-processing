@@ -1,7 +1,8 @@
 <?php
 
 return [
-    'chunk_size' => (int) env('REGISTRATION_IMPORT_CHUNK_SIZE', 2000),
+    'chunk_size' => (int) env('REGISTRATION_IMPORT_CHUNK_SIZE', 1000),
+    'queue' => env('REGISTRATION_IMPORT_QUEUE', 'imports'),
     'headers' => [
         'user', 'reg', 'name', 'fname', 'mname', 'b_date', 'sex', 'district',
         'university', 'b_subject', 'post_related_subject',

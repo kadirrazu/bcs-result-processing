@@ -77,23 +77,77 @@ final class RegistrationRowNormalizer
 
     private function date(mixed $value): ?string
     {
-        if ($value === null || trim((string) $value) === '') {
+        if ($value === null) {
             return null;
         }
 
-        if (is_numeric($value)) {
-            return ExcelDate::excelToDateTimeObject((float) $value)->format('Y-m-d');
+        $rawValue = trim((string) $value);
+
+        if ($rawValue === '') {
+            return null;
         }
 
-        $value = trim((string) $value);
-        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'dmY'] as $format) {
-            $date = DateTimeImmutable::createFromFormat('!'.$format, $value);
-            $errors = DateTimeImmutable::getLastErrors();
-            if ($date !== false && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
-                return $date->format('Y-m-d');
+        /*
+        * Important:
+        * An 8-digit numeric value such as 21031996 means DDMMYYYY.
+        * It must be checked before treating numeric values as Excel serial dates.
+        */
+        if (preg_match('/^\d{8}$/', $rawValue) === 1) {
+            $date = $this->createStrictDate('dmY', $rawValue);
+
+            if ($date !== null) {
+                return $date;
+            }
+        }
+
+        foreach ([
+            'Y-m-d',
+            'd/m/Y',
+            'd-m-Y',
+        ] as $format) {
+            $date = $this->createStrictDate($format, $rawValue);
+
+            if ($date !== null) {
+                return $date;
+            }
+        }
+
+        /*
+        * Excel date serials are normally comparatively small numbers.
+        * Do not interpret an 8-digit DDMMYYYY value as an Excel serial.
+        */
+        if (is_numeric($value)) {
+            $serial = (float) $value;
+
+            if ($serial >= 1 && $serial <= 100000) {
+                try {
+                    return ExcelDate::excelToDateTimeObject($serial)
+                        ->format('Y-m-d');
+                } catch (\Throwable) {
+                    return null;
+                }
             }
         }
 
         return null;
+    }
+
+    private function createStrictDate(string $format, string $value): ?string
+    {
+        $date = DateTimeImmutable::createFromFormat('!'.$format, $value);
+        $errors = DateTimeImmutable::getLastErrors();
+
+        if ($date === false) {
+            return null;
+        }
+
+        if (
+            $errors !== false
+            && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)
+        ) {
+            return null;
+        }
+
+        return $date->format('Y-m-d');
     }
 }
