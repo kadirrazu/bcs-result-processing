@@ -134,6 +134,13 @@ return [
             'days' => 365,
         ],
 
+        'written' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/written/written.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 365,
+        ],
+
         'registration' => [
             'driver' => 'daily',
             'path' => storage_path('logs/registration/registration.log'),

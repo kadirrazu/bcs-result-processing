@@ -23,4 +23,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/preliminary.php';
 
+    require __DIR__.'/written.php';
+
 });

@@ -10,7 +10,7 @@ return [
                 'route' => 'preliminary.index',
                 'patterns' => ['preliminary.*'],
             ],
-            ['label' => 'Written Marks', 'route' => null, 'patterns' => ['written-marks.*']],
+            ['label' => 'Written Marks', 'route' => 'written.index', 'patterns' => ['written.*']],
             ['label' => 'Viva Marks', 'route' => null, 'patterns' => ['viva-marks.*']],
             ['label' => 'Choice Lists', 'route' => null, 'patterns' => ['choices.*']],
             ['label' => 'Tabulation', 'route' => null, 'patterns' => ['tabulation.*']],
