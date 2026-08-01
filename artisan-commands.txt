@@ -6,3 +6,5 @@ php artisan test
 php artisan queue:restart
 
 php artisan queue:work database --queue=imports --timeout=0 --tries=1 --memory=900 -vvv
+
+git log --oneline --graph --decorate

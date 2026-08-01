@@ -10,6 +10,7 @@ use App\Http\Requests\StoreRegistrationRequest;
 use App\Http\Requests\UpdateRegistrationRequest;
 use App\Models\District;
 use App\Models\Registration;
+use App\Models\RegistrationAudit;
 use App\Queries\Registrations\ListRegistrationsQuery;
 use App\Services\Registrations\RegistrationFormOptions;
 use App\Support\Pagination\PaginationSettings;
@@ -68,6 +69,11 @@ final class RegistrationController extends Controller
 
         return view('registrations.show', [
             'registration' => $registration,
+            'audits' => RegistrationAudit::query()
+                ->where('registration_id', $registration->getKey())
+                ->latest('id')
+                ->limit(50)
+                ->get(),
             ...$this->formOptions->get(),
         ]);
     }
@@ -84,9 +90,13 @@ final class RegistrationController extends Controller
 
     public function update(UpdateRegistrationRequest $request, Registration $registration, UpdateRegistrationAction $action): RedirectResponse
     {
-        $action->execute($registration, $request->validated());
+        $attributes = $request->validated();
+        $reason = (string) $attributes['edit_reason'];
+        unset($attributes['edit_reason']);
+
+        $action->execute($registration, $attributes, $request->user(), $reason);
 
         return redirect()->route('registrations.show', $registration)
-            ->with('success', 'Registration updated successfully.');
+            ->with('success', 'Registration updated successfully. Audit trail recorded.');
     }
 }
