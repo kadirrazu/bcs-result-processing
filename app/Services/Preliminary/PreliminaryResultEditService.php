@@ -50,8 +50,18 @@ final class PreliminaryResultEditService
                 'last_edit_reason' => $reason,
             ]);
 
-            // Any manual mark/status correction makes reconciliation and final result snapshots stale.
-            // Keep an already-approved cutoff value, but require reconciliation/finalization to be run again.
+            // Any manual mark/status correction invalidates every derived PASS/FAIL fact.
+            // Keep source/cancellation facts, but never expose a stale finalized result.
+            DB::connection('exam')->table('preliminary_results')->update([
+                'result_status' => DB::raw("CASE WHEN candidate_status = 'cancelled' THEN 'cancelled' ELSE NULL END"),
+                'applied_cutoff_mark' => null,
+                'finalized_at' => null,
+                'updated_at' => now(),
+            ]);
+
+            $existingSummary = is_array($state->summary) ? $state->summary : [];
+            unset($existingSummary['finalization']);
+
             $state->update([
                 'status' => PreliminaryProcessingStatus::Reopened->value,
                 'latest_reconciliation_report_id' => null,
@@ -61,9 +71,10 @@ final class PreliminaryResultEditService
                 'distribution_generated_by' => null,
                 'distribution_generated_at' => null,
                 'cutoff_requires_review' => $state->cutoff_mark !== null,
+                'latest_finalization_run_id' => null,
                 'result_finalized_by' => null,
                 'result_finalized_at' => null,
-                'summary' => null,
+                'summary' => $existingSummary,
             ]);
         });
 

@@ -1,0 +1,8 @@
+composer dump-autoload
+php artisan optimize:clear
+php artisan view:clear
+php artisan examination:migrate
+php artisan test
+php artisan queue:restart
+
+php artisan queue:work database --queue=imports --timeout=0 --tries=1 --memory=900 -vvv

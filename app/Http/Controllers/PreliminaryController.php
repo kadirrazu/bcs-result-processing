@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Enums\PreliminaryProcessingStatus;
 use App\Jobs\ApprovePreliminaryImport;
+use App\Jobs\FinalizePreliminaryResults;
 use App\Jobs\ValidatePreliminaryImport;
 use App\Models\PreliminaryCutoffDecision;
 use App\Models\PreliminaryDistributionReport;
 use App\Models\PreliminaryImportBatch;
+use App\Models\PreliminaryFinalizationRun;
 use App\Models\PreliminaryProcessingAudit;
 use App\Models\PreliminaryProcessingState;
 use App\Models\PreliminaryReconciliationReport;
@@ -46,6 +48,7 @@ final class PreliminaryController extends Controller
             'latestDistribution' => PreliminaryDistributionReport::query()->latest('id')->first(),
             'pendingCutoff' => PreliminaryCutoffDecision::query()->where('status', 'proposed')->latest('id')->first(),
             'currentCutoff' => PreliminaryCutoffDecision::query()->where('status', 'approved')->latest('id')->first(),
+            'latestFinalization' => PreliminaryFinalizationRun::query()->latest('id')->first(),
             'batches' => PreliminaryImportBatch::query()->latest('id')->paginate(15),
             'audits' => PreliminaryProcessingAudit::query()->latest('id')->limit(10)->get(),
             'counts' => [
@@ -247,6 +250,7 @@ final class PreliminaryController extends Controller
             'state' => $state,
             'pendingCutoff' => PreliminaryCutoffDecision::query()->where('status', 'proposed')->latest('id')->first(),
             'currentCutoff' => PreliminaryCutoffDecision::query()->where('status', 'approved')->latest('id')->first(),
+            'latestFinalization' => PreliminaryFinalizationRun::query()->latest('id')->first(),
             'cutoffHistory' => PreliminaryCutoffDecision::query()->latest('id')->limit(25)->get(),
         ]);
     }
@@ -303,6 +307,190 @@ final class PreliminaryController extends Controller
 
         return redirect()->route('preliminary.distribution.show', $decision->distribution_report_id)
             ->with('success', 'Cut-off approved and recorded in database audit and preliminary file log.');
+    }
+
+    public function finalizeResults(Request $request, ExaminationContext $context, PreliminaryAuditService $audit): RedirectResponse
+    {
+        $this->authorize('process', PreliminaryResult::class);
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:2000'],
+        ]);
+
+        $state = PreliminaryProcessingState::query()->firstOrCreate(
+            ['id' => 1],
+            ['status' => PreliminaryProcessingStatus::NotStarted->value],
+        );
+
+        abort_if($state->current_cutoff_decision_id === null || $state->cutoff_mark === null, 409, 'Approve a cut-off before finalizing results.');
+        abort_if((bool) $state->cutoff_requires_review, 409, 'The approved cut-off requires review before finalization.');
+        abort_if($state->latest_distribution_report_id === null, 409, 'Generate the current mark distribution before finalization.');
+
+        $decision = PreliminaryCutoffDecision::query()->findOrFail($state->current_cutoff_decision_id);
+        abort_unless($decision->status === 'approved', 409, 'Current cut-off is not approved.');
+
+        $running = PreliminaryFinalizationRun::query()->whereIn('status', ['queued', 'running'])->exists();
+        abort_if($running, 409, 'A preliminary finalization is already queued/running.');
+
+        $examinationId = $context->currentId();
+        abort_if($examinationId === null, 409, 'No examination is selected.');
+
+        $beforeStatus = $state->status instanceof \BackedEnum ? $state->status->value : (string) $state->status;
+        $run = PreliminaryFinalizationRun::query()->create([
+            'cutoff_decision_id' => $decision->id,
+            'cutoff_mark' => $decision->cutoff_mark,
+            'status' => 'queued',
+            'reason' => $validated['reason'],
+            'queued_by' => $request->user()->id,
+            'queued_at' => now(),
+            'current_step' => 'Waiting for queue worker',
+            'total_rows' => 0,
+            'processed_rows' => 0,
+            'progress_percent' => 0,
+        ]);
+
+        $state->update([
+            'status' => PreliminaryProcessingStatus::ResultFinalizing->value,
+            'latest_finalization_run_id' => $run->id,
+        ]);
+
+        FinalizePreliminaryResults::dispatch($examinationId, $run->id, (int) $request->user()->id);
+
+        $audit->record(
+            'RESULT_FINALIZATION_QUEUED',
+            $request->user(),
+            $beforeStatus,
+            PreliminaryProcessingStatus::ResultFinalizing->value,
+            $validated['reason'],
+            [
+                'run_id' => $run->id,
+                'cutoff_decision_id' => $decision->id,
+                'cutoff_mark' => $decision->cutoff_mark,
+            ],
+            batchId: $state->latest_import_batch_id,
+            processingRunId: $run->id,
+        );
+
+        return back()->with('success', 'Preliminary result finalization queued.');
+    }
+
+    public function finalizationStatus(PreliminaryFinalizationRun $run): JsonResponse
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $run->refresh();
+
+        return response()->json([
+            'id' => $run->id,
+            'status' => $run->status,
+            'cutoff_mark' => $run->cutoff_mark,
+            'current_step' => $run->current_step,
+            'total_rows' => (int) $run->total_rows,
+            'processed_rows' => (int) $run->processed_rows,
+            'progress_percent' => (float) $run->progress_percent,
+            'summary' => $run->summary,
+            'failure_message' => $run->failure_message,
+            'queued_at' => $run->queued_at?->format('d-m-Y h:i:s A'),
+            'started_at' => $run->started_at?->format('d-m-Y h:i:s A'),
+            'completed_at' => $run->completed_at?->format('d-m-Y h:i:s A'),
+            'timezone' => config('app.timezone'),
+            'finished' => in_array($run->status, ['completed', 'failed'], true),
+        ]);
+    }
+
+    public function finalResultCombined(): View
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $state = $this->finalizedState();
+
+        return view('preliminary.final-result-combined', [
+            'state' => $state,
+            'registrations' => $this->passedRegistrations(),
+        ]);
+    }
+
+    public function finalResultCategory(): View
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $state = $this->finalizedState();
+
+        return view('preliminary.final-result-category', [
+            'state' => $state,
+            'groups' => [
+                'GG' => $this->passedRegistrations(1),
+                'TT' => $this->passedRegistrations(2),
+                'GT' => $this->passedRegistrations(3),
+            ],
+        ]);
+    }
+
+    public function finalResultCombinedTxt(): BinaryFileResponse
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $this->finalizedState();
+        $regs = $this->passedRegistrations();
+
+        $directory = storage_path('app/private/preliminary-final-results');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.DIRECTORY_SEPARATOR.uniqid('preliminary-result-combined-', true).'.txt';
+        $file = new \SplFileObject($path, 'wb');
+        $file->fwrite("PRELIMINARY EXAMINATION RESULT - ALL CATEGORIES COMBINED\r\n\r\n");
+        foreach ($regs->chunk(10) as $row) {
+            $file->fwrite($row->implode('    ')."\r\n");
+        }
+        $file->fwrite("\r\nTOTAL = ".number_format($regs->count())."\r\n");
+        unset($file);
+
+        return response()->download($path, 'preliminary-result-combined.txt', ['Content-Type' => 'text/plain; charset=UTF-8'])->deleteFileAfterSend(true);
+    }
+
+    public function finalResultCategoryTxt(): BinaryFileResponse
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $this->finalizedState();
+        $groups = ['GG' => $this->passedRegistrations(1), 'TT' => $this->passedRegistrations(2), 'GT' => $this->passedRegistrations(3)];
+
+        $directory = storage_path('app/private/preliminary-final-results');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.DIRECTORY_SEPARATOR.uniqid('preliminary-result-category-', true).'.txt';
+        $file = new \SplFileObject($path, 'wb');
+        $file->fwrite("PRELIMINARY EXAMINATION RESULT - CATEGORY WISE\r\n");
+
+        foreach ($groups as $category => $regs) {
+            $file->fwrite("\r\n{$category}\r\n");
+            $file->fwrite(str_repeat('-', 40)."\r\n");
+            foreach ($regs->chunk(10) as $row) {
+                $file->fwrite($row->implode('    ')."\r\n");
+            }
+            $file->fwrite("\r\nTOTAL ({$category}) = ".number_format($regs->count())."\r\n");
+        }
+        unset($file);
+
+        return response()->download($path, 'preliminary-result-category-wise.txt', ['Content-Type' => 'text/plain; charset=UTF-8'])->deleteFileAfterSend(true);
+    }
+
+    private function finalizedState(): PreliminaryProcessingState
+    {
+        $state = PreliminaryProcessingState::query()->firstOrCreate(
+            ['id' => 1],
+            ['status' => PreliminaryProcessingStatus::NotStarted->value],
+        );
+
+        abort_if($state->result_finalized_at === null, 409, 'Preliminary result has not been finalized yet.');
+        abort_if((bool) $state->cutoff_requires_review, 409, 'Preliminary result is stale because the cut-off requires review.');
+
+        return $state;
+    }
+
+    private function passedRegistrations(?int $category = null)
+    {
+        return DB::connection('exam')->table('preliminary_results as p')
+            ->join('registrations as r', 'r.id', '=', 'p.registration_id')
+            ->where('r.status', 'active')
+            ->where('p.result_status', 'pass')
+            ->when($category !== null, fn ($query) => $query->where('r.cadre_category', $category))
+            // Registration number order is authoritative for the published list; mark order is never used here.
+            ->orderByRaw('CAST(p.reg AS UNSIGNED) ASC')
+            ->pluck('p.reg');
     }
 
     public function results(Request $request): View

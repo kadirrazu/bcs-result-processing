@@ -27,6 +27,13 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::post('/cutoff/propose', [PreliminaryController::class, 'proposeCutoff'])->name('cutoff.propose');
         Route::post('/cutoff/{decision}/approve', [PreliminaryController::class, 'approveCutoff'])->name('cutoff.approve');
 
+        Route::post('/finalization', [PreliminaryController::class, 'finalizeResults'])->name('finalization.store');
+        Route::get('/finalization/{run}/status', [PreliminaryController::class, 'finalizationStatus'])->name('finalization.status');
+        Route::get('/final-result/combined', [PreliminaryController::class, 'finalResultCombined'])->name('final-result.combined');
+        Route::get('/final-result/category-wise', [PreliminaryController::class, 'finalResultCategory'])->name('final-result.category');
+        Route::get('/final-result/combined.txt', [PreliminaryController::class, 'finalResultCombinedTxt'])->name('final-result.combined.txt');
+        Route::get('/final-result/category-wise.txt', [PreliminaryController::class, 'finalResultCategoryTxt'])->name('final-result.category.txt');
+
         Route::get('/results', [PreliminaryController::class, 'results'])->name('results.index');
         Route::get('/results/{result}/edit', [PreliminaryController::class, 'edit'])->name('results.edit');
         Route::put('/results/{result}', [PreliminaryController::class, 'update'])->name('results.update');

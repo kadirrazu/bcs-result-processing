@@ -96,10 +96,20 @@ final class PreliminaryCutoffService
                 'approval_reason' => $reason,
             ]);
 
+            // A new/changed approved cut-off invalidates every previously derived PASS/FAIL fact.
+            DB::connection('exam')->table('preliminary_results')->update([
+                'result_status' => DB::raw("CASE WHEN candidate_status = 'cancelled' THEN 'cancelled' ELSE NULL END"),
+                'applied_cutoff_mark' => null,
+                'finalized_at' => null,
+                'updated_at' => now(),
+            ]);
+
             $existingSummary = is_array($state->summary) ? $state->summary : [];
+            unset($existingSummary['finalization']);
             $state->update([
                 'status' => PreliminaryProcessingStatus::CutoffSet->value,
                 'current_cutoff_decision_id' => $decision->id,
+                'latest_finalization_run_id' => null,
                 'cutoff_mark' => $decision->cutoff_mark,
                 'cutoff_set_by' => $actor->id,
                 'cutoff_set_at' => now(),

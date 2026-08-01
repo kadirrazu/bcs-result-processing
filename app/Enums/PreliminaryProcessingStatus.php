@@ -9,6 +9,7 @@ enum PreliminaryProcessingStatus: string
     case ReconciliationGenerated = 'reconciliation_generated';
     case DistributionGenerated = 'distribution_generated';
     case CutoffSet = 'cutoff_set';
+    case ResultFinalizing = 'result_finalizing';
     case ResultFinalized = 'result_finalized';
     case Reopened = 'reopened';
 }

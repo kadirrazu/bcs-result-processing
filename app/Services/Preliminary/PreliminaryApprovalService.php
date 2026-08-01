@@ -127,6 +127,7 @@ final class PreliminaryApprovalService
                     'cutoff_set_at' => null,
                     'cutoff_requires_review' => false,
                     'current_cutoff_decision_id' => null,
+                    'latest_finalization_run_id' => null,
                     'latest_reconciliation_report_id' => null,
                     'reconciliation_generated_by' => null,
                     'reconciliation_generated_at' => null,

@@ -9,7 +9,7 @@ final class PreliminaryProcessingState extends ExaminationModel
 {
     protected $fillable = [
         'status', 'latest_import_batch_id', 'latest_reconciliation_report_id',
-        'latest_distribution_report_id', 'current_cutoff_decision_id',
+        'latest_distribution_report_id', 'current_cutoff_decision_id', 'latest_finalization_run_id',
         'cutoff_mark', 'cutoff_set_by', 'cutoff_set_at', 'cutoff_requires_review',
         'reconciliation_generated_by', 'reconciliation_generated_at',
         'distribution_generated_by', 'distribution_generated_at',
