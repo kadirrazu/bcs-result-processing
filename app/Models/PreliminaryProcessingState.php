@@ -8,7 +8,7 @@ use App\Enums\PreliminaryProcessingStatus;
 final class PreliminaryProcessingState extends ExaminationModel
 {
     protected $fillable = [
-        'status', 'latest_import_batch_id', 'cutoff_mark', 'cutoff_set_by',
+        'status', 'latest_import_batch_id', 'latest_reconciliation_report_id', 'cutoff_mark', 'cutoff_set_by',
         'cutoff_set_at', 'reconciliation_generated_by', 'reconciliation_generated_at',
         'result_finalized_by', 'result_finalized_at', 'summary',
     ];

@@ -20,10 +20,13 @@ final class PreliminaryAuditService
         ?array $after = null,
         ?int $batchId = null,
         ?int $processingRunId = null,
+        ?int $registrationId = null,
+        ?int $preliminaryResultId = null,
     ): PreliminaryProcessingAudit {
         return $this->write(
             $action, (int) $actor->id, (string) $actor->name, $statusBefore, $statusAfter,
             $reason, $summary, $before, $after, $batchId, $processingRunId,
+            $registrationId, $preliminaryResultId,
         );
     }
 
@@ -38,12 +41,15 @@ final class PreliminaryAuditService
         ?array $after = null,
         ?int $batchId = null,
         ?int $processingRunId = null,
+        ?int $registrationId = null,
+        ?int $preliminaryResultId = null,
     ): PreliminaryProcessingAudit {
         $actor = User::query()->find($actorId);
 
         return $this->write(
             $action, $actorId, $actor?->name, $statusBefore, $statusAfter,
             $reason, $summary, $before, $after, $batchId, $processingRunId,
+            $registrationId, $preliminaryResultId,
         );
     }
 
@@ -59,6 +65,8 @@ final class PreliminaryAuditService
         ?array $after,
         ?int $batchId,
         ?int $processingRunId,
+        ?int $registrationId,
+        ?int $preliminaryResultId,
     ): PreliminaryProcessingAudit {
         $ip = null;
         $userAgent = null;
@@ -73,6 +81,8 @@ final class PreliminaryAuditService
             'status_after' => $statusAfter,
             'batch_id' => $batchId,
             'processing_run_id' => $processingRunId,
+            'registration_id' => $registrationId,
+            'preliminary_result_id' => $preliminaryResultId,
             'actor_id' => $actorId,
             'actor_name' => $actorName,
             'reason' => $reason,

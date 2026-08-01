@@ -1,0 +1,11 @@
+@extends('layouts.app')
+@section('title', 'Preliminary Results')
+@section('content')
+<div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center"><div class="col"><h2 class="page-title">Preliminary Results</h2><div class="text-secondary">Approved preliminary marks and source status</div></div><div class="col-auto ms-auto"><a href="{{ route('preliminary.index') }}" class="btn btn-outline-secondary">Back</a></div></div></div></div>
+<div class="page-body"><div class="container-xl">
+<div class="card mb-3"><div class="card-body"><form method="get" class="row g-2"><div class="col-md"><input class="form-control" name="search" value="{{ $search }}" placeholder="Exact REG or USER"></div><div class="col-md-3"><select class="form-select" name="status"><option value="">All statuses</option><option value="active" @selected($status==='active')>Active</option><option value="cancelled" @selected($status==='cancelled')>Cancelled</option></select></div><div class="col-auto"><button class="btn btn-primary">Filter</button></div></form></div></div>
+<div class="card"><div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>REG</th><th>USER</th><th class="text-end">Mark</th><th>Source Status</th><th>Normalized</th><th>Last Edited</th><th></th></tr></thead><tbody>
+@forelse($results as $row)<tr><td>{{ $row->reg }}</td><td>{{ $row->user_id }}</td><td class="text-end">{{ $row->mark ?? '—' }}</td><td>{{ $row->raw_candidate_status ?: '—' }}</td><td>{{ strtoupper($row->candidate_status->value) }}</td><td>{{ $row->last_edited_at?->format('d-m-Y h:i A') ?? '—' }}</td><td>@can('process', App\Models\PreliminaryResult::class)<a class="btn btn-sm btn-outline-primary" href="{{ route('preliminary.results.edit',$row) }}">Edit</a>@endcan</td></tr>@empty<tr><td colspan="7" class="text-center text-secondary py-4">No results found.</td></tr>@endforelse
+</tbody></table></div>@if($results->hasPages())<div class="card-footer">{{ $results->links() }}</div>@endif</div>
+</div></div>
+@endsection
