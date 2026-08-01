@@ -127,6 +127,13 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'preliminary' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/preliminary/preliminary.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 365,
+        ],
+
     ],
 
 ];

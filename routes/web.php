@@ -21,4 +21,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/registrations.php';
 
+    require __DIR__.'/preliminary.php';
+
 });
