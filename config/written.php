@@ -15,6 +15,10 @@ return [
     'paper_crash_percent' => (float) env('WRITTEN_PAPER_CRASH_PERCENT', 30),
     'high_mark_review_percent' => (float) env('WRITTEN_HIGH_MARK_REVIEW_PERCENT', 75),
 
+    /* Chunked rule-processing writes: tune without touching service code. */
+    'rule_processing_chunk_size' => (int) env('WRITTEN_RULE_PROCESSING_CHUNK_SIZE', 1000),
+    'rule_mark_write_chunk_size' => (int) env('WRITTEN_RULE_MARK_WRITE_CHUNK_SIZE', 2500),
+
     /*
     |--------------------------------------------------------------------------
     | Authoritative written subject metadata

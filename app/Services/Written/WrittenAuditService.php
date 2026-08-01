@@ -26,37 +26,32 @@ final class WrittenAuditService
     ): WrittenProcessingAudit {
         $ip = app()->runningInConsole() ? null : request()->ip();
         $userAgent = app()->runningInConsole() ? null : request()->userAgent();
-
         $context = [
-            'action' => $action,
-            'status_before' => $statusBefore,
-            'status_after' => $statusAfter,
-            'batch_id' => $batchId,
-            'processing_run_id' => $processingRunId,
-            'registration_id' => $registrationId,
-            'written_result_id' => $writtenResultId,
-            'actor_id' => (int) $actor->id,
-            'actor_name' => (string) $actor->name,
-            'reason' => $reason,
-            'changed_fields' => $changedFields,
-            'summary' => $summary,
-            'before' => $before,
-            'after' => $after,
-            'ip_address' => $ip,
-            'user_agent' => $userAgent,
+            'action' => $action, 'status_before' => $statusBefore, 'status_after' => $statusAfter,
+            'batch_id' => $batchId, 'processing_run_id' => $processingRunId,
+            'registration_id' => $registrationId, 'written_result_id' => $writtenResultId,
+            'actor_id' => (int) $actor->id, 'actor_name' => (string) $actor->name,
+            'reason' => $reason, 'changed_fields' => $changedFields, 'summary' => $summary,
+            'before' => $before, 'after' => $after, 'ip_address' => $ip, 'user_agent' => $userAgent,
         ];
-
         $audit = WrittenProcessingAudit::query()->create([
-            ...$context,
-            'before_snapshot' => $before,
-            'after_snapshot' => $after,
-            'started_at' => now(),
-            'completed_at' => now(),
-            'created_at' => now(),
+            ...$context, 'before_snapshot' => $before, 'after_snapshot' => $after,
+            'started_at' => now(), 'completed_at' => now(), 'created_at' => now(),
         ]);
-
         Log::channel('written')->info('Written processing action recorded.', $context);
-
         return $audit;
+    }
+
+    public function recordByActorId(
+        string $action,
+        int $actorId,
+        ?string $statusBefore = null,
+        ?string $statusAfter = null,
+        ?string $reason = null,
+        array $summary = [],
+        ?int $batchId = null,
+    ): WrittenProcessingAudit {
+        $actor = User::query()->findOrFail($actorId);
+        return $this->record($action, $actor, $statusBefore, $statusAfter, $reason, summary: $summary, batchId: $batchId);
     }
 }

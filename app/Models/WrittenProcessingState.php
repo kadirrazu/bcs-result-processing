@@ -11,8 +11,9 @@ final class WrittenProcessingState extends ExaminationModel
 
     protected $fillable = [
         'id', 'status', 'latest_import_batch_id', 'reconciliation_generated_at',
-        'reconciliation_generated_by', 'result_finalized_at', 'result_finalized_by',
-        'summary', 'is_stale', 'stale_reason',
+        'reconciliation_generated_by', 'latest_reconciliation_report_id',
+        'latest_processing_run_id', 'paper_crash_processed_at', 'paper_crash_processed_by',
+        'result_finalized_at', 'result_finalized_by', 'summary', 'is_stale', 'stale_reason',
     ];
 
     protected function casts(): array
@@ -20,6 +21,7 @@ final class WrittenProcessingState extends ExaminationModel
         return [
             'status' => WrittenProcessingStatus::class,
             'reconciliation_generated_at' => 'datetime',
+            'paper_crash_processed_at' => 'datetime',
             'result_finalized_at' => 'datetime',
             'summary' => 'array',
             'is_stale' => 'boolean',
