@@ -4,6 +4,7 @@ namespace App\Services\Registrations;
 
 use App\Jobs\ProcessRegistrationImport;
 use App\Models\RegistrationImportBatch;
+use DateTimeInterface;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -14,21 +15,13 @@ use Throwable;
 use ZipArchive;
 
 /**
- * Queue and process registration spreadsheets using one forward-only stream.
+ * R5 fast-ingestion service.
  *
- * The workbook is opened once. Rows are validated and persisted in bulk, so a
- * 375,000-row XLSX is not reparsed hundreds of times and does not execute one
- * INSERT/SELECT pair per candidate.
+ * This stage only streams the source file into a lightly indexed staging table.
+ * Master-data and business-rule validation deliberately run in a later job.
  */
 final class RegistrationImportService
 {
-    public function __construct(
-        private readonly RegistrationMasterMap $maps,
-        private readonly RegistrationRowNormalizer $normalizer,
-        private readonly RegistrationRowValidator $validator,
-        private readonly RegistrationUniversityCodePolicy $universityPolicy,
-    ) {}
-
     public function enqueue(UploadedFile $file, int $userId, int $examinationId): RegistrationImportBatch
     {
         $extension = strtolower($file->getClientOriginalExtension());
@@ -38,6 +31,7 @@ final class RegistrationImportService
             bin2hex(random_bytes(8)),
             $extension,
         );
+
         $file->storeAs(dirname($storedName), basename($storedName), 'local');
 
         $batch = RegistrationImportBatch::query()->create([
@@ -45,7 +39,7 @@ final class RegistrationImportService
             'original_name' => $file->getClientOriginalName(),
             'stored_name' => $storedName,
             'status' => 'queued',
-            'chunk_size' => max(500, (int) config('registrations.chunk_size', 2000)),
+            'chunk_size' => max(500, (int) config('registrations.staging_chunk_size', 2000)),
             'queued_at' => now(),
             'created_by' => $userId,
         ]);
@@ -55,7 +49,6 @@ final class RegistrationImportService
         return $batch;
     }
 
-    /** Execute the queued import. The examination connection must already be configured. */
     public function process(int $batchId): RegistrationImportBatch
     {
         $batch = RegistrationImportBatch::query()->findOrFail($batchId);
@@ -65,15 +58,14 @@ final class RegistrationImportService
             throw new RuntimeException('The uploaded registration spreadsheet is missing.');
         }
 
-        if (! class_exists(XlsxReader::class)) {
-            throw new RuntimeException('OpenSpout is required. Run: composer require openspout/openspout:^4.24');
-        }
-
         $batch->update([
-            'status' => 'processing',
+            'status' => 'staging',
             'started_at' => $batch->started_at ?? now(),
             'heartbeat_at' => now(),
             'failure_message' => null,
+            'processed_rows' => 0,
+            'staged_rows' => 0,
+            'progress_percent' => 0,
         ]);
 
         $reader = null;
@@ -83,7 +75,7 @@ final class RegistrationImportService
             $reader = match ($extension) {
                 'xlsx' => new XlsxReader(),
                 'csv' => new CsvReader(),
-                default => throw new RuntimeException('Enterprise import supports XLSX and CSV files only.'),
+                default => throw new RuntimeException('Registration staging supports XLSX and CSV files only.'),
             };
 
             $totalRows = $this->quickTotalRows($path, $extension);
@@ -95,16 +87,13 @@ final class RegistrationImportService
                 'total_chunks' => $totalChunks,
             ]);
 
-            $masters = $this->maps->load();
-            $totals = ['processed' => 0, 'inserted' => 0, 'updated' => 0, 'failed' => 0, 'warning' => 0, 'conflict' => 0];
-            $seenRegs = [];
-            $seenUserIds = [];
-            $prepared = [];
-            $headers = null;
-            $sourceRow = 0;
-            $chunk = 0;
-
             $reader->open($path);
+            $headers = null;
+            $buffer = [];
+            $sourceRow = 0;
+            $staged = 0;
+            $chunk = 0;
+            $timestamp = now()->format('Y-m-d H:i:s');
 
             foreach ($reader->getSheetIterator() as $sheet) {
                 foreach ($sheet->getRowIterator() as $spreadsheetRow) {
@@ -120,76 +109,44 @@ final class RegistrationImportService
                         continue;
                     }
 
-                    if ($headers === null) {
-                        throw new RuntimeException('The spreadsheet header row is missing.');
-                    }
-
-                    $columnCount = count($headers);
                     $raw = array_combine(
                         $headers,
-                        array_slice(array_pad($values, $columnCount, null), 0, $columnCount),
+                        array_slice(array_pad($values, count($headers), null), 0, count($headers)),
                     );
 
-                    $normalized = $this->normalizer->normalize($raw, $batch->id);
-                    $data = $normalized['attributes'];
-                    $data['division_code'] = $data['district_code'] === null
-                        ? null
-                        : ($masters['district_division'][(string) $data['district_code']] ?? null);
+                    $buffer[] = $this->toStagingRow($batchId, $sourceRow, $raw, $timestamp);
 
-                    $universityResult = $this->universityPolicy->apply($data, $masters['university']);
-                    $data = $universityResult['attributes'];
-                    $warnings = array_values(array_unique([
-                        ...$normalized['warnings'],
-                        ...$universityResult['warnings'],
-                    ]));
-                    $errors = $this->validator->validate($data, $masters);
-
-                    $reg = $data['reg'] ?: null;
-                    $userId = $data['user_id'] ?: null;
-                    if (($reg !== null && isset($seenRegs[$reg])) || ($userId !== null && isset($seenUserIds[$userId]))) {
-                        $errors[] = 'Duplicate REG or USER appears more than once in the same spreadsheet.';
-                    }
-                    if ($reg !== null) {
-                        $seenRegs[$reg] = true;
-                    }
-                    if ($userId !== null) {
-                        $seenUserIds[$userId] = true;
-                    }
-
-                    $prepared[] = compact('sourceRow', 'data', 'warnings', 'errors');
-
-                    if (count($prepared) >= $chunkSize) {
+                    if (count($buffer) >= $chunkSize) {
+                        DB::connection('exam')->table('registration_import_staging')->insert($buffer);
+                        $staged += count($buffer);
                         $chunk++;
-                        $this->flushChunk($batch, $prepared, $totals, $sourceRow, $chunk, $totalRows, $totalChunks);
-                        $prepared = [];
+                        $buffer = [];
+                        $this->updateProgress($batch, $staged, $sourceRow, $chunk, $totalRows, $totalChunks);
                     }
                 }
 
-                // Registration templates are single-sheet files. Ignore any extra sheets.
                 break;
             }
 
-            if ($prepared !== []) {
+            if ($buffer !== []) {
+                DB::connection('exam')->table('registration_import_staging')->insert($buffer);
+                $staged += count($buffer);
                 $chunk++;
-                $this->flushChunk($batch, $prepared, $totals, $sourceRow, $chunk, $totalRows, $totalChunks);
+                $this->updateProgress($batch, $staged, $sourceRow, $chunk, $totalRows, $totalChunks);
             }
 
             $reader->close();
             $reader = null;
 
-            $actualRows = $totals['processed'];
             $batch->update([
-                'status' => $totals['failed'] > 0 ? 'completed_with_errors' : 'completed',
-                'total_rows' => $totalRows > 0 ? $totalRows : $actualRows,
-                'processed_rows' => $actualRows,
-                'total_chunks' => $totalChunks > 0 ? $totalChunks : $chunk,
+                'status' => 'staged',
+                'total_rows' => $totalRows > 0 ? $totalRows : $staged,
+                'processed_rows' => $staged,
+                'staged_rows' => $staged,
+                'current_row' => $sourceRow,
                 'current_chunk' => $chunk,
+                'total_chunks' => $totalChunks > 0 ? $totalChunks : $chunk,
                 'progress_percent' => 100,
-                'inserted_rows' => $totals['inserted'],
-                'updated_rows' => $totals['updated'],
-                'failed_rows' => $totals['failed'],
-                'warning_rows' => $totals['warning'],
-                'identity_conflict_rows' => $totals['conflict'],
                 'finished_at' => now(),
                 'heartbeat_at' => now(),
             ]);
@@ -200,7 +157,6 @@ final class RegistrationImportService
                 try {
                     $reader->close();
                 } catch (Throwable) {
-                    // Preserve the original exception.
                 }
             }
 
@@ -213,6 +169,68 @@ final class RegistrationImportService
 
             throw $exception;
         }
+    }
+
+    /** @param array<string,mixed> $raw @return array<string,mixed> */
+    private function toStagingRow(int $batchId, int $sourceRow, array $raw, string $timestamp): array
+    {
+        $ff = $this->plain($raw['has_ff_quota'] ?? null);
+        $em = $this->plain($raw['has_em_quota'] ?? null);
+        $phc = $this->plain($raw['has_phc_quota'] ?? null);
+
+        return [
+            'batch_id' => $batchId,
+            'source_row' => $sourceRow,
+            'user_id' => strtoupper($this->plain($raw['user'] ?? null)),
+            'reg' => $this->plain($raw['reg'] ?? null),
+            'national_id' => $this->nullable($raw['national_id'] ?? null),
+            'name' => $this->nullable($raw['name'] ?? null),
+            'father_name' => $this->nullable($raw['fname'] ?? null),
+            'mother_name' => $this->nullable($raw['mname'] ?? null),
+            'name_bn' => $this->nullable($raw['name_bn'] ?? null),
+            'father_name_bn' => $this->nullable($raw['fname_bn'] ?? null),
+            'mother_name_bn' => $this->nullable($raw['mname_bn'] ?? null),
+            'raw_birth_date' => $this->rawDate($raw['b_date'] ?? null),
+            'birth_date' => null,
+            'sex_code' => $this->nullable($raw['sex'] ?? null),
+            'district_code' => $this->nullable($raw['district'] ?? null),
+            'division_code' => null,
+            'university_code' => $this->nullable($raw['university'] ?? null),
+            'bachelor_subject_code' => $this->nullable($raw['b_subject'] ?? null),
+            'post_related_subject_code' => $this->nullable($raw['post_related_subject'] ?? null),
+            'cadre_category' => $this->nullable($raw['cadre_category'] ?? null),
+            'has_ff_quota' => $ff === '' ? null : $ff,
+            'has_em_quota' => $em === '' ? null : $em,
+            'has_phc_quota' => $phc === '' ? null : $phc,
+            'has_quota' => $this->hasQuota($ff, $em, $phc),
+            'candidate_status' => strtolower($this->plain($raw['status'] ?? null) ?: 'active'),
+            'comment' => $this->nullable($raw['comment'] ?? null),
+            'validation_status' => 'pending',
+            'validation_errors' => null,
+            'validation_warnings' => null,
+            'registration_id' => null,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ];
+    }
+
+    private function updateProgress(
+        RegistrationImportBatch $batch,
+        int $staged,
+        int $sourceRow,
+        int $chunk,
+        int $totalRows,
+        int $totalChunks,
+    ): void {
+        $batch->update([
+            'processed_rows' => $staged,
+            'staged_rows' => $staged,
+            'current_row' => $sourceRow,
+            'current_chunk' => $chunk,
+            'total_chunks' => $totalChunks,
+            'progress_percent' => $totalRows > 0 ? min(100, round(($staged / $totalRows) * 100, 4)) : 0,
+            'heartbeat_at' => now(),
+        ]);
     }
 
     /** @param list<mixed> $values @return list<string> */
@@ -235,193 +253,53 @@ final class RegistrationImportService
     private function isEmptyRow(array $values): bool
     {
         foreach ($values as $value) {
-            if ($value === null) {
-                continue;
+            if ($value instanceof DateTimeInterface) {
+                return false;
             }
-            if (is_string($value) && trim($value) === '') {
-                continue;
+            if ($value !== null && trim((string) $value) !== '') {
+                return false;
             }
-
-            return false;
         }
 
         return true;
     }
 
-    /**
-     * @param list<array{sourceRow:int,data:array<string,mixed>,warnings:list<string>,errors:list<string>}> $prepared
-     * @param array{processed:int,inserted:int,updated:int,failed:int,warning:int,conflict:int} $totals
-     */
-    private function flushChunk(
-        RegistrationImportBatch $batch,
-        array $prepared,
-        array &$totals,
-        int $sourceRow,
-        int $chunk,
-        int $totalRows,
-        int $totalChunks,
-    ): void {
-        $chunkTotals = $this->persistChunkBulk($batch->id, $prepared);
-        foreach ($chunkTotals as $key => $value) {
-            $totals[$key] += $value;
-        }
-
-        $processed = $totals['processed'];
-        $batch->update([
-            'processed_rows' => $processed,
-            'current_row' => $sourceRow,
-            'current_chunk' => $chunk,
-            'progress_percent' => $totalRows > 0 ? min(100, round(($processed / $totalRows) * 100, 4)) : 0,
-            'inserted_rows' => $totals['inserted'],
-            'updated_rows' => $totals['updated'],
-            'failed_rows' => $totals['failed'],
-            'warning_rows' => $totals['warning'],
-            'identity_conflict_rows' => $totals['conflict'],
-            'total_chunks' => $totalChunks,
-            'heartbeat_at' => now(),
-        ]);
-
-        gc_collect_cycles();
-    }
-
-    /**
-     * Persist a complete chunk with a constant number of SQL statements.
-     *
-     * @param list<array{sourceRow:int,data:array<string,mixed>,warnings:list<string>,errors:list<string>}> $rows
-     * @return array{processed:int,inserted:int,updated:int,failed:int,warning:int,conflict:int}
-     */
-    private function persistChunkBulk(int $batchId, array $rows): array
+    private function plain(mixed $value): string
     {
-        $totals = ['processed' => count($rows), 'inserted' => 0, 'updated' => 0, 'failed' => 0, 'warning' => 0, 'conflict' => 0];
-        if ($rows === []) {
-            return $totals;
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('dmY');
         }
 
-        $candidateRows = array_values(array_filter($rows, static fn (array $row): bool => $row['errors'] === []));
-        $regs = array_values(array_unique(array_filter(array_map(static fn (array $row): ?string => $row['data']['reg'] ?: null, $candidateRows))));
-        $userIds = array_values(array_unique(array_filter(array_map(static fn (array $row): ?string => $row['data']['user_id'] ?: null, $candidateRows))));
-
-        $existing = collect();
-        if ($regs !== [] || $userIds !== []) {
-            $existing = DB::connection('exam')->table('registrations')
-                ->where(function ($query) use ($regs, $userIds): void {
-                    if ($regs !== []) {
-                        $query->whereIn('reg', $regs);
-                    }
-                    if ($userIds !== []) {
-                        $query->{$regs === [] ? 'whereIn' : 'orWhereIn'}('user_id', $userIds);
-                    }
-                })
-                ->get()
-                ->map(static fn (object $row): array => (array) $row);
-        }
-
-        $byReg = $existing->keyBy('reg');
-        $byUser = $existing->keyBy('user_id');
-        $accepted = [];
-        $metadata = [];
-        $auditRows = [];
-        $timestamp = now();
-
-        foreach ($rows as $row) {
-            $data = $row['data'];
-            $errors = $row['errors'];
-            $regMatch = $data['reg'] ? $byReg->get($data['reg']) : null;
-            $userMatch = $data['user_id'] ? $byUser->get($data['user_id']) : null;
-
-            $auditBase = [
-                'batch_id' => $batchId,
-                'source_row' => $row['sourceRow'],
-                'registration_id' => null,
-                'reg' => $data['reg'] ?: null,
-                'user_id' => $data['user_id'] ?: null,
-                'warnings' => $row['warnings'] === [] ? null : json_encode($row['warnings'], JSON_UNESCAPED_UNICODE),
-                'errors' => null,
-                'before_data' => null,
-                'after_data' => null,
-                'created_at' => $timestamp,
-                'updated_at' => $timestamp,
-            ];
-
-            if ($errors !== []) {
-                $auditBase['action'] = 'rejected';
-                $auditBase['errors'] = json_encode(array_values(array_unique($errors)), JSON_UNESCAPED_UNICODE);
-                $auditRows[] = $auditBase;
-                $totals['failed']++;
-                continue;
-            }
-
-            if (($regMatch && $regMatch['user_id'] !== $data['user_id'])
-                || ($userMatch && $userMatch['reg'] !== $data['reg'])
-                || ($regMatch && $userMatch && $regMatch['id'] !== $userMatch['id'])) {
-                $auditBase['action'] = 'identity_conflict';
-                $auditBase['errors'] = json_encode(['REG and USER identify different candidates. Correct the spreadsheet and import again.'], JSON_UNESCAPED_UNICODE);
-                $auditRows[] = $auditBase;
-                $totals['failed']++;
-                $totals['conflict']++;
-                continue;
-            }
-
-            $isUpdate = $regMatch !== null;
-            // Keep a uniform column set for bulk upsert. created_at is excluded
-            // from updateColumns, so existing registrations retain their value.
-            $accepted[] = $data;
-            $metadata[$data['reg']] = [
-                'base' => $auditBase,
-                'action' => $isUpdate ? 'updated' : 'inserted',
-                'before' => $isUpdate ? $regMatch : null,
-                'warnings' => $row['warnings'],
-            ];
-        }
-
-        DB::connection('exam')->transaction(function () use ($accepted, $regs, $metadata, &$auditRows, &$totals): void {
-            if ($accepted !== []) {
-                $updateColumns = [
-                    'national_id', 'name', 'father_name', 'mother_name', 'name_bn', 'father_name_bn',
-                    'mother_name_bn', 'birth_date', 'sex_code', 'district_code', 'division_code',
-                    'university_code', 'bachelor_subject_code', 'post_related_subject_code',
-                    'cadre_category', 'has_ff_quota', 'has_em_quota', 'has_phc_quota', 'has_quota',
-                    'status', 'validation_status', 'comment', 'source_batch_id', 'updated_at',
-                ];
-
-                DB::connection('exam')->table('registrations')->upsert($accepted, ['reg'], $updateColumns);
-
-                $afterByReg = DB::connection('exam')->table('registrations')
-                    ->whereIn('reg', array_keys($metadata))
-                    ->get()
-                    ->map(static fn (object $row): array => (array) $row)
-                    ->keyBy('reg');
-
-                foreach ($metadata as $reg => $meta) {
-                    $after = $afterByReg->get($reg);
-                    if ($after === null) {
-                        throw new RuntimeException("Registration {$reg} was not found after bulk upsert.");
-                    }
-
-                    $audit = $meta['base'];
-                    $audit['registration_id'] = $after['id'];
-                    $audit['action'] = $meta['action'];
-                    // Rollback needs the old snapshot only for updates. Insert rollback uses registration_id.
-                    $audit['before_data'] = $meta['before'] === null ? null : json_encode($meta['before'], JSON_UNESCAPED_UNICODE);
-                    $audit['after_data'] = null;
-                    $auditRows[] = $audit;
-
-                    $totals[$meta['action'] === 'updated' ? 'updated' : 'inserted']++;
-                    if ($meta['warnings'] !== []) {
-                        $totals['warning']++;
-                    }
-                }
-            }
-
-            foreach (array_chunk($auditRows, 1000) as $auditChunk) {
-                DB::connection('exam')->table('registration_import_rows')->insert($auditChunk);
-            }
-        });
-
-        return $totals;
+        return trim((string) ($value ?? ''));
     }
 
-    /** Obtain XLSX row count from worksheet dimension without loading the workbook. */
+    private function nullable(mixed $value): ?string
+    {
+        $value = $this->plain($value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private function rawDate(mixed $value): ?string
+    {
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('dmY');
+        }
+
+        return $this->nullable($value);
+    }
+
+    private function hasQuota(string $ff, string $em, string $phc): bool
+    {
+        foreach ([$ff, $em, $phc] as $value) {
+            if ($value !== '' && is_numeric($value) && (int) $value > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function quickTotalRows(string $path, string $extension): int
     {
         if ($extension === 'csv') {

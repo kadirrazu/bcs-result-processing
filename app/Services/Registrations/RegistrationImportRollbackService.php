@@ -6,7 +6,7 @@ use App\Models\RegistrationImportBatch;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
-/** Reverse one completed import batch using its row-level audit snapshots. */
+/** Reverse one approved import batch using row-level audit snapshots. */
 final class RegistrationImportRollbackService
 {
     public function rollback(RegistrationImportBatch $batch, int $userId, ?string $reason = null): RegistrationImportBatch
@@ -14,8 +14,8 @@ final class RegistrationImportRollbackService
         if ($batch->rolled_back_at !== null) {
             throw new RuntimeException('This import batch has already been rolled back.');
         }
-        if (! in_array($batch->status, ['completed', 'completed_with_errors'], true)) {
-            throw new RuntimeException('Only completed import batches can be rolled back.');
+        if (! in_array($batch->status, ['approved', 'completed', 'completed_with_errors'], true)) {
+            throw new RuntimeException('Only an approved import batch can be rolled back.');
         }
 
         DB::connection('exam')->transaction(function () use ($batch, $userId, $reason): void {
@@ -24,7 +24,6 @@ final class RegistrationImportRollbackService
                 function ($rows): void {
                     foreach ($rows as $row) {
                         if ($row->action === 'inserted') {
-                            // Delete only when the candidate still belongs to this import batch.
                             DB::connection('exam')->table('registrations')
                                 ->where('id', $row->registration_id)
                                 ->where('source_batch_id', $row->batch_id)
