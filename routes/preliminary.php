@@ -21,6 +21,12 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/reconciliation/{report}', [PreliminaryController::class, 'reconciliation'])->name('reconciliation.show');
         Route::get('/reconciliation/{report}/csv/{group}', [PreliminaryController::class, 'reconciliationCsv'])->name('reconciliation.csv');
 
+        Route::post('/distribution/generate', [PreliminaryController::class, 'generateDistribution'])->name('distribution.generate');
+        Route::get('/distribution/{report}', [PreliminaryController::class, 'distribution'])->name('distribution.show');
+        Route::get('/distribution/{report}/csv', [PreliminaryController::class, 'distributionCsv'])->name('distribution.csv');
+        Route::post('/cutoff/propose', [PreliminaryController::class, 'proposeCutoff'])->name('cutoff.propose');
+        Route::post('/cutoff/{decision}/approve', [PreliminaryController::class, 'approveCutoff'])->name('cutoff.approve');
+
         Route::get('/results', [PreliminaryController::class, 'results'])->name('results.index');
         Route::get('/results/{result}/edit', [PreliminaryController::class, 'edit'])->name('results.edit');
         Route::put('/results/{result}', [PreliminaryController::class, 'update'])->name('results.update');

@@ -8,8 +8,11 @@ use App\Enums\PreliminaryProcessingStatus;
 final class PreliminaryProcessingState extends ExaminationModel
 {
     protected $fillable = [
-        'status', 'latest_import_batch_id', 'latest_reconciliation_report_id', 'cutoff_mark', 'cutoff_set_by',
-        'cutoff_set_at', 'reconciliation_generated_by', 'reconciliation_generated_at',
+        'status', 'latest_import_batch_id', 'latest_reconciliation_report_id',
+        'latest_distribution_report_id', 'current_cutoff_decision_id',
+        'cutoff_mark', 'cutoff_set_by', 'cutoff_set_at', 'cutoff_requires_review',
+        'reconciliation_generated_by', 'reconciliation_generated_at',
+        'distribution_generated_by', 'distribution_generated_at',
         'result_finalized_by', 'result_finalized_at', 'summary',
     ];
 
@@ -18,8 +21,10 @@ final class PreliminaryProcessingState extends ExaminationModel
         return [
             'status' => PreliminaryProcessingStatus::class,
             'cutoff_mark' => 'decimal:2',
+            'cutoff_requires_review' => 'boolean',
             'cutoff_set_at' => 'datetime',
             'reconciliation_generated_at' => 'datetime',
+            'distribution_generated_at' => 'datetime',
             'result_finalized_at' => 'datetime',
             'summary' => 'array',
         ];

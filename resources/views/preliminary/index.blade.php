@@ -93,12 +93,51 @@
                         </tr>
 
                         <tr>
+                            <td>Mark Distribution</td>
+                            <td>
+                                {{ $state->distribution_generated_at ? 'Generated' : 'Pending / stale' }}
+                                @if ($latestDistribution)
+                                    — {{ number_format((int) $latestDistribution->eligible_candidates) }} eligible candidates
+                                @endif
+                            </td>
+                            <td>{{ $state->distribution_generated_at?->format('d-m-Y h:i A') ?? '—' }}</td>
+                            <td class="text-end">
+                                @can('process', App\Models\PreliminaryResult::class)
+                                    @if ($state->latest_reconciliation_report_id)
+                                        <form class="d-inline" method="POST" action="{{ route('preliminary.distribution.generate') }}">
+                                            @csrf
+                                            <button class="btn btn-sm btn-primary" type="submit">
+                                                {{ $state->distribution_generated_at ? 'Regenerate' : 'Generate' }}
+                                            </button>
+                                        </form>
+                                    @endif
+                                @endcan
+                                @if ($latestDistribution)
+                                    <a class="btn btn-sm btn-outline-primary" href="{{ route('preliminary.distribution.show', $latestDistribution) }}">View Latest</a>
+                                @endif
+                            </td>
+                        </tr>
+
+                        <tr>
                             <td>Cut-off Mark</td>
                             <td>
-                                {{ $state->cutoff_mark !== null ? 'Set as '.$state->cutoff_mark : 'Pending' }}
+                                @if ($state->cutoff_mark !== null)
+                                    Set as {{ number_format((float) $state->cutoff_mark, 2) }}
+                                    @if ($state->cutoff_requires_review)
+                                        <span class="badge bg-yellow-lt ms-1">Review required</span>
+                                    @endif
+                                @elseif ($pendingCutoff)
+                                    Proposed: {{ number_format((float) $pendingCutoff->cutoff_mark, 2) }} — awaiting approval
+                                @else
+                                    Pending
+                                @endif
                             </td>
                             <td>{{ $state->cutoff_set_at?->format('d-m-Y h:i A') ?? '—' }}</td>
-                            <td></td>
+                            <td class="text-end">
+                                @if ($latestDistribution)
+                                    <a class="btn btn-sm btn-outline-primary" href="{{ route('preliminary.distribution.show', $latestDistribution) }}">Manage Cut-off</a>
+                                @endif
+                            </td>
                         </tr>
 
                         <tr>

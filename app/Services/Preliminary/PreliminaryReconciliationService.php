@@ -64,6 +64,13 @@ final class PreliminaryReconciliationService
             'latest_reconciliation_report_id' => $report->id,
             'reconciliation_generated_by' => $actorId,
             'reconciliation_generated_at' => now(),
+            // A regenerated reconciliation invalidates any previous mark-distribution snapshot.
+            'latest_distribution_report_id' => null,
+            'distribution_generated_by' => null,
+            'distribution_generated_at' => null,
+            'cutoff_requires_review' => $state->cutoff_mark !== null,
+            'result_finalized_by' => null,
+            'result_finalized_at' => null,
             'summary' => [...$existingSummary, 'reconciliation' => $summary],
         ]);
 

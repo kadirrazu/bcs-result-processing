@@ -5,12 +5,16 @@ namespace App\Http\Controllers;
 use App\Enums\PreliminaryProcessingStatus;
 use App\Jobs\ApprovePreliminaryImport;
 use App\Jobs\ValidatePreliminaryImport;
+use App\Models\PreliminaryCutoffDecision;
+use App\Models\PreliminaryDistributionReport;
 use App\Models\PreliminaryImportBatch;
 use App\Models\PreliminaryProcessingAudit;
 use App\Models\PreliminaryProcessingState;
 use App\Models\PreliminaryReconciliationReport;
 use App\Models\PreliminaryResult;
 use App\Services\Preliminary\PreliminaryAuditService;
+use App\Services\Preliminary\PreliminaryCutoffService;
+use App\Services\Preliminary\PreliminaryDistributionService;
 use App\Services\Preliminary\PreliminaryImportService;
 use App\Services\Preliminary\PreliminaryReconciliationService;
 use App\Services\Preliminary\PreliminaryResultEditService;
@@ -39,6 +43,9 @@ final class PreliminaryController extends Controller
             'state' => $state,
             'latestBatch' => PreliminaryImportBatch::query()->latest('id')->first(),
             'latestReconciliation' => PreliminaryReconciliationReport::query()->latest('id')->first(),
+            'latestDistribution' => PreliminaryDistributionReport::query()->latest('id')->first(),
+            'pendingCutoff' => PreliminaryCutoffDecision::query()->where('status', 'proposed')->latest('id')->first(),
+            'currentCutoff' => PreliminaryCutoffDecision::query()->where('status', 'approved')->latest('id')->first(),
             'batches' => PreliminaryImportBatch::query()->latest('id')->paginate(15),
             'audits' => PreliminaryProcessingAudit::query()->latest('id')->limit(10)->get(),
             'counts' => [
@@ -198,6 +205,104 @@ final class PreliminaryController extends Controller
         unset($file);
 
         return response()->download($path, "preliminary-reconciliation-{$report->id}-{$group}.csv", ['Content-Type' => 'text/csv; charset=UTF-8'])->deleteFileAfterSend(true);
+    }
+
+
+    public function generateDistribution(Request $request, PreliminaryDistributionService $service, PreliminaryAuditService $audit): RedirectResponse
+    {
+        $this->authorize('process', PreliminaryResult::class);
+        $state = PreliminaryProcessingState::query()->firstOrCreate(['id' => 1], ['status' => PreliminaryProcessingStatus::NotStarted->value]);
+        $beforeStatus = $state->status instanceof \BackedEnum ? $state->status->value : (string) $state->status;
+        $generated = $service->generate((int) $request->user()->id);
+
+        $audit->record(
+            'MARK_DISTRIBUTION_GENERATED',
+            $request->user(),
+            $beforeStatus,
+            $state->cutoff_mark !== null ? PreliminaryProcessingStatus::CutoffSet->value : PreliminaryProcessingStatus::DistributionGenerated->value,
+            null,
+            $generated['summary'],
+            null,
+            $generated['summary'],
+            batchId: $state->latest_import_batch_id,
+            processingRunId: $generated['report']->id,
+        );
+
+        return redirect()->route('preliminary.distribution.show', $generated['report'])
+            ->with('success', 'Mark distribution and cumulative report generated.');
+    }
+
+    public function distribution(PreliminaryDistributionReport $report): View
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+
+        $state = PreliminaryProcessingState::query()->firstOrCreate(
+            ['id' => 1],
+            ['status' => PreliminaryProcessingStatus::NotStarted->value],
+        );
+
+        return view('preliminary.distribution', [
+            'report' => $report,
+            'rows' => $report->distribution ?? [],
+            'state' => $state,
+            'pendingCutoff' => PreliminaryCutoffDecision::query()->where('status', 'proposed')->latest('id')->first(),
+            'currentCutoff' => PreliminaryCutoffDecision::query()->where('status', 'approved')->latest('id')->first(),
+            'cutoffHistory' => PreliminaryCutoffDecision::query()->latest('id')->limit(25)->get(),
+        ]);
+    }
+
+    public function distributionCsv(PreliminaryDistributionReport $report): BinaryFileResponse
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+
+        $directory = storage_path('app/private/preliminary-distribution-reports');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.DIRECTORY_SEPARATOR.uniqid("distribution-{$report->id}-", true).'.csv';
+        $file = new \SplFileObject($path, 'wb');
+        $file->fwrite("\xEF\xBB\xBF");
+        $file->fputcsv(['mark', 'count_total', 'count_GG', 'count_TT', 'count_GT', 'cumulative_total', 'cumulative_GG', 'cumulative_TT', 'cumulative_GT']);
+
+        foreach (($report->distribution ?? []) as $row) {
+            $file->fputcsv([
+                $row['mark'],
+                $row['count']['total'], $row['count']['GG'], $row['count']['TT'], $row['count']['GT'],
+                $row['cumulative']['total'], $row['cumulative']['GG'], $row['cumulative']['TT'], $row['cumulative']['GT'],
+            ]);
+        }
+        unset($file);
+
+        return response()->download(
+            $path,
+            "preliminary-mark-distribution-{$report->id}.csv",
+            ['Content-Type' => 'text/csv; charset=UTF-8'],
+        )->deleteFileAfterSend(true);
+    }
+
+    public function proposeCutoff(Request $request, PreliminaryCutoffService $service): RedirectResponse
+    {
+        $this->authorize('process', PreliminaryResult::class);
+        $validated = $request->validate([
+            'cutoff_mark' => ['required', 'numeric', 'between:-9999.99,9999.99'],
+            'reason' => ['required', 'string', 'min:5', 'max:2000'],
+        ]);
+
+        $decision = $service->propose((float) $validated['cutoff_mark'], $validated['reason'], $request->user());
+
+        return redirect()->route('preliminary.distribution.show', $decision->distribution_report_id)
+            ->with('success', 'Cut-off proposal saved with audit trail. Review the projected pass counts and approve when ready.');
+    }
+
+    public function approveCutoff(Request $request, PreliminaryCutoffDecision $decision, PreliminaryCutoffService $service): RedirectResponse
+    {
+        $this->authorize('process', PreliminaryResult::class);
+        $validated = $request->validate([
+            'approval_reason' => ['required', 'string', 'min:5', 'max:2000'],
+        ]);
+
+        $service->approve($decision, $validated['approval_reason'], $request->user());
+
+        return redirect()->route('preliminary.distribution.show', $decision->distribution_report_id)
+            ->with('success', 'Cut-off approved and recorded in database audit and preliminary file log.');
     }
 
     public function results(Request $request): View
