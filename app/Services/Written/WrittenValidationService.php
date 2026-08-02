@@ -16,14 +16,14 @@ final class WrittenValidationService
         private readonly WrittenMarkInterpreter $marks,
     ) {}
 
-    public function validate(int $batchId): WrittenImportBatch
+    public function validate(int $batchId, bool $allowApprovedCorrection = false): WrittenImportBatch
     {
         $batch = WrittenImportBatch::query()->findOrFail($batchId);
         if (! in_array($batch->status, ['staged', 'validation_queued', 'validated', 'failed'], true)) {
             throw new RuntimeException('This Written batch cannot be validated from its current status.');
         }
-        if ((int) $batch->approved_rows > 0) {
-            throw new RuntimeException('An already approved Written batch cannot be revalidated.');
+        if ((int) $batch->approved_rows > 0 && ! $allowApprovedCorrection) {
+            throw new RuntimeException('An already approved Written batch can only be revalidated through the invalid-row correction workflow.');
         }
 
         $batch->update([

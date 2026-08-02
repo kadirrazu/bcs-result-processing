@@ -3,7 +3,7 @@
 @section('content')
 <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
     <div class="col"><h2 class="page-title">Final Written Result — Category-wise</h2><div class="text-secondary">GG includes GG + GN, TT includes TT + T, and GT contains only candidates qualified in both tracks.</div></div>
-    <div class="col-auto ms-auto d-flex gap-2"><a class="btn btn-outline-secondary" href="{{ route('written.index') }}">Back to Written</a><a class="btn btn-outline-primary" href="{{ route('written.final-result.category.txt') }}">Download TXT</a><button class="btn btn-primary" onclick="window.print()">Print</button></div>
+    <div class="col-auto ms-auto d-flex gap-2"><a class="btn btn-outline-secondary" href="{{ route('written.index') }}">Back to Written</a><a class="btn btn-outline-primary" href="{{ route('written.final-result.category.txt') }}">Download TXT</a><a class="btn btn-outline-success" href="{{ route('written.final-result.template') }}">Fill Result Template</a><button class="btn btn-primary" onclick="window.print()">Print</button></div>
 </div></div></div>
 <div class="page-body"><div class="container-xl">
 @foreach($groups as $category => $registrations)

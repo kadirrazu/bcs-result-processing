@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ApproveRegistrationImport;
+use App\Jobs\RevalidateAndMergeCorrectedImportRows;
 use App\Jobs\ValidateRegistrationImport;
+use App\Models\ImportCorrectionEntry;
 use App\Models\Registration;
 use App\Models\RegistrationImportBatch;
 use App\Services\Registrations\RegistrationImportRollbackService;
 use App\Services\Registrations\RegistrationImportService;
 use App\Services\Registrations\RegistrationTemplateService;
+use App\Services\Imports\InvalidRowCorrectionService;
 use App\Support\Examinations\ExaminationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -55,11 +58,55 @@ final class RegistrationImportController extends Controller
     {
         $this->authorize('viewAny', Registration::class);
         $rows = $batch->stagingRows()
-            ->whereIn('validation_status', ['invalid', 'warning'])
+            ->whereIn('validation_status', ['invalid', 'identity_conflict', 'warning'])
             ->orderBy('source_row')
             ->paginate(100);
 
-        return view('registrations.import-result', ['record' => $batch, 'rows' => $rows]);
+        return view('registrations.import-result', [
+            'record' => $batch,
+            'rows' => $rows,
+            'corrections' => ImportCorrectionEntry::query()->where('module', 'registration')->where('batch_id', $batch->id)->latest('id')->limit(10)->get(),
+        ]);
+    }
+
+    public function correctionTemplate(RegistrationImportBatch $batch, InvalidRowCorrectionService $service): BinaryFileResponse
+    {
+        $this->authorize('viewAny', Registration::class);
+        $directory = storage_path('app/private/import-corrections');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.'/registration-batch-'.$batch->id.'-invalid-rows.xlsx';
+        $count = $service->createCorrectionWorkbook('registration', (int) $batch->id, $path);
+        abort_if($count === 0, 409, 'This batch has no invalid rows to correct.');
+
+        return response()->download($path, 'registration-batch-'.$batch->id.'-invalid-rows.xlsx')->deleteFileAfterSend();
+    }
+
+    public function applyCorrections(Request $request, RegistrationImportBatch $batch, InvalidRowCorrectionService $service, ExaminationContext $context): RedirectResponse
+    {
+        $this->authorize('import', Registration::class);
+        $validated = $request->validate([
+            'correction_file' => ['required', 'file', 'mimes:xlsx,csv', 'max:102400'],
+        ]);
+        $examinationId = $context->currentId();
+        abort_if($examinationId === null, 409, 'No examination is selected.');
+
+        $wasApproved = (int) $batch->approved_rows > 0 || (string) $batch->status === 'approved';
+        $summary = $service->apply('registration', $batch, $validated['correction_file'], $request->user());
+        $batch->update([
+            'status' => 'validation_queued',
+            'progress_percent' => 0,
+            'failure_message' => null,
+            'finished_at' => null,
+        ]);
+        if ($wasApproved) {
+            RevalidateAndMergeCorrectedImportRows::dispatch(
+                $examinationId, 'registration', (int) $batch->id, $summary['source_rows'], (int) $request->user()->id
+            );
+        } else {
+            ValidateRegistrationImport::dispatch($examinationId, $batch->id);
+        }
+
+        return back()->with('success', number_format($summary['corrected_rows']).' invalid registration row(s) were replaced from the correction file. Validation is running again now.');
     }
 
     public function validateBatch(RegistrationImportBatch $batch, ExaminationContext $context): RedirectResponse
@@ -165,7 +212,7 @@ final class RegistrationImportController extends Controller
                 'validation_errors',
             ])
             ->where('batch_id', $batch->id)
-            ->whereIn('validation_status', ['invalid', 'warning'])
+            ->whereIn('validation_status', ['invalid', 'identity_conflict', 'warning'])
             ->chunkById(5000, function ($rows) use ($file): void {
                 foreach ($rows as $row) {
                     $file->fputcsv([

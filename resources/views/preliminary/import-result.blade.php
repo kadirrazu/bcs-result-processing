@@ -32,6 +32,32 @@
         <div class="alert alert-success">Preliminary snapshot approved: {{ number_format($record->inserted_rows) }} inserted, {{ number_format($record->updated_rows) }} updated. Candidates not present in this approved source are now derived as absent.</div>
     @endif
 
+
+    @if(((int) $record->invalid_rows + (int) $record->identity_conflict_rows) > 0 && in_array($record->status, ['validated', 'failed', 'approved'], true))
+        <div class="card mb-3 border-warning">
+            <div class="card-header"><h3 class="card-title">Correct invalid rows</h3></div>
+            <div class="card-body">
+                <p class="text-secondary">Download only the rows that still need correction. Keep <strong>source_row</strong> unchanged, make the corrections, and upload the workbook again. Valid rows and warning-only rows cannot be changed through this upload. @if((int)$record->approved_rows > 0) Because this batch is already approved, only corrected rows that become valid will be added; existing approved results will remain untouched. @endif</p>
+                @error('correction_file')<div class="alert alert-danger">{{ $message }}</div>@enderror
+                <div class="d-flex gap-2 flex-wrap align-items-end">
+                    <a class="btn btn-outline-warning" href="{{ route('preliminary.import.corrections.template', $record) }}">Download Invalid Rows</a>
+                    <form method="post" action="{{ route('preliminary.import.corrections.store', $record) }}" enctype="multipart/form-data" class="d-flex gap-2 flex-wrap align-items-end">
+                        @csrf
+                        <div><label class="form-label">Corrected workbook</label><input class="form-control" type="file" name="correction_file" accept=".xlsx,.csv" required></div>
+                        <button class="btn btn-warning" onclick="return confirm('Apply these corrections to the invalid Preliminary rows and run validation again?');">Upload Corrections</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
+
+@if(isset($corrections) && $corrections->isNotEmpty())
+<div class="card mb-3"><div class="card-header"><h3 class="card-title">Recent correction uploads</h3></div><div class="table-responsive"><table class="table table-vcenter"><thead><tr><th>Source row</th><th>Previous validation</th><th>File</th><th>Corrected by</th><th>Time</th></tr></thead><tbody>
+@foreach($corrections as $correction)<tr><td>{{ $correction->source_row }}</td><td>{{ str_replace('_',' ',(string)$correction->validation_status_before) }}</td><td>{{ $correction->source_filename }}</td><td>{{ $correction->actor_name ?? ('User #'.$correction->actor_id) }}</td><td>{{ $correction->created_at?->format('d-m-Y h:i:s A') }}</td></tr>@endforeach
+</tbody></table></div></div>
+@endif
+
     <div class="card"><div class="card-header"><h3 class="card-title">Rows requiring attention</h3></div><div class="table-responsive"><table class="table table-vcenter"><thead><tr><th>Row</th><th>Reg</th><th>User</th><th>Mark</th><th>Source status</th><th>Validation</th><th>Messages</th></tr></thead><tbody>
         @forelse($rows as $row)
         <tr><td>{{ $row->source_row }}</td><td>{{ $row->reg }}</td><td>{{ $row->user_id }}</td><td>{{ $row->raw_mark ?? '—' }}</td><td>{{ $row->raw_candidate_status ?? '—' }}</td><td>{{ str_replace('_', ' ', $row->validation_status) }}</td><td>{{ implode(' | ', array_merge($row->validation_errors ?? [], $row->validation_warnings ?? [])) }}</td></tr>

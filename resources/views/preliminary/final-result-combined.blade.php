@@ -13,6 +13,7 @@
             <div class="col-auto ms-auto d-flex gap-2">
                 <a class="btn btn-outline-primary" href="{{ route('preliminary.final-result.category') }}">GG / TT / GT Separate</a>
                 <a class="btn btn-outline-secondary" href="{{ route('preliminary.final-result.combined.txt') }}">Download TXT</a>
+                <a class="btn btn-outline-success" href="{{ route('preliminary.final-result.template') }}">Fill Result Template</a>
                 <button class="btn btn-primary" type="button" onclick="window.print()">Print</button>
             </div>
         </div>

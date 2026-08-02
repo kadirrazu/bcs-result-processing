@@ -13,6 +13,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::post('/import', [WrittenController::class, 'store'])->name('import.store');
         Route::get('/import/{batch}/result', [WrittenController::class, 'result'])->name('import.result');
         Route::get('/import/{batch}/status', [WrittenController::class, 'status'])->name('import.status');
+        Route::get('/import/{batch}/corrections/template', [WrittenController::class, 'correctionTemplate'])->name('import.corrections.template');
+        Route::post('/import/{batch}/corrections', [WrittenController::class, 'applyCorrections'])->name('import.corrections.store');
         Route::post('/import/{batch}/retry-staging', [WrittenController::class, 'retryStaging'])->name('import.retry-staging');
         Route::post('/import/{batch}/validate', [WrittenController::class, 'validateBatch'])->name('import.validate');
         Route::post('/import/{batch}/approve', [WrittenController::class, 'approve'])->name('import.approve');
@@ -27,6 +29,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/final-result/category', [WrittenController::class, 'finalResultCategory'])->name('final-result.category');
         Route::get('/final-result/combined.txt', [WrittenController::class, 'finalResultCombinedTxt'])->name('final-result.combined.txt');
         Route::get('/final-result/category.txt', [WrittenController::class, 'finalResultCategoryTxt'])->name('final-result.category.txt');
+        Route::get('/final-result/fill-template', [WrittenController::class, 'finalResultTemplate'])->name('final-result.template');
+        Route::post('/final-result/fill-template', [WrittenController::class, 'generateFinalResultTemplate'])->name('final-result.template.generate');
         Route::get('/failure-reasons', [WrittenController::class, 'failureReasons'])->name('failure-reasons');
         Route::get('/paper-crashes', [WrittenController::class, 'paperCrashes'])->name('paper-crashes');
         Route::get('/results', [WrittenController::class, 'results'])->name('results');

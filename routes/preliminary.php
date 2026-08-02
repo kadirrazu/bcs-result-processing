@@ -13,6 +13,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::post('/import', [PreliminaryController::class, 'store'])->name('import.store');
         Route::get('/import/{batch}/result', [PreliminaryController::class, 'result'])->name('import.result');
         Route::get('/import/{batch}/status', [PreliminaryController::class, 'status'])->name('import.status');
+        Route::get('/import/{batch}/corrections/template', [PreliminaryController::class, 'correctionTemplate'])->name('import.corrections.template');
+        Route::post('/import/{batch}/corrections', [PreliminaryController::class, 'applyCorrections'])->name('import.corrections.store');
         Route::post('/import/{batch}/validate', [PreliminaryController::class, 'validateBatch'])->name('import.validate');
         Route::post('/import/{batch}/approve', [PreliminaryController::class, 'approve'])->name('import.approve');
         Route::get('/import/{batch}/report', [PreliminaryController::class, 'report'])->name('import.report');
@@ -33,6 +35,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/final-result/category-wise', [PreliminaryController::class, 'finalResultCategory'])->name('final-result.category');
         Route::get('/final-result/combined.txt', [PreliminaryController::class, 'finalResultCombinedTxt'])->name('final-result.combined.txt');
         Route::get('/final-result/category-wise.txt', [PreliminaryController::class, 'finalResultCategoryTxt'])->name('final-result.category.txt');
+        Route::get('/final-result/fill-template', [PreliminaryController::class, 'finalResultTemplate'])->name('final-result.template');
+        Route::post('/final-result/fill-template', [PreliminaryController::class, 'generateFinalResultTemplate'])->name('final-result.template.generate');
 
         Route::get('/results', [PreliminaryController::class, 'results'])->name('results.index');
         Route::get('/results/{result}/edit', [PreliminaryController::class, 'edit'])->name('results.edit');

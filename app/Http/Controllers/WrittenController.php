@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Enums\WrittenCandidateStatus;
 use App\Enums\WrittenProcessingStatus;
 use App\Jobs\ApproveWrittenImport;
+use App\Jobs\RevalidateAndMergeCorrectedImportRows;
 use App\Jobs\ProcessWrittenImport;
 use App\Jobs\ProcessWrittenRules;
 use App\Jobs\FinalizeWrittenResults;
 use App\Jobs\ValidateWrittenImport;
+use App\Models\ImportCorrectionEntry;
 use App\Models\WrittenImportBatch;
 use App\Models\WrittenProcessingAudit;
 use App\Models\WrittenProcessingRun;
@@ -22,12 +24,15 @@ use App\Services\Written\WrittenResultEditService;
 use App\Services\Written\WrittenSubjectConfig;
 use App\Services\Written\WrittenTemplateService;
 use App\Services\MasterData\CodeLabelService;
+use App\Services\Imports\InvalidRowCorrectionService;
+use App\Services\Documents\DocxPlaceholderTemplateService;
 use App\Support\Examinations\ExaminationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -115,7 +120,58 @@ final class WrittenController extends Controller
             'rows' => $query->paginate(100)->withQueryString(),
             'filters' => compact('validation', 'highMark', 'search'),
             'highMarkSubjects' => [...array_keys(array_filter($subjects->subjects(), fn ($v, $k) => $k !== '008' && $k !== '009', ARRAY_FILTER_USE_BOTH)), '008_009'],
+            'corrections' => ImportCorrectionEntry::query()->where('module', 'written')->where('batch_id', $batch->id)->latest('id')->limit(10)->get(),
         ]);
+    }
+
+    public function correctionTemplate(WrittenImportBatch $batch, InvalidRowCorrectionService $service): BinaryFileResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $directory = storage_path('app/private/import-corrections');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.'/written-batch-'.$batch->id.'-invalid-rows.xlsx';
+        $count = $service->createCorrectionWorkbook('written', (int) $batch->id, $path);
+        abort_if($count === 0, 409, 'This batch has no invalid rows to correct.');
+
+        return response()->download($path, 'written-batch-'.$batch->id.'-invalid-rows.xlsx')->deleteFileAfterSend();
+    }
+
+    public function applyCorrections(Request $request, WrittenImportBatch $batch, InvalidRowCorrectionService $service, ExaminationContext $context, WrittenAuditService $audit): RedirectResponse
+    {
+        $this->authorize('process', WrittenResult::class);
+        $validated = $request->validate([
+            'correction_file' => ['required', 'file', 'mimes:xlsx,csv', 'max:102400'],
+        ]);
+        $examinationId = $context->currentId();
+        abort_if($examinationId === null, 409, 'No examination is selected.');
+
+        $before = (string) $batch->status;
+        $wasApproved = (int) $batch->approved_rows > 0 || $before === 'approved';
+        $summary = $service->apply('written', $batch, $validated['correction_file'], $request->user());
+        $batch->update([
+            'status' => 'validation_queued',
+            'progress_percent' => 0,
+            'failure_message' => null,
+            'finished_at' => null,
+        ]);
+        if ($wasApproved) {
+            RevalidateAndMergeCorrectedImportRows::dispatch(
+                $examinationId, 'written', (int) $batch->id, $summary['source_rows'], (int) $request->user()->id
+            );
+        } else {
+            ValidateWrittenImport::dispatch($examinationId, $batch->id, (int) $request->user()->id);
+        }
+        $audit->record(
+            'WRITTEN_INVALID_ROWS_CORRECTED',
+            $request->user(),
+            $before,
+            'validation_queued',
+            'Corrected invalid source rows before approval.',
+            summary: ['corrected_rows' => $summary['corrected_rows'], 'source_rows' => $summary['source_rows']],
+            batchId: (int) $batch->id,
+        );
+
+        return back()->with('success', number_format($summary['corrected_rows']).' invalid Written row(s) were replaced from the correction file. Validation is running again now.');
     }
 
     public function retryStaging(WrittenImportBatch $batch, ExaminationContext $context, Request $request, WrittenAuditService $audit): RedirectResponse
@@ -395,6 +451,107 @@ final class WrittenController extends Controller
         return response()->download($path, 'written-result-category-wise.txt', ['Content-Type' => 'text/plain; charset=UTF-8'])->deleteFileAfterSend(true);
     }
 
+    public function finalResultTemplate(ExaminationContext $context): View
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $state = $this->finalizedState();
+
+        return view('written.fill-result-template', [
+            'state' => $state,
+            'examination' => $context->current(),
+            'defaultPerLine' => max(1, min(12, (int) config('result-documents.registrations_per_line', 8))),
+        ]);
+    }
+
+    public function generateFinalResultTemplate(
+        Request $request,
+        ExaminationContext $context,
+        DocxPlaceholderTemplateService $documents,
+        WrittenAuditService $audit,
+    ): BinaryFileResponse {
+        $this->authorize('viewAny', WrittenResult::class);
+        $state = $this->finalizedState();
+
+        $validated = $request->validate([
+            'template_file' => [
+                'required',
+                'file',
+                'mimes:docx',
+                'max:'.max(1024, (int) config('result-documents.max_template_size_kb', 20480)),
+            ],
+            'registrations_per_line' => ['nullable', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $perLine = (int) ($validated['registrations_per_line'] ?? config('result-documents.registrations_per_line', 8));
+        $perLine = max(1, min(12, $perLine));
+        $separator = (string) config('result-documents.registration_separator', '    ');
+
+        $all = $this->qualifiedRegistrations();
+        $groups = [
+            'GG' => $this->qualifiedRegistrations(['GG', 'GN']),
+            'TT' => $this->qualifiedRegistrations(['TT', 'T']),
+            'GT' => $this->qualifiedRegistrations(['GT']),
+        ];
+
+        $resultOnly = fn ($regs): string => $this->registrationLines($regs, $perLine, $separator);
+        $block = fn ($regs, string $label): string => $this->registrationResultBlock($regs, $label, $perLine, $separator);
+        $examination = $context->current();
+
+        $replacements = [
+            'RESULT_ALL' => $resultOnly($all),
+            'RESULT_GG' => $resultOnly($groups['GG']),
+            'RESULT_TT' => $resultOnly($groups['TT']),
+            'RESULT_GT' => $resultOnly($groups['GT']),
+            'TOTAL_ALL' => number_format($all->count()),
+            'TOTAL_GG' => number_format($groups['GG']->count()),
+            'TOTAL_TT' => number_format($groups['TT']->count()),
+            'TOTAL_GT' => number_format($groups['GT']->count()),
+            'ALL' => $block($all, 'ALL'),
+            'GG' => $block($groups['GG'], 'GG'),
+            'TT' => $block($groups['TT'], 'TT'),
+            'GT' => $block($groups['GT'], 'GT'),
+            'EXAM_NAME' => (string) ($examination?->name ?? 'Selected Examination'),
+            'FINALIZED_DATE' => $state->result_finalized_at?->format('d-m-Y') ?? '',
+        ];
+
+        $directory = storage_path('app/private/written-publishing-documents');
+        File::ensureDirectoryExists($directory);
+        $examSlug = Str::slug((string) ($examination?->name ?? 'written-examination')) ?: 'written-examination';
+        $outputName = $examSlug.'-written-result-'.now()->format('Ymd-His').'.docx';
+        $outputPath = $directory.DIRECTORY_SEPARATOR.uniqid('publishing-', true).'.docx';
+
+        try {
+            $summary = $documents->fill($validated['template_file']->getRealPath(), $outputPath, $replacements);
+        } catch (\Throwable $exception) {
+            report($exception);
+            return back()->with('error', 'The Word template could not be filled. Please check that it is a valid .docx file and try again.');
+        }
+
+        $audit->record(
+            'WRITTEN_PUBLISHING_DOCUMENT_CREATED',
+            $request->user(),
+            'finalized',
+            'finalized',
+            'Created a Word publishing document from the finalized Written result.',
+            summary: [
+                'template_name' => $validated['template_file']->getClientOriginalName(),
+                'output_name' => $outputName,
+                'registrations_per_line' => $perLine,
+                'placeholder_replacements' => $summary['replaced'],
+                'total_replacements' => $summary['total_replacements'],
+                'unrecognized_placeholders' => $summary['unknown_placeholders'],
+                'finalized_at' => $state->result_finalized_at?->toIso8601String(),
+            ],
+            batchId: $state->latest_import_batch_id,
+        );
+
+        return response()->download(
+            $outputPath,
+            $outputName,
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        )->deleteFileAfterSend(true);
+    }
+
     public function failureReasons(Request $request): View
     {
         $this->authorize('viewAny', WrittenResult::class);
@@ -575,6 +732,26 @@ final class WrittenController extends Controller
             'bachelor_subject' => $labels->bachelorSubject($registration?->bachelor_subject_code),
             'gender' => $labels->gender($registration?->sex_code),
         ];
+    }
+
+    private function registrationLines($registrations, int $perLine, string $separator): string
+    {
+        if ($registrations->isEmpty()) {
+            return 'No registration numbers.';
+        }
+
+        return $registrations
+            ->chunk($perLine)
+            ->map(fn ($row): string => $row->implode($separator))
+            ->implode("\n");
+    }
+
+    private function registrationResultBlock($registrations, string $label, int $perLine, string $separator): string
+    {
+        $lines = $this->registrationLines($registrations, $perLine, $separator);
+        $totalLabel = $label === 'ALL' ? 'TOTAL' : 'TOTAL ('.$label.')';
+
+        return $lines."\n\n".$totalLabel.' = '.number_format($registrations->count());
     }
 
     private function finalizedState(): WrittenProcessingState

@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
                     <div class="d-flex gap-2 flex-wrap">
                         <a class="btn btn-sm btn-outline-primary" href="{{ route('written.final-result.combined') }}">Combined Result</a>
                         <a class="btn btn-sm btn-outline-primary" href="{{ route('written.final-result.category') }}">Category-wise Result</a>
-                        <a class="btn btn-sm btn-outline-secondary" href="{{ route('written.failure-reasons') }}">Failure Reasons</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ route('written.failure-reasons') }}">Failure Reasons</a><a class="btn btn-sm btn-outline-success" href="{{ route('written.final-result.template') }}">Fill Result Template</a>
                     </div>
                 @elseif($state->paper_crash_processed_at && !$state->is_stale && !in_array($runStatus,['queued','running'],true))
                     <form method="post" action="{{ route('written.finalize') }}" class="row g-2 align-items-end">@csrf

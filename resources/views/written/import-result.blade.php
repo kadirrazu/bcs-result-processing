@@ -15,10 +15,30 @@
 @if($record->status === 'staged')
 <div class="alert alert-info d-flex align-items-center justify-content-between"><div>Fast staging is complete. Run identity, eligibility, mark, PRS and review validation.</div><form method="post" action="{{ route('written.import.validate',$record) }}">@csrf<button class="btn btn-primary">Validate Staged Data</button></form></div>
 @elseif($record->status === 'validated')
-<div class="alert alert-warning"><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><div><strong>{{ number_format($record->valid_rows + $record->warning_rows) }}</strong> rows are merge-eligible. Warning rows remain reviewable after merge; invalid rows stay unmerged.</div><div class="d-flex gap-2"><form method="post" action="{{ route('written.import.validate',$record) }}">@csrf<button class="btn btn-outline-primary">Revalidate</button></form><form method="post" action="{{ route('written.import.approve',$record) }}" onsubmit="return confirm('Approve and merge all valid/warning Written rows?');">@csrf<button class="btn btn-success">Approve &amp; Merge</button></form></div></div></div>
+@if((int)$record->approved_rows === 0)
+<div class="alert alert-warning"><div class="d-flex align-items-center justify-content-between gap-2 flex-wrap"><div><strong>{{ number_format($record->valid_rows + $record->warning_rows) }}</strong> rows are ready to merge. Rows with warnings can still be merged; invalid rows will remain in this batch for correction.</div><div class="d-flex gap-2"><form method="post" action="{{ route('written.import.validate',$record) }}">@csrf<button class="btn btn-outline-primary">Check Again</button></form><form method="post" action="{{ route('written.import.approve',$record) }}" onsubmit="return confirm('Merge all valid and warning Written rows?');">@csrf<button class="btn btn-success">Approve &amp; Merge</button></form></div></div></div>
+@else
+<div class="alert alert-info">The corrected rows have been checked. The system will merge only the corrected rows that are now valid; previously approved rows will not be touched.</div>
+@endif
 @elseif($record->status === 'failed' && (int)$record->approved_rows === 0)
 <div class="alert alert-danger d-flex align-items-center justify-content-between gap-2 flex-wrap"><div>@if((int)$record->staged_rows === 0)Staging failed before any rows became available for validation. Retry staging after applying the header fix.@elseThe last queue phase failed after staging. Existing staged rows can be revalidated.@endif</div><div class="d-flex gap-2">@if((int)$record->staged_rows === 0)<form method="post" action="{{ route('written.import.retry-staging',$record) }}">@csrf<button class="btn btn-danger">Retry Staging</button></form>@else<form method="post" action="{{ route('written.import.validate',$record) }}">@csrf<button class="btn btn-outline-danger">Retry Validation</button></form>@endif @if(((int)$record->valid_rows+(int)$record->warning_rows)>0)<form method="post" action="{{ route('written.import.approve',$record) }}">@csrf<button class="btn btn-danger">Retry Approve &amp; Merge</button></form>@endif</div></div>
 @elseif($record->status === 'approved')<div class="alert alert-success">Written snapshot approved: {{ number_format($record->inserted_rows) }} inserted, {{ number_format($record->updated_rows) }} updated. <a href="{{ route('written.results') }}">Open merged Written results</a>.</div>@endif
+
+
+@if(((int)$record->invalid_rows + (int)$record->identity_conflict_rows) > 0 && in_array((string)$record->status,['validated','failed','approved'],true))
+<div class="card mb-3 border-warning"><div class="card-header"><h3 class="card-title">Correct invalid rows</h3></div><div class="card-body">
+<p class="text-secondary">Download only the rows that still need correction. Keep <strong>source_row</strong> unchanged, fix those rows in Excel, then upload the same workbook here. Valid rows and warning-only rows are protected and cannot be changed through this upload. @if((int)$record->approved_rows > 0) This batch has already been approved, so only the corrected rows that pass validation will be added; existing approved rows will remain unchanged. @endif</p>
+@error('correction_file')<div class="alert alert-danger">{{ $message }}</div>@enderror
+<div class="d-flex gap-2 flex-wrap align-items-end"><a class="btn btn-outline-warning" href="{{ route('written.import.corrections.template',$record) }}">Download Invalid Rows</a><form method="post" action="{{ route('written.import.corrections.store',$record) }}" enctype="multipart/form-data" class="d-flex gap-2 flex-wrap align-items-end">@csrf<div><label class="form-label">Corrected workbook</label><input class="form-control" type="file" name="correction_file" accept=".xlsx,.csv" required></div><button class="btn btn-warning" onclick="return confirm('Apply these corrections to the invalid Written rows and run validation again?');">Upload Corrections</button></form></div>
+</div></div>
+@endif
+
+
+@if(isset($corrections) && $corrections->isNotEmpty())
+<div class="card mb-3"><div class="card-header"><h3 class="card-title">Recent correction uploads</h3></div><div class="table-responsive"><table class="table table-vcenter"><thead><tr><th>Source row</th><th>Previous validation</th><th>File</th><th>Corrected by</th><th>Time</th></tr></thead><tbody>
+@foreach($corrections as $correction)<tr><td>{{ $correction->source_row }}</td><td>{{ str_replace('_',' ',(string)$correction->validation_status_before) }}</td><td>{{ $correction->source_filename }}</td><td>{{ $correction->actor_name ?? ('User #'.$correction->actor_id) }}</td><td>{{ $correction->created_at?->format('d-m-Y h:i:s A') }}</td></tr>@endforeach
+</tbody></table></div></div>
+@endif
 
 <div class="card mb-3"><div class="card-header"><h3 class="card-title">Validation / Review Filters</h3></div><div class="card-body"><form method="get" class="row g-2">
 <div class="col-md-2"><label class="form-label">Validation</label><select class="form-select" name="validation"><option value="all">All</option>@foreach(['warning'=>'Warning','invalid'=>'Invalid','identity_conflict'=>'Identity Conflict','valid'=>'Valid'] as $v=>$label)<option value="{{ $v }}" @selected($filters['validation']===$v)>{{ $label }}</option>@endforeach</select></div>
