@@ -16,16 +16,29 @@ final class PreliminaryResultEditService
         private readonly PreliminaryAuditService $audit,
     ) {}
 
-    public function update(PreliminaryResult $result, mixed $mark, ?string $statusText, string $reason, User $actor): PreliminaryResult
+    public function update(
+        PreliminaryResult $result,
+        mixed $mark,
+        ?string $sourceNote,
+        string $status,
+        string $reason,
+        User $actor,
+    ): PreliminaryResult
     {
-        $interpreted = $this->interpreter->interpret($mark, $statusText);
+        $interpreted = $this->interpreter->interpret($mark, $sourceNote);
         if ($interpreted['errors'] !== []) {
             throw ValidationException::withMessages(['mark' => $interpreted['errors']]);
         }
 
-        $rawStatus = trim((string) ($statusText ?? ''));
+        $rawStatus = trim((string) ($sourceNote ?? ''));
         $rawStatus = $rawStatus === '' ? null : $rawStatus;
         $validationStatus = $interpreted['warnings'] === [] ? 'valid' : 'warning';
+
+        if ($status === 'active' && $interpreted['mark'] === null) {
+            throw ValidationException::withMessages([
+                'status' => ['An active Preliminary candidate must have a valid mark. Use Cancelled, Withheld or Expelled when the candidate should stay outside result processing.'],
+            ]);
+        }
 
         $before = $this->snapshot($result);
         $state = PreliminaryProcessingState::query()->firstOrCreate(
@@ -35,13 +48,13 @@ final class PreliminaryResultEditService
         $stateBefore = $state->status instanceof \BackedEnum ? $state->status->value : (string) $state->status;
 
         DB::connection('exam')->transaction(function () use (
-            $result, $interpreted, $rawStatus, $validationStatus, $reason, $actor, $state
+            $result, $interpreted, $rawStatus, $validationStatus, $status, $reason, $actor, $state
         ): void {
             $result->update([
                 'mark' => $interpreted['mark'],
                 'raw_candidate_status' => $rawStatus,
-                'candidate_status' => $interpreted['candidate_status'],
-                'result_status' => $interpreted['candidate_status'] === 'cancelled' ? 'cancelled' : null,
+                'candidate_status' => $status,
+                'result_status' => $status === 'cancelled' ? 'cancelled' : null,
                 'applied_cutoff_mark' => null,
                 'validation_status' => $validationStatus,
                 'finalized_at' => null,
@@ -91,6 +104,8 @@ final class PreliminaryResultEditService
                 'reg' => $result->reg,
                 'user_id' => $result->user_id,
                 'warnings' => $interpreted['warnings'],
+                'operational_status' => $status,
+                'processing_eligible' => $status === 'active',
                 'downstream_snapshots_invalidated' => true,
                 'cutoff_requires_review' => $state->cutoff_mark !== null,
             ],

@@ -257,7 +257,7 @@
                     <table class="table table-vcenter card-table">
                         <thead><tr><th>Result</th><th class="text-end">Total</th><th class="text-end">GG</th><th class="text-end">TT</th><th class="text-end">GT</th></tr></thead>
                         <tbody>
-                            @foreach (['pass' => 'Passed', 'fail' => 'Failed', 'cancelled' => 'Cancelled', 'absent' => 'Absent'] as $key => $label)
+                            @foreach (['pass' => 'Passed', 'fail' => 'Failed', 'cancelled' => 'Cancelled', 'withheld' => 'Withheld', 'expelled' => 'Expelled', 'absent' => 'Absent'] as $key => $label)
                                 <tr>
                                     <td>{{ $label }}</td>
                                     <td class="text-end">{{ number_format((int) data_get($state->summary, 'finalization.'.$key.'.total', 0)) }}</td>
@@ -277,6 +277,8 @@
                 'Results' => $counts['results'],
                 'Active with mark' => $counts['active'],
                 'Cancelled' => $counts['cancelled'],
+                'Withheld' => $counts['withheld'],
+                'Expelled' => $counts['expelled'],
                 'Passed' => $counts['passed'],
                 'Failed' => $counts['failed'],
             ] as $label => $value)

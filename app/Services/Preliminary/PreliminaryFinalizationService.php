@@ -228,12 +228,12 @@ final class PreliminaryFinalizationService
         $rows = DB::connection('exam')->table('registrations as r')
             ->leftJoin('preliminary_results as p', 'p.registration_id', '=', 'r.id')
             ->where('r.status', 'active')
-            ->selectRaw("r.cadre_category, CASE WHEN p.id IS NULL THEN 'absent' ELSE COALESCE(p.result_status, 'unprocessed') END as outcome, COUNT(*) as aggregate")
+            ->selectRaw("r.cadre_category, CASE WHEN p.id IS NULL THEN 'absent' WHEN p.candidate_status IN ('cancelled','withheld','expelled') THEN p.candidate_status ELSE COALESCE(p.result_status, 'unprocessed') END as outcome, COUNT(*) as aggregate")
             ->groupBy('r.cadre_category', 'outcome')
             ->get();
 
         $summary = [];
-        foreach (['pass', 'fail', 'cancelled', 'absent'] as $outcome) {
+        foreach (['pass', 'fail', 'cancelled', 'withheld', 'expelled', 'absent'] as $outcome) {
             $summary[$outcome] = ['total' => 0, 'GG' => 0, 'TT' => 0, 'GT' => 0];
         }
 

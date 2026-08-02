@@ -146,15 +146,18 @@ final class WrittenRuleProcessingService
             default => [],
         };
 
+        $candidateIsActive = (string) $row->status === 'active';
         $crashes = [];
 
         foreach ($marks as $code => $mark) {
             $subjectCode = (string) $code;
             $actual = $mark->actual_mark === null ? null : (float) $mark->actual_mark;
-            $mark->counted_mark = $actual;
+            $mark->counted_mark = $candidateIsActive ? $actual : null;
             $mark->paper_crashed = 0;
+            $mark->crash_threshold = null;
 
-            if (in_array($subjectCode, $applicable, true)
+            if ($candidateIsActive
+                && in_array($subjectCode, $applicable, true)
                 && ! in_array($subjectCode, ['008', '009'], true)
                 && $actual !== null) {
                 $threshold = $this->subjects->paperCrashThreshold($subjectCode);
@@ -169,7 +172,8 @@ final class WrittenRuleProcessingService
 
         $m008 = $marks->get('008');
         $m009 = $marks->get('009');
-        if ($m008 && $m009
+        if ($candidateIsActive
+            && $m008 && $m009
             && in_array('008', $applicable, true)
             && in_array('009', $applicable, true)
             && $m008->actual_mark !== null
@@ -199,6 +203,8 @@ final class WrittenRuleProcessingService
         $flags = array_merge($existingFlags, [
             'paper_crash' => array_values(array_unique($crashes)),
             'completely_absent' => $completelyAbsent,
+            'processing_excluded' => ! $candidateIsActive,
+            'processing_excluded_status' => $candidateIsActive ? null : (string) $row->status,
             'general' => $general['flags'],
             'technical' => $technical['flags'],
             'rules_processed_at' => $isoTimestamp,
@@ -264,7 +270,12 @@ final class WrittenRuleProcessingService
         }
 
         if ($candidateStatus !== 'active') {
-            $code = $candidateStatus === 'cancelled' ? 'CANCELLED' : 'WITHHELD';
+            $code = match ($candidateStatus) {
+                'cancelled' => 'CANCELLED',
+                'withheld' => 'WITHHELD',
+                'expelled' => 'EXPELLED',
+                default => 'EXCLUDED_BY_STATUS',
+            };
             return [
                 'status' => 'not_applicable',
                 'actual_total' => null,

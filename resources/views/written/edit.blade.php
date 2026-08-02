@@ -108,7 +108,7 @@
                                             <option value="{{ $statusOption }}" @selected(old('status', $currentStatus) === $statusOption)>{{ strtoupper($statusOption) }}</option>
                                         @endforeach
                                     </select>
-                                    <div class="form-hint">ACTIVE / CANCELLED / WITHHELD is Written-only processing status.</div>
+                                    <div class="form-hint">Only Active candidates are included in Written rule processing. Cancelled, Withheld and Expelled candidates remain on record but stay outside the processing pipeline.</div>
                                 </div>
                                 <div class="col-md-12">
                                     <label class="form-label">Operator Comment</label>

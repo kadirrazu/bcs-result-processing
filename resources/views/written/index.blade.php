@@ -11,7 +11,7 @@
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
 <div class="row row-cards mb-3">
-@foreach(['results'=>'Written Results','warnings'=>'Warning Review','active'=>'Active','cancelled'=>'Cancelled','withheld'=>'Withheld'] as $key=>$label)
+@foreach(['results'=>'Written Results','warnings'=>'Warning Review','active'=>'Active','cancelled'=>'Cancelled','withheld'=>'Withheld','expelled'=>'Expelled'] as $key=>$label)
 <div class="col-sm-6 col-lg"><div class="card card-sm"><div class="card-body"><div class="text-secondary">{{ $label }}</div><div class="h2 mb-0 {{ $key === 'warnings' ? 'text-warning' : '' }}">{{ number_format($counts[$key]) }}</div></div></div></div>
 @endforeach
 </div>
@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
 <tr><td>General track full mark</td><td>{{ number_format($ruleSummary['general_full_mark'],2) }}</td></tr>
 <tr><td>Technical track full mark</td><td>{{ number_format($ruleSummary['technical_full_mark'],2) }}</td></tr>
 <tr><td>Written pass threshold</td><td>{{ number_format((float)config('written.written_pass_percent'),2) }}%</td></tr>
-<tr><td>Paper crash threshold</td><td>{{ number_format($ruleSummary['paper_crash_percent'],2) }}%</td></tr>
+<tr><td>Paper crash rule</td><td>Below {{ number_format($ruleSummary['paper_crash_percent'],2) }}% of full marks</td></tr>
 <tr><td>High-mark review</td><td>{{ number_format($ruleSummary['high_mark_review_percent'],2) }}%</td></tr>
 <tr><td>008 + 009</td><td>Combined evaluation for crash and high-mark review</td></tr>
 </tbody></table></div></div>

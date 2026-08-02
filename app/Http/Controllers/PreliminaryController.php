@@ -55,6 +55,8 @@ final class PreliminaryController extends Controller
                 'results' => PreliminaryResult::query()->count(),
                 'active' => PreliminaryResult::query()->where('candidate_status', 'active')->whereNotNull('mark')->count(),
                 'cancelled' => PreliminaryResult::query()->where('candidate_status', 'cancelled')->count(),
+                'withheld' => PreliminaryResult::query()->where('candidate_status', 'withheld')->count(),
+                'expelled' => PreliminaryResult::query()->where('candidate_status', 'expelled')->count(),
                 'passed' => PreliminaryResult::query()->where('result_status', 'pass')->count(),
                 'failed' => PreliminaryResult::query()->where('result_status', 'fail')->count(),
             ],
@@ -500,7 +502,7 @@ final class PreliminaryController extends Controller
         $status = trim((string) $request->query('status', ''));
         $results = PreliminaryResult::query()
             ->when($search !== '', fn ($q) => $q->where(fn ($x) => $x->where('reg', $search)->orWhere('user_id', $search)))
-            ->when(in_array($status, ['active', 'cancelled'], true), fn ($q) => $q->where('candidate_status', $status))
+            ->when(in_array($status, ['active', 'cancelled', 'withheld', 'expelled'], true), fn ($q) => $q->where('candidate_status', $status))
             ->orderBy('reg')->paginate(100)->withQueryString();
         return view('preliminary.results', compact('results', 'search', 'status'));
     }
@@ -510,7 +512,15 @@ final class PreliminaryController extends Controller
         $this->authorize('process', PreliminaryResult::class);
         $registration = DB::connection('exam')->table('registrations')->where('id', $result->registration_id)->first(['name', 'cadre_category']);
         $audits = PreliminaryProcessingAudit::query()->where('preliminary_result_id', $result->id)->latest('id')->limit(25)->get();
-        return view('preliminary.edit', compact('result', 'registration', 'audits'));
+        return view('preliminary.edit', [
+            'result' => $result,
+            'registration' => $registration,
+            'audits' => $audits,
+            'statusOptions' => array_map(
+                static fn (\App\Enums\PreliminaryCandidateStatus $status): string => $status->value,
+                \App\Enums\PreliminaryCandidateStatus::cases(),
+            ),
+        ]);
     }
 
     public function update(Request $request, PreliminaryResult $result, PreliminaryResultEditService $service): RedirectResponse
@@ -518,11 +528,20 @@ final class PreliminaryController extends Controller
         $this->authorize('process', PreliminaryResult::class);
         $validated = $request->validate([
             'mark' => ['nullable', 'numeric', 'between:-9999.99,9999.99'],
-            'candidate_status' => ['nullable', 'string', 'max:5000'],
+            'source_note' => ['nullable', 'string', 'max:5000'],
+            'status' => ['required', 'string', 'in:active,cancelled,withheld,expelled'],
             'reason' => ['required', 'string', 'min:5', 'max:2000'],
         ]);
-        $service->update($result, $validated['mark'] ?? null, $validated['candidate_status'] ?? null, $validated['reason'], $request->user());
-        return redirect()->route('preliminary.results.edit', $result)->with('success', 'Preliminary mark/status updated. Previous values were preserved in database audit and file log. Reconciliation/finalization snapshots were invalidated.');
+        $service->update(
+            $result,
+            $validated['mark'] ?? null,
+            $validated['source_note'] ?? null,
+            $validated['status'],
+            $validated['reason'],
+            $request->user(),
+        );
+        return redirect()->route('preliminary.results.edit', $result)
+            ->with('success', 'Preliminary record updated and the previous values were kept in the audit history. Result-processing steps now need to be generated again.');
     }
 
     private function csvMessages(mixed $value): string

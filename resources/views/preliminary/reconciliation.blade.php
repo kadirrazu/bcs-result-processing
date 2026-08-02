@@ -20,6 +20,12 @@
 <tr><td>{{ $label }}</td><td class="text-end">{{ number_format($row['GG']) }}</td><td class="text-end">{{ number_format($row['TT']) }}</td><td class="text-end">{{ number_format($row['GT']) }}</td><td class="text-end fw-bold">{{ number_format($row['total']) }}</td></tr>
 @endforeach
 </tbody></table></div></div>
+<div class="card mb-3"><div class="card-header"><h3 class="card-title">Processing Status</h3><div class="card-actions text-secondary small">Only Active candidates continue to cut-off and final result processing.</div></div><div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>Status</th><th class="text-end">GG</th><th class="text-end">TT</th><th class="text-end">GT</th><th class="text-end">Total</th></tr></thead><tbody>
+@foreach(['Active'=>'status_active','Cancelled'=>'status_cancelled','Withheld'=>'status_withheld','Expelled'=>'status_expelled'] as $label=>$key)
+@php($row=$summary['category'][$key] ?? ['GG'=>0,'TT'=>0,'GT'=>0,'total'=>0])
+<tr><td>{{ $label }}</td><td class="text-end">{{ number_format($row['GG']) }}</td><td class="text-end">{{ number_format($row['TT']) }}</td><td class="text-end">{{ number_format($row['GT']) }}</td><td class="text-end fw-bold">{{ number_format($row['total']) }}</td></tr>
+@endforeach
+</tbody></table></div></div>
 <div class="card"><div class="card-header"><h3 class="card-title">Action Reports</h3></div><div class="card-body d-flex flex-wrap gap-2">
 <a class="btn btn-outline-primary" href="{{ route('preliminary.reconciliation.csv', [$report,'present_status']) }}">Present + Status Text CSV</a>
 <a class="btn btn-outline-primary" href="{{ route('preliminary.reconciliation.csv', [$report,'cancelled_reason']) }}">Cancelled with Reason CSV</a>

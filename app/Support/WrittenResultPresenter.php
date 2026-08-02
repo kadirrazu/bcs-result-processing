@@ -37,6 +37,7 @@ final class WrittenResultPresenter
                 ),
                 'CANCELLED' => 'Candidate was cancelled for Written processing.',
                 'WITHHELD' => 'Written result is withheld.',
+                'EXPELLED' => 'Candidate was expelled from Written processing.',
                 default => $code !== '' ? ucwords(strtolower(str_replace('_', ' ', $code))).'.' : 'Written requirement was not met.',
             };
         }, $reasons);

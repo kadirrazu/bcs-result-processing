@@ -32,6 +32,12 @@ final class PreliminaryReconciliationService
                 ->join('registrations as r', 'r.id', '=', 'p.registration_id')
                 ->where('r.status', '!=', 'active')
                 ->count(),
+            'processing_status' => [
+                'active' => DB::connection('exam')->table('preliminary_results')->where('candidate_status', 'active')->count(),
+                'cancelled' => DB::connection('exam')->table('preliminary_results')->where('candidate_status', 'cancelled')->count(),
+                'withheld' => DB::connection('exam')->table('preliminary_results')->where('candidate_status', 'withheld')->count(),
+                'expelled' => DB::connection('exam')->table('preliminary_results')->where('candidate_status', 'expelled')->count(),
+            ],
         ];
 
         $summary['category'] = [
@@ -41,6 +47,10 @@ final class PreliminaryReconciliationService
             'cancelled_with_reason' => $this->categoryBreakdown('cancelled_with_reason'),
             'cancelled_without_reason' => $this->categoryBreakdown('cancelled_without_reason'),
             'absent' => $this->categoryBreakdown('absent'),
+            'status_active' => $this->categoryBreakdown('status_active'),
+            'status_cancelled' => $this->categoryBreakdown('status_cancelled'),
+            'status_withheld' => $this->categoryBreakdown('status_withheld'),
+            'status_expelled' => $this->categoryBreakdown('status_expelled'),
         ];
 
         $report = PreliminaryReconciliationReport::query()->create([
@@ -143,6 +153,10 @@ final class PreliminaryReconciliationService
                 ->whereNotNull('p.raw_candidate_status')->whereRaw("TRIM(p.raw_candidate_status) <> ''"),
             'cancelled_without_reason' => $query->where('p.candidate_status', 'cancelled')
                 ->where(fn ($q) => $q->whereNull('p.raw_candidate_status')->orWhereRaw("TRIM(p.raw_candidate_status) = ''")),
+            'status_active' => $query->where('p.candidate_status', 'active'),
+            'status_cancelled' => $query->where('p.candidate_status', 'cancelled'),
+            'status_withheld' => $query->where('p.candidate_status', 'withheld'),
+            'status_expelled' => $query->where('p.candidate_status', 'expelled'),
             default => null,
         };
     }

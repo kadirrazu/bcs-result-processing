@@ -55,6 +55,7 @@ final class WrittenController extends Controller
                 'active' => WrittenResult::query()->where('status', 'active')->count(),
                 'cancelled' => WrittenResult::query()->where('status', 'cancelled')->count(),
                 'withheld' => WrittenResult::query()->where('status', 'withheld')->count(),
+                'expelled' => WrittenResult::query()->where('status', 'expelled')->count(),
             ],
             'ruleSummary' => [
                 'general_full_mark' => $subjects->trackFullMark('general'),
@@ -442,11 +443,13 @@ final class WrittenController extends Controller
     {
         $this->authorize('viewAny', WrittenResult::class);
         $validation = trim((string) $request->query('validation', 'all'));
+        $status = trim((string) $request->query('status', 'all'));
         $search = trim((string) $request->query('search', ''));
         $highMark = $request->boolean('high_mark');
 
         $query = WrittenResult::query()->with(['marks' => fn ($q) => $q->orderBy('id')])
             ->when($validation !== 'all' && $validation !== '', fn ($q) => $q->where('validation_status', $validation))
+            ->when(in_array($status, ['active', 'cancelled', 'withheld', 'expelled'], true), fn ($q) => $q->where('status', $status))
             ->when($search !== '', fn ($q) => $q->where(fn ($nested) => $nested->where('reg', $search)->orWhere('user_id', $search)))
             ->when($highMark, fn ($q) => $q->whereHas('marks', fn ($marks) => $marks->where('warning_codes', 'like', '%HIGH_MARK_REVIEW:%')))
             ->orderByRaw("CASE validation_status WHEN 'warning' THEN 0 WHEN 'valid' THEN 1 ELSE 2 END")
@@ -454,7 +457,7 @@ final class WrittenController extends Controller
 
         return view('written.results', [
             'rows' => $query->paginate(100)->withQueryString(),
-            'filters' => compact('validation', 'search', 'highMark'),
+            'filters' => compact('validation', 'status', 'search', 'highMark'),
             'state' => WrittenProcessingState::query()->firstOrCreate(
                 ['id' => 1],
                 ['status' => WrittenProcessingStatus::NotStarted->value],
@@ -518,7 +521,7 @@ final class WrittenController extends Controller
         $subjectCodes = array_keys((array) config('written.subjects', []));
         $rules = [
             'prs_code' => ['nullable', 'string', 'max:20'],
-            'status' => ['required', 'string', 'in:active,cancelled,withheld'],
+            'status' => ['required', 'string', 'in:active,cancelled,withheld,expelled'],
             'comment' => ['nullable', 'string', 'max:5000'],
             'reason' => ['required', 'string', 'min:5', 'max:2000'],
             'marks' => ['required', 'array'],

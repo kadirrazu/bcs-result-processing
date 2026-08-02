@@ -168,6 +168,7 @@ final class WrittenFinalizationService
             'failed_total' => (clone $base)->where('status', 'active')->whereNull('written_qualified_track')->count(),
             'cancelled_total' => (clone $base)->where('status', 'cancelled')->count(),
             'withheld_total' => (clone $base)->where('status', 'withheld')->count(),
+            'expelled_total' => (clone $base)->where('status', 'expelled')->count(),
             'qualified_tracks' => $qualified,
             'effective_categories' => [
                 'GG' => $qualified['GG'] + $qualified['GN'],
