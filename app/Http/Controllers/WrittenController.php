@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WrittenCandidateStatus;
 use App\Enums\WrittenProcessingStatus;
 use App\Jobs\ApproveWrittenImport;
 use App\Jobs\ProcessWrittenImport;
 use App\Jobs\ProcessWrittenRules;
+use App\Jobs\FinalizeWrittenResults;
 use App\Jobs\ValidateWrittenImport;
 use App\Models\WrittenImportBatch;
 use App\Models\WrittenProcessingAudit;
@@ -16,8 +18,10 @@ use App\Models\WrittenResult;
 use App\Services\Written\WrittenAuditService;
 use App\Services\Written\WrittenImportService;
 use App\Services\Written\WrittenReconciliationService;
+use App\Services\Written\WrittenResultEditService;
 use App\Services\Written\WrittenSubjectConfig;
 use App\Services\Written\WrittenTemplateService;
+use App\Services\MasterData\CodeLabelService;
 use App\Support\Examinations\ExaminationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -44,7 +48,7 @@ final class WrittenController extends Controller
                 : null,
             'latestProcessingRun' => $state->latest_processing_run_id
                 ? WrittenProcessingRun::query()->find($state->latest_processing_run_id)
-                : WrittenProcessingRun::query()->latest('id')->first(),
+                : ($state->is_stale ? null : WrittenProcessingRun::query()->latest('id')->first()),
             'counts' => [
                 'results' => WrittenResult::query()->count(),
                 'warnings' => WrittenResult::query()->where('validation_status', 'warning')->count(),
@@ -259,7 +263,158 @@ final class WrittenController extends Controller
             'progress_percent' => (float) $run->progress_percent,
             'current_step' => $run->current_step,
             'failure_message' => $run->failure_message,
+            'status_label' => \App\Support\WrittenStatusPresenter::label($run->status),
+            'task_label' => \App\Support\WrittenStatusPresenter::taskLabel($run->type),
             'finished' => in_array($run->status, ['completed', 'failed'], true),
+        ]);
+    }
+
+    public function finalize(Request $request, ExaminationContext $context, WrittenAuditService $audit): RedirectResponse
+    {
+        $this->authorize('process', WrittenResult::class);
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:2000'],
+        ]);
+
+        $state = WrittenProcessingState::query()->firstOrCreate(
+            ['id' => 1],
+            ['status' => WrittenProcessingStatus::NotStarted->value],
+        );
+        $stateValue = $state->status instanceof \BackedEnum ? $state->status->value : (string) $state->status;
+
+        abort_if((bool) $state->is_stale, 409, 'Written data changed after processing. Regenerate reconciliation and process Written rules before finalizing.');
+        abort_if($state->reconciliation_generated_at === null, 409, 'Generate the current Written reconciliation before finalizing.');
+        abort_if($state->paper_crash_processed_at === null, 409, 'Process Written rules before finalizing the result.');
+        abort_unless(in_array($stateValue, [WrittenProcessingStatus::ProcessingReady->value, WrittenProcessingStatus::ResultFinalized->value], true), 409, 'The Written result is not ready for final review yet.');
+        abort_if(WrittenProcessingRun::query()->whereIn('status', ['queued', 'running'])->exists(), 409, 'Another Written background task is already in progress.');
+
+        $examinationId = $context->currentId();
+        abort_if($examinationId === null, 409, 'No examination is selected.');
+
+        $run = WrittenProcessingRun::query()->create([
+            'type' => 'written_finalization',
+            'status' => 'queued',
+            'total_rows' => WrittenResult::query()->count(),
+            'processed_rows' => 0,
+            'progress_percent' => 0,
+            'current_step' => 'Waiting to start final review',
+            'created_by' => (int) $request->user()->id,
+        ]);
+
+        $state->update(['latest_processing_run_id' => $run->id]);
+        FinalizeWrittenResults::dispatch(
+            $examinationId,
+            $run->id,
+            (int) $request->user()->id,
+            $validated['reason'],
+        );
+
+        $audit->record(
+            'WRITTEN_RESULT_FINALIZATION_QUEUED',
+            $request->user(),
+            $stateValue,
+            'queued',
+            $validated['reason'],
+            summary: ['run_id' => $run->id, 'candidate_rows' => (int) $run->total_rows],
+            batchId: $state->latest_import_batch_id,
+            processingRunId: $run->id,
+        );
+
+        return back()->with('success', 'Final review has been queued. The progress panel will update automatically.');
+    }
+
+    public function finalResultCombined(): View
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $state = $this->finalizedState();
+
+        return view('written.final-result-combined', [
+            'state' => $state,
+            'registrations' => $this->qualifiedRegistrations(),
+        ]);
+    }
+
+    public function finalResultCategory(): View
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $state = $this->finalizedState();
+
+        return view('written.final-result-category', [
+            'state' => $state,
+            'groups' => [
+                'GG' => $this->qualifiedRegistrations(['GG', 'GN']),
+                'TT' => $this->qualifiedRegistrations(['TT', 'T']),
+                'GT' => $this->qualifiedRegistrations(['GT']),
+            ],
+        ]);
+    }
+
+    public function finalResultCombinedTxt(): BinaryFileResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $this->finalizedState();
+        $regs = $this->qualifiedRegistrations();
+        $directory = storage_path('app/private/written-final-results');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.DIRECTORY_SEPARATOR.uniqid('written-result-combined-', true).'.txt';
+        $file = new \SplFileObject($path, 'wb');
+        $file->fwrite("WRITTEN EXAMINATION RESULT - ALL QUALIFIED CANDIDATES\r\n\r\n");
+        foreach ($regs->chunk(10) as $row) {
+            $file->fwrite($row->implode('    ')."\r\n");
+        }
+        $file->fwrite("\r\nTOTAL = ".number_format($regs->count())."\r\n");
+        unset($file);
+
+        return response()->download($path, 'written-result-combined.txt', ['Content-Type' => 'text/plain; charset=UTF-8'])->deleteFileAfterSend(true);
+    }
+
+    public function finalResultCategoryTxt(): BinaryFileResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $this->finalizedState();
+        $groups = [
+            'GG' => $this->qualifiedRegistrations(['GG', 'GN']),
+            'TT' => $this->qualifiedRegistrations(['TT', 'T']),
+            'GT' => $this->qualifiedRegistrations(['GT']),
+        ];
+        $directory = storage_path('app/private/written-final-results');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.DIRECTORY_SEPARATOR.uniqid('written-result-category-', true).'.txt';
+        $file = new \SplFileObject($path, 'wb');
+        $file->fwrite("WRITTEN EXAMINATION RESULT - CATEGORY WISE\r\n");
+        foreach ($groups as $category => $regs) {
+            $file->fwrite("\r\n{$category}\r\n".str_repeat('-', 40)."\r\n");
+            foreach ($regs->chunk(10) as $row) {
+                $file->fwrite($row->implode('    ')."\r\n");
+            }
+            $file->fwrite("\r\nTOTAL ({$category}) = ".number_format($regs->count())."\r\n");
+        }
+        unset($file);
+
+        return response()->download($path, 'written-result-category-wise.txt', ['Content-Type' => 'text/plain; charset=UTF-8'])->deleteFileAfterSend(true);
+    }
+
+    public function failureReasons(Request $request): View
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $this->finalizedState();
+        $search = trim((string) $request->query('search', ''));
+        $scope = trim((string) $request->query('scope', 'all'));
+
+        $query = WrittenResult::query()
+            ->where('status', 'active')
+            ->where(function ($q): void {
+                $q->where('general_result_status', 'fail')->orWhere('technical_result_status', 'fail');
+            })
+            ->when($scope === 'fully_failed', fn ($q) => $q->whereNull('written_qualified_track'))
+            ->when($scope === 'partially_qualified', fn ($q) => $q->whereIn('written_qualified_track', ['GN', 'T']))
+            ->when($search !== '', fn ($q) => $q->where(fn ($nested) => $nested->where('reg', $search)->orWhere('user_id', $search)))
+            ->orderByRaw('CAST(reg AS UNSIGNED) ASC');
+
+        return view('written.failure-reasons', [
+            'rows' => $query->paginate(100)->withQueryString(),
+            'search' => $search,
+            'scope' => $scope,
         ]);
     }
 
@@ -300,7 +455,146 @@ final class WrittenController extends Controller
         return view('written.results', [
             'rows' => $query->paginate(100)->withQueryString(),
             'filters' => compact('validation', 'search', 'highMark'),
+            'state' => WrittenProcessingState::query()->firstOrCreate(
+                ['id' => 1],
+                ['status' => WrittenProcessingStatus::NotStarted->value],
+            ),
         ]);
+    }
+
+    public function show(WrittenResult $result, CodeLabelService $labels): View
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $result->load(['marks' => fn ($q) => $q->orderBy('id')]);
+        $registration = DB::connection('exam')->table('registrations')
+            ->where('id', $result->registration_id)
+            ->first(['name', 'cadre_category', 'post_related_subject_code', 'district_code', 'division_code', 'university_code', 'bachelor_subject_code', 'sex_code']);
+        $audits = WrittenProcessingAudit::query()
+            ->where('written_result_id', $result->id)
+            ->latest('id')
+            ->limit(50)
+            ->get();
+        $state = WrittenProcessingState::query()->firstOrCreate(
+            ['id' => 1],
+            ['status' => WrittenProcessingStatus::NotStarted->value],
+        );
+
+        $display = $this->writtenReferenceDisplay($result, $registration, $labels);
+
+        return view('written.show', compact('result', 'registration', 'audits', 'state', 'display'));
+    }
+
+    public function edit(WrittenResult $result, CodeLabelService $labels): View
+    {
+        $this->authorize('process', WrittenResult::class);
+        $result->load(['marks' => fn ($q) => $q->orderBy('id')]);
+        $registration = DB::connection('exam')->table('registrations')
+            ->where('id', $result->registration_id)
+            ->first(['name', 'cadre_category', 'post_related_subject_code', 'district_code', 'division_code', 'university_code', 'bachelor_subject_code', 'sex_code']);
+        $audits = WrittenProcessingAudit::query()
+            ->where('written_result_id', $result->id)
+            ->latest('id')
+            ->limit(25)
+            ->get();
+
+        $display = $this->writtenReferenceDisplay($result, $registration, $labels);
+
+        return view('written.edit', [
+            'result' => $result,
+            'registration' => $registration,
+            'display' => $display,
+            'audits' => $audits,
+            'subjectConfig' => (array) config('written.subjects', []),
+            'statusOptions' => array_map(
+                static fn (WrittenCandidateStatus $status): string => $status->value,
+                WrittenCandidateStatus::cases(),
+            ),
+        ]);
+    }
+
+    public function update(Request $request, WrittenResult $result, WrittenResultEditService $service): RedirectResponse
+    {
+        $this->authorize('process', WrittenResult::class);
+        $subjectCodes = array_keys((array) config('written.subjects', []));
+        $rules = [
+            'prs_code' => ['nullable', 'string', 'max:20'],
+            'status' => ['required', 'string', 'in:active,cancelled,withheld'],
+            'comment' => ['nullable', 'string', 'max:5000'],
+            'reason' => ['required', 'string', 'min:5', 'max:2000'],
+            'marks' => ['required', 'array'],
+        ];
+        foreach ($subjectCodes as $subjectCode) {
+            $rules['marks.'.$subjectCode] = ['nullable', 'string', 'max:100'];
+        }
+        $validated = $request->validate($rules);
+
+        $outcome = $service->update(
+            $result,
+            (array) $validated['marks'],
+            $validated['prs_code'] ?? null,
+            $validated['status'],
+            $validated['comment'] ?? null,
+            $validated['reason'],
+            $request->user(),
+        );
+
+        if (! $outcome['changed']) {
+            return redirect()->route('written.results.edit', $result)
+                ->with('success', 'No Written values changed; no audit event or stale state was created.');
+        }
+
+        $message = $outcome['stale']
+            ? 'Written facts updated with audit trail. Reconciliation and rule-processing results are now stale; regenerate the required steps.'
+            : 'Written comment updated with audit trail. Result-processing state remains current because no result-affecting fact changed.';
+
+        return redirect()->route('written.results.edit', $result)->with('success', $message);
+    }
+
+    /** @return array<string, mixed> */
+    private function writtenReferenceDisplay(WrittenResult $result, ?object $registration, CodeLabelService $labels): array
+    {
+        $registrationPrs = $registration?->post_related_subject_code;
+        $writtenPrs = $result->prs_code;
+        $normalize = static fn (mixed $value): ?string => ($value === null || trim((string) $value) === '')
+            ? null
+            : trim((string) $value);
+
+        return [
+            'cadre_category' => $labels->cadreCategory($registration?->cadre_category ?? $result->cadre_category),
+            'registration_prs' => $labels->postRelatedSubject($registrationPrs),
+            'written_prs' => $labels->postRelatedSubject($writtenPrs),
+            'prs_mismatch' => $normalize($registrationPrs) !== null
+                && $normalize($writtenPrs) !== null
+                && $normalize($registrationPrs) !== $normalize($writtenPrs),
+            'district' => $labels->district($registration?->district_code),
+            'division' => $labels->division($registration?->division_code),
+            'university' => $labels->university($registration?->university_code),
+            'bachelor_subject' => $labels->bachelorSubject($registration?->bachelor_subject_code),
+            'gender' => $labels->gender($registration?->sex_code),
+        ];
+    }
+
+    private function finalizedState(): WrittenProcessingState
+    {
+        $state = WrittenProcessingState::query()->firstOrCreate(
+            ['id' => 1],
+            ['status' => WrittenProcessingStatus::NotStarted->value],
+        );
+        abort_if($state->result_finalized_at === null, 409, 'The Written result has not been finalized yet.');
+        abort_if((bool) $state->is_stale, 409, 'The Written result is out of date after a correction. Reprocess and finalize it again.');
+
+        return $state;
+    }
+
+    /** @param list<string>|null $tracks */
+    private function qualifiedRegistrations(?array $tracks = null)
+    {
+        return DB::connection('exam')->table('written_results')
+            ->where('status', 'active')
+            ->whereNotNull('written_qualified_track')
+            ->when($tracks !== null, fn ($query) => $query->whereIn('written_qualified_track', $tracks))
+            ->orderByRaw('CAST(reg AS UNSIGNED) ASC')
+            ->pluck('reg');
     }
 
     private function csvMessages(mixed $value): string

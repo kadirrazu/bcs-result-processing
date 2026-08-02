@@ -21,6 +21,16 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/reconciliation', [WrittenController::class, 'reconciliation'])->name('reconciliation');
         Route::post('/rules/process', [WrittenController::class, 'processRules'])->name('rules.process');
         Route::get('/rules/run/{run}/status', [WrittenController::class, 'processingRunStatus'])->name('rules.status');
+        Route::get('/processing/run/{run}/status', [WrittenController::class, 'processingRunStatus'])->name('processing.status');
+        Route::post('/finalize', [WrittenController::class, 'finalize'])->name('finalize');
+        Route::get('/final-result/combined', [WrittenController::class, 'finalResultCombined'])->name('final-result.combined');
+        Route::get('/final-result/category', [WrittenController::class, 'finalResultCategory'])->name('final-result.category');
+        Route::get('/final-result/combined.txt', [WrittenController::class, 'finalResultCombinedTxt'])->name('final-result.combined.txt');
+        Route::get('/final-result/category.txt', [WrittenController::class, 'finalResultCategoryTxt'])->name('final-result.category.txt');
+        Route::get('/failure-reasons', [WrittenController::class, 'failureReasons'])->name('failure-reasons');
         Route::get('/paper-crashes', [WrittenController::class, 'paperCrashes'])->name('paper-crashes');
         Route::get('/results', [WrittenController::class, 'results'])->name('results');
+        Route::get('/results/{result}', [WrittenController::class, 'show'])->name('results.show');
+        Route::get('/results/{result}/edit', [WrittenController::class, 'edit'])->name('results.edit');
+        Route::put('/results/{result}', [WrittenController::class, 'update'])->name('results.update');
     });
