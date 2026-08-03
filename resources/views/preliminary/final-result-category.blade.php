@@ -13,6 +13,7 @@
             <div class="col-auto ms-auto d-flex gap-2">
                 <a class="btn btn-outline-primary" href="{{ route('preliminary.final-result.combined') }}">Combined</a>
                 <a class="btn btn-outline-secondary" href="{{ route('preliminary.final-result.category.txt') }}">Download TXT</a>
+                <a class="btn btn-outline-success" href="{{ route('preliminary.exports.xlsx', ['scope'=>'passed','order'=>'reg','direction'=>'asc']) }}">Download XLSX</a>
                 <a class="btn btn-outline-success" href="{{ route('preliminary.final-result.template') }}">Fill Result Template</a>
                 <button class="btn btn-primary" type="button" onclick="window.print()">Print</button>
             </div>

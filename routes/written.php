@@ -33,6 +33,12 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::post('/final-result/fill-template', [WrittenController::class, 'generateFinalResultTemplate'])->name('final-result.template.generate');
         Route::get('/failure-reasons', [WrittenController::class, 'failureReasons'])->name('failure-reasons');
         Route::get('/paper-crashes', [WrittenController::class, 'paperCrashes'])->name('paper-crashes');
+        Route::get('/paper-crashes/export.xlsx', [WrittenController::class, 'paperCrashesXlsx'])->name('paper-crashes.xlsx');
+        Route::get('/paper-crashes/export.csv', [WrittenController::class, 'paperCrashesCsv'])->name('paper-crashes.csv');
+        Route::get('/high-mark-review', [WrittenController::class, 'highMarks'])->name('high-marks');
+        Route::get('/high-mark-review/export.xlsx', [WrittenController::class, 'highMarksXlsx'])->name('high-marks.xlsx');
+        Route::get('/high-mark-review/export.csv', [WrittenController::class, 'highMarksCsv'])->name('high-marks.csv');
+        Route::get('/exports/xlsx', [WrittenController::class, 'administrativeExportXlsx'])->name('exports.xlsx');
         Route::get('/results', [WrittenController::class, 'results'])->name('results');
         Route::get('/results/{result}', [WrittenController::class, 'show'])->name('results.show');
         Route::get('/results/{result}/edit', [WrittenController::class, 'edit'])->name('results.edit');

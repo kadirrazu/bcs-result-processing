@@ -15,6 +15,10 @@
 <div class="col-sm-6 col-lg"><div class="card card-sm"><div class="card-body"><div class="text-secondary">{{ $label }}</div><div class="h2 mb-0 {{ $key === 'warnings' ? 'text-warning' : '' }}">{{ number_format($counts[$key]) }}</div></div></div></div>
 @endforeach
 </div>
+<div class="row row-cards mb-3">
+<div class="col-md-6"><div class="card card-sm border-warning"><div class="card-body d-flex align-items-center"><div><div class="text-secondary">Candidates with Paper Crash</div><div class="h2 mb-0 text-warning">{{ number_format($counts['paper_crash']) }}</div></div><a class="btn btn-sm btn-outline-warning ms-auto" href="{{ route('written.paper-crashes') }}">Review</a></div></div></div>
+<div class="col-md-6"><div class="card card-sm border-azure"><div class="card-body d-flex align-items-center"><div><div class="text-secondary">High-mark Review</div><div class="h2 mb-0 text-azure">{{ number_format($counts['high_mark']) }}</div></div><a class="btn btn-sm btn-outline-azure ms-auto" href="{{ route('written.high-marks') }}">Review</a></div></div></div>
+</div>
 
 @if($state->is_stale)
 <div class="alert alert-warning mb-3">
@@ -64,7 +68,7 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
         <tr>
             <td class="fw-medium">Paper Crash &amp; Track Processing</td>
             <td>@if(in_array($runStatus, ['queued','running'], true))<span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass($runStatus) }}">{{ \App\Support\WrittenStatusPresenter::label($runStatus) }}</span>@elseif($runStatus === 'failed')<span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass('failed') }}">Failed</span>@elseif($state->paper_crash_processed_at)<span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass('completed') }}">Completed</span>@else<span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass('pending') }}">Pending</span>@endif</td>
-            <td class="d-flex gap-2 flex-wrap">@if($state->reconciliation_generated_at && !$state->paper_crash_processed_at && !in_array($runStatus,['queued','running'],true))<form method="post" action="{{ route('written.rules.process') }}">@csrf<button class="btn btn-sm btn-primary">Process Written Rules</button></form>@endif @if($state->paper_crash_processed_at)<a href="{{ route('written.paper-crashes') }}" class="btn btn-sm btn-outline-warning">Paper Crash Report</a><a href="{{ route('written.results') }}" class="btn btn-sm btn-outline-primary">Processed Results</a>@if(!in_array($runStatus,['queued','running'],true))<form method="post" action="{{ route('written.rules.process') }}">@csrf<button class="btn btn-sm btn-outline-secondary">Reprocess Rules</button></form>@endif @endif</td>
+            <td class="d-flex gap-2 flex-wrap">@if($state->reconciliation_generated_at && !$state->paper_crash_processed_at && !in_array($runStatus,['queued','running'],true))<form method="post" action="{{ route('written.rules.process') }}">@csrf<button class="btn btn-sm btn-primary">Process Written Rules</button></form>@endif @if($state->paper_crash_processed_at)<a href="{{ route('written.paper-crashes') }}" class="btn btn-sm btn-outline-warning">Paper Crash Report</a><a href="{{ route('written.high-marks') }}" class="btn btn-sm btn-outline-azure">High-mark Review</a><a href="{{ route('written.results') }}" class="btn btn-sm btn-outline-primary">Processed Results</a>@if(!in_array($runStatus,['queued','running'],true))<form method="post" action="{{ route('written.rules.process') }}">@csrf<button class="btn btn-sm btn-outline-secondary">Reprocess Rules</button></form>@endif @endif</td>
         </tr>
         <tr>
             <td class="fw-medium">Final Written Result</td>
@@ -97,6 +101,41 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
     </tbody></table></div>
 </div>
 
+<div class="card mb-3">
+<div class="card-header"><div><h3 class="card-title mb-1">Reports &amp; Exports</h3><div class="text-secondary small">Central shortcuts for result, review and administrative outputs. The same actions remain available on their detailed pages.</div></div></div>
+<div class="card-body">
+    <div class="d-flex gap-2 flex-wrap mb-3">
+        @if($state->paper_crash_processed_at)
+            <a class="btn btn-outline-warning" href="{{ route('written.paper-crashes') }}">Paper Crash Report</a>
+            <a class="btn btn-outline-azure" href="{{ route('written.high-marks') }}">High-mark Review</a>
+            <a class="btn btn-outline-secondary" href="{{ route('written.failure-reasons') }}">Failure Reasons</a>
+        @endif
+        @if($state->result_finalized_at && !$state->is_stale)
+            <a class="btn btn-outline-success" href="{{ route('written.final-result.combined') }}">Combined Result</a>
+            <a class="btn btn-outline-success" href="{{ route('written.final-result.category') }}">Category-wise Result</a>
+            <a class="btn btn-outline-secondary" href="{{ route('written.final-result.template') }}">Fill Result Template</a>
+        @endif
+    </div>
+    @if($state->result_finalized_at && !$state->is_stale)
+        <div class="row g-3">
+            @foreach(['qualified'=>'Qualified candidates','all'=>'All Written records'] as $scope=>$label)
+                <div class="col-lg-6"><div class="border rounded p-3 h-100">
+                    <div class="fw-semibold mb-2">{{ $label }} · Excel</div>
+                    <form method="get" action="{{ route('written.exports.xlsx') }}" class="row g-2 align-items-end">
+                        <input type="hidden" name="scope" value="{{ $scope }}">
+                        <div class="col-sm-5"><label class="form-label">Order by</label><select class="form-select" name="order"><option value="reg">Registration number</option><option value="general_total">General counted total</option><option value="technical_total">Technical counted total</option></select></div>
+                        <div class="col-sm-4"><label class="form-label">Direction</label><select class="form-select" name="direction"><option value="asc">Ascending</option><option value="desc">Descending</option></select></div>
+                        <div class="col-sm-3"><button class="btn btn-primary w-100">Export XLSX</button></div>
+                    </form>
+                </div></div>
+            @endforeach
+        </div>
+    @else
+        <div class="text-secondary">Official administrative Excel exports are available after the Written result is finalized and current. Review reports remain available after Written rule processing.</div>
+    @endif
+</div>
+</div>
+
 <div class="card mb-3"><div class="card-header"><h3 class="card-title">Import Written Marks</h3><div class="card-actions text-secondary small">XLSX / CSV · up to 100 MB</div></div><div class="card-body">
 <form method="post" action="{{ route('written.import.store') }}" enctype="multipart/form-data" class="row g-2 align-items-end">@csrf
 <div class="col-md"><label class="form-label">Written mark source file</label><input type="file" class="form-control" name="file" accept=".xlsx,.csv" required></div>
@@ -117,7 +156,7 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
 <div class="card mb-3"><div class="card-header"><h3 class="card-title">Written Import History</h3></div><div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>Batch</th><th>File</th><th>Status</th><th>Rows</th><th>Warnings</th><th>Invalid</th><th>Approved</th><th></th></tr></thead><tbody>
 @forelse($batches as $batch)<tr><td>#{{ $batch->id }}</td><td>{{ $batch->original_name }}</td><td>{{ str_replace('_',' ',$batch->status) }}</td><td>{{ number_format($batch->total_rows) }}</td><td class="text-warning">{{ number_format($batch->warning_rows) }}</td><td class="text-danger">{{ number_format($batch->invalid_rows) }}</td><td>{{ number_format($batch->approved_rows) }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ route('written.import.result',$batch) }}">Open</a></td></tr>
 @empty<tr><td colspan="8" class="text-center text-secondary py-4">No Written mark file has been imported yet.</td></tr>@endforelse
-</tbody></table></div>@if($batches->hasPages())<div class="card-footer">{{ $batches->links() }}</div>@endif</div>
+</tbody></table></div><div class="card-footer d-flex align-items-center justify-content-between gap-3 flex-wrap"><x-pagination-summary :paginator="$batches" />@if($batches->hasPages()){{ $batches->links() }}@endif</div></div>
 
 @if($audits->isNotEmpty())<div class="card"><div class="card-header"><h3 class="card-title">Latest Written Audit Events</h3></div><div class="table-responsive"><table class="table table-sm card-table"><thead><tr><th>Action</th><th>Actor</th><th>Reason</th><th>Time</th></tr></thead><tbody>@foreach($audits as $audit)<tr><td>{{ $audit->action }}</td><td>{{ $audit->actor_name ?: $audit->actor_id }}</td><td>{{ $audit->reason ?: '—' }}</td><td>{{ $audit->created_at?->format('d-m-Y h:i A') ?? '—' }}</td></tr>@endforeach</tbody></table></div></div>@endif
 </div></div>

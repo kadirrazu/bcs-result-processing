@@ -51,7 +51,7 @@
 @php($vs=$row->validation_status instanceof \BackedEnum ? $row->validation_status->value : (string)$row->validation_status)
 <tr class="{{ $vs === 'warning' ? 'table-warning' : (in_array($vs,['invalid','identity_conflict'],true) ? 'table-danger' : '') }}"><td>{{ $row->source_row }}</td><td>{{ $row->reg }}</td><td>{{ $row->user_id }}</td><td>{{ $row->prs_code ?? '—' }}</td><td>{{ $row->data_source_note ?? '—' }}</td><td><strong>{{ str_replace('_',' ',$vs) }}</strong></td><td>{{ implode(' | ',array_merge($row->validation_errors ?? [],$row->validation_warnings ?? [])) }}</td></tr>
 @empty<tr><td colspan="7" class="text-center text-secondary py-4">No rows match the selected filters.</td></tr>@endforelse
-</tbody></table></div>@if($rows->hasPages())<div class="card-footer">{{ $rows->links() }}</div>@endif</div>
+</tbody></table></div><div class="card-footer d-flex align-items-center justify-content-between gap-3 flex-wrap"><x-pagination-summary :paginator="$rows" />@if($rows->hasPages()){{ $rows->links() }}@endif</div></div>
 </div></div>
 @endsection
 @push('scripts')

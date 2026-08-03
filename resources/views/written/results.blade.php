@@ -62,6 +62,6 @@
     <td><div class="btn-list flex-nowrap"><a href="{{ route('written.results.show',$row) }}" class="btn btn-sm btn-outline-primary">View</a><a href="{{ route('written.results.edit',$row) }}" class="btn btn-sm btn-outline-secondary">Edit</a></div></td>
 </tr>
 @empty<tr><td colspan="15" class="text-center text-secondary py-4">No Written result rows.</td></tr>@endforelse
-</tbody></table></div>@if($rows->hasPages())<div class="card-footer">{{ $rows->links() }}</div>@endif</div>
+</tbody></table></div><div class="card-footer d-flex align-items-center justify-content-between gap-3 flex-wrap"><x-pagination-summary :paginator="$rows" />@if($rows->hasPages()){{ $rows->links() }}@endif</div></div>
 </div></div>
 @endsection

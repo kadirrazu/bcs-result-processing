@@ -62,7 +62,7 @@
         @forelse($rows as $row)
         <tr><td>{{ $row->source_row }}</td><td>{{ $row->reg }}</td><td>{{ $row->user_id }}</td><td>{{ $row->raw_mark ?? '—' }}</td><td>{{ $row->raw_candidate_status ?? '—' }}</td><td>{{ str_replace('_', ' ', $row->validation_status) }}</td><td>{{ implode(' | ', array_merge($row->validation_errors ?? [], $row->validation_warnings ?? [])) }}</td></tr>
         @empty<tr><td colspan="7" class="text-center text-secondary py-4">No invalid or warning rows.</td></tr>@endforelse
-    </tbody></table></div>@if($rows->hasPages())<div class="card-footer">{{ $rows->links() }}</div>@endif</div>
+    </tbody></table></div><div class="card-footer d-flex align-items-center justify-content-between gap-3 flex-wrap"><x-pagination-summary :paginator="$rows" />@if($rows->hasPages()){{ $rows->links() }}@endif</div></div>
 </div></div>
 @endsection
 

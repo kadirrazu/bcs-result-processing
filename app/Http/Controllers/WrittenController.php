@@ -26,7 +26,10 @@ use App\Services\Written\WrittenTemplateService;
 use App\Services\MasterData\CodeLabelService;
 use App\Services\Imports\InvalidRowCorrectionService;
 use App\Services\Documents\DocxPlaceholderTemplateService;
+use App\Services\Exports\AdministrativeXlsxExportService;
+use App\Services\Exports\AdministrativeExportCacheService;
 use App\Support\Examinations\ExaminationContext;
+use App\Support\WrittenResultPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,6 +38,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class WrittenController extends Controller
 {
@@ -61,6 +65,8 @@ final class WrittenController extends Controller
                 'cancelled' => WrittenResult::query()->where('status', 'cancelled')->count(),
                 'withheld' => WrittenResult::query()->where('status', 'withheld')->count(),
                 'expelled' => WrittenResult::query()->where('status', 'expelled')->count(),
+                'paper_crash' => DB::connection('exam')->table('written_candidate_marks')->where('paper_crashed', 1)->distinct()->count('written_result_id'),
+                'high_mark' => DB::connection('exam')->table('written_candidate_marks')->where('warning_codes', 'like', '%HIGH_MARK_REVIEW:%')->distinct()->count('written_result_id'),
             ],
             'ruleSummary' => [
                 'general_full_mark' => $subjects->trackFullMark('general'),
@@ -541,6 +547,7 @@ final class WrittenController extends Controller
                 'total_replacements' => $summary['total_replacements'],
                 'unrecognized_placeholders' => $summary['unknown_placeholders'],
                 'finalized_at' => $state->result_finalized_at?->toIso8601String(),
+                'cache_hit' => false,
             ],
             batchId: $state->latest_import_batch_id,
         );
@@ -581,18 +588,16 @@ final class WrittenController extends Controller
         $this->authorize('viewAny', WrittenResult::class);
         $subject = trim((string) $request->query('subject', 'all'));
         $search = trim((string) $request->query('search', ''));
-        $query = DB::connection('exam')->table('written_candidate_marks as m')
-            ->join('written_results as w', 'w.id', '=', 'm.written_result_id')
-            ->where('m.paper_crashed', 1)
-            ->when($subject !== '' && $subject !== 'all', fn ($q) => $q->where('m.subject_code', $subject))
-            ->when($search !== '', fn ($q) => $q->where(fn ($n) => $n->where('w.reg', $search)->orWhere('w.user_id', $search)))
-            ->select(['m.id', 'm.subject_code', 'm.actual_mark', 'm.counted_mark', 'm.crash_threshold', 'w.reg', 'w.user_id', 'w.cadre_category', 'w.written_qualified_track'])
-            ->orderBy('w.reg')->orderBy('m.subject_code');
 
         return view('written.paper-crashes', [
-            'rows' => $query->paginate(100)->withQueryString(),
+            'rows' => $this->paperCrashQuery($subject, $search)->paginate(100)->withQueryString(),
             'filters' => compact('subject', 'search'),
-            'subjects' => array_keys((array) config('written.subjects', [])),
+            'subjects' => $this->reviewSubjectOptions(),
+            'statistics' => $this->paperCrashStatistics(),
+            'uniqueCandidates' => DB::connection('exam')->table('written_candidate_marks as m')
+                ->join('written_results as w', 'w.id', '=', 'm.written_result_id')
+                ->where('w.status', 'active')->where('m.paper_crashed', 1)
+                ->distinct()->count('m.written_result_id'),
         ]);
     }
 
@@ -620,6 +625,216 @@ final class WrittenController extends Controller
                 ['status' => WrittenProcessingStatus::NotStarted->value],
             ),
         ]);
+    }
+
+    public function administrativeExportXlsx(
+        Request $request,
+        ExaminationContext $context,
+        AdministrativeXlsxExportService $exports,
+        AdministrativeExportCacheService $exportCache,
+        WrittenAuditService $audit,
+    ): BinaryFileResponse {
+        $this->authorize('viewAny', WrittenResult::class);
+        $state = $this->finalizedState();
+
+        $validated = $request->validate([
+            'scope' => ['required', 'string', 'in:qualified,all'],
+            'order' => ['nullable', 'string', 'in:reg,general_total,technical_total'],
+            'direction' => ['nullable', 'string', 'in:asc,desc'],
+        ]);
+        $scope = $validated['scope'];
+        $order = $validated['order'] ?? 'reg';
+        $direction = $validated['direction'] ?? ($order === 'reg' ? 'asc' : 'desc');
+        $examination = $context->current();
+        $examinationKey = (string) ($examination?->id ?? config('database.connections.exam.database', 'exam'));
+        $filename = 'written-'.($scope === 'qualified' ? 'qualified-candidates' : 'all-records').'-'.$state->result_finalized_at->format('Ymd-His').'.xlsx';
+        $path = $exportCache->path('written', $examinationKey, $state->result_finalized_at, $scope, $order, $direction);
+
+        if ($exportCache->isReady($path)) {
+            $audit->record(
+                'WRITTEN_ADMINISTRATIVE_XLSX_EXPORTED',
+                $request->user(),
+                'result_finalized',
+                'result_finalized',
+                'Downloaded a previously prepared administrative Excel export from the finalized Written result.',
+                summary: [
+                    'scope' => $scope, 'order' => $order, 'direction' => $direction,
+                    'filename' => $filename, 'cache_hit' => true,
+                    'finalized_at' => $state->result_finalized_at?->toIso8601String(),
+                ],
+                batchId: $state->latest_import_batch_id,
+            );
+
+            return response()->download($path, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]);
+        }
+
+        $subjectCodes = array_keys((array) config('written.subjects', []));
+        $selects = [];
+        foreach ($subjectCodes as $code) {
+            $safe = preg_replace('/[^A-Za-z0-9_]/', '_', $code);
+            $selects[] = "MAX(CASE WHEN subject_code = '".str_replace("'", "''", $code)."' THEN m.actual_mark END) AS mark_{$safe}";
+        }
+
+        $marksPivot = DB::connection('exam')->table('written_candidate_marks as m')
+            ->select('m.written_result_id')
+            ->selectRaw(implode(', ', $selects))
+            ->groupBy('m.written_result_id');
+
+        $query = DB::connection('exam')->table('written_results as w')
+            ->join('registrations as r', 'r.id', '=', 'w.registration_id')
+            ->leftJoinSub($marksPivot, 'pm', 'pm.written_result_id', '=', 'w.id')
+            ->where('r.status', 'active')
+            ->when($scope === 'qualified', fn ($q) => $q->where('w.status', 'active')->whereNotNull('w.written_qualified_track'))
+            ->select([
+                'w.id', 'w.user_id', 'w.reg', 'r.name', 'w.cadre_category', 'w.prs_code', 'w.status',
+                'w.validation_status', 'w.written_qualified_track', 'w.general_actual_total', 'w.general_counted_total',
+                'w.technical_actual_total', 'w.technical_counted_total', 'w.general_result_status',
+                'w.technical_result_status', 'w.general_fail_reasons', 'w.technical_fail_reasons', 'w.data_source_note',
+            ]);
+        foreach ($subjectCodes as $code) {
+            $safe = preg_replace('/[^A-Za-z0-9_]/', '_', $code);
+            $query->addSelect('pm.mark_'.$safe);
+        }
+
+        match ($order) {
+            'general_total' => $query->orderBy('w.general_counted_total', $direction)->orderBy('w.reg', 'asc'),
+            'technical_total' => $query->orderBy('w.technical_counted_total', $direction)->orderBy('w.reg', 'asc'),
+            default => $query->orderBy('w.reg', $direction),
+        };
+
+        $category = static fn (mixed $value): string => match ((int) $value) {
+            1 => '1 - GG', 2 => '2 - TT', 3 => '3 - GT', default => (string) $value,
+        };
+        $enum = static fn (mixed $value): mixed => $value instanceof \BackedEnum ? $value->value : $value;
+
+        $headers = ['User ID', 'Registration Number', 'Name', 'Original Category'];
+        foreach ($subjectCodes as $code) {
+            $headers[] = $code === 'PRS' ? 'PRS Mark' : 'Subject '.$code.' Mark';
+        }
+        array_push(
+            $headers,
+            'PRS Code', 'Processing Status', 'Validation Status', 'Qualified Track', 'Effective Category',
+            'General Actual Total', 'General Counted Total', 'Technical Actual Total', 'Technical Counted Total',
+            'General Result', 'Technical Result', 'Fail Reasons', 'Source Note'
+        );
+
+        $rows = (function () use ($query, $subjectCodes, $category, $enum): \Generator {
+            foreach ($query->cursor() as $row) {
+                $track = (string) ($enum($row->written_qualified_track) ?? '');
+                $generalReasons = WrittenResultPresenter::reasons($this->decodeArray($row->general_fail_reasons));
+                $technicalReasons = WrittenResultPresenter::reasons($this->decodeArray($row->technical_fail_reasons));
+                $data = [
+                    (string) $row->user_id,
+                    (string) $row->reg,
+                    (string) ($row->name ?? ''),
+                    $category($row->cadre_category),
+                ];
+                foreach ($subjectCodes as $code) {
+                    $safe = preg_replace('/[^A-Za-z0-9_]/', '_', $code);
+                    $property = 'mark_'.$safe;
+                    $data[] = $row->{$property} === null ? '' : (float) $row->{$property};
+                }
+                array_push(
+                    $data,
+                    (string) ($row->prs_code ?? ''),
+                    ucfirst((string) ($enum($row->status) ?? '')),
+                    strtoupper((string) ($enum($row->validation_status) ?? '')),
+                    $track,
+                    WrittenResultPresenter::effectiveCategory($track),
+                    $row->general_actual_total === null ? '' : (float) $row->general_actual_total,
+                    $row->general_counted_total === null ? '' : (float) $row->general_counted_total,
+                    $row->technical_actual_total === null ? '' : (float) $row->technical_actual_total,
+                    $row->technical_counted_total === null ? '' : (float) $row->technical_counted_total,
+                    strtoupper((string) ($enum($row->general_result_status) ?? '')),
+                    strtoupper((string) ($enum($row->technical_result_status) ?? '')),
+                    implode(' | ', array_values(array_unique([...$generalReasons, ...$technicalReasons]))),
+                    (string) ($row->data_source_note ?? ''),
+                );
+                yield $data;
+            }
+        })();
+
+        $recordCount = $exports->create(
+            $path,
+            [
+                'Examination' => (string) ($examination?->name ?? 'Selected Examination'),
+                'Report' => $scope === 'qualified' ? 'Written qualified candidates' : 'All Written records',
+                'Generated at' => now()->format('d-m-Y h:i A').' GMT+6',
+                'Generated by' => (string) $request->user()->name,
+                'Result finalized at' => $state->result_finalized_at?->format('d-m-Y h:i A').' GMT+6',
+                'Order' => strtoupper($order).' '.strtoupper($direction),
+            ],
+            $headers,
+            $rows,
+        );
+
+        $audit->record(
+            'WRITTEN_ADMINISTRATIVE_XLSX_EXPORTED',
+            $request->user(),
+            'result_finalized',
+            'result_finalized',
+            'Created an administrative Excel export from the finalized Written result.',
+            summary: [
+                'scope' => $scope, 'order' => $order, 'direction' => $direction,
+                'records' => $recordCount, 'filename' => $filename,
+                'finalized_at' => $state->result_finalized_at?->toIso8601String(),
+            ],
+            batchId: $state->latest_import_batch_id,
+        );
+
+        $exportCache->prune($path);
+
+        return response()->download(
+            $path,
+            $filename,
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        );
+    }
+
+    public function highMarks(Request $request): View
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $subject = trim((string) $request->query('subject', 'all'));
+        $search = trim((string) $request->query('search', ''));
+        $query = $this->highMarkQuery($subject, $search);
+
+        return view('written.high-marks', [
+            'rows' => $query->paginate(100)->withQueryString(),
+            'filters' => compact('subject', 'search'),
+            'subjects' => $this->reviewSubjectOptions(),
+            'statistics' => $this->highMarkStatistics(),
+            'uniqueCandidates' => DB::connection('exam')->table('written_candidate_marks as m')
+                ->join('written_results as w', 'w.id', '=', 'm.written_result_id')
+                ->where('w.status', 'active')->where('m.warning_codes', 'like', '%HIGH_MARK_REVIEW:%')
+                ->distinct()->count('m.written_result_id'),
+            'threshold' => (float) config('written.high_mark_review_percent', 75),
+        ]);
+    }
+
+    public function paperCrashesXlsx(Request $request, AdministrativeXlsxExportService $exports, WrittenAuditService $audit): BinaryFileResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        return $this->reviewXlsx($request, $exports, $audit, 'paper_crash');
+    }
+
+    public function highMarksXlsx(Request $request, AdministrativeXlsxExportService $exports, WrittenAuditService $audit): BinaryFileResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        return $this->reviewXlsx($request, $exports, $audit, 'high_mark');
+    }
+
+    public function paperCrashesCsv(Request $request, WrittenAuditService $audit): StreamedResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        return $this->reviewCsv($request, $audit, 'paper_crash');
+    }
+
+    public function highMarksCsv(Request $request, WrittenAuditService $audit): StreamedResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        return $this->reviewCsv($request, $audit, 'high_mark');
     }
 
     public function show(WrittenResult $result, CodeLabelService $labels): View
@@ -708,6 +923,208 @@ final class WrittenController extends Controller
             : 'Written comment updated with audit trail. Result-processing state remains current because no result-affecting fact changed.';
 
         return redirect()->route('written.results.edit', $result)->with('success', $message);
+    }
+
+    private function reviewSubjectOptions(): array
+    {
+        $codes = array_keys((array) config('written.subjects', []));
+        $codes = array_values(array_filter($codes, static fn (string $code): bool => ! in_array($code, ['008', '009'], true)));
+        $codes[] = '008_009';
+        sort($codes, SORT_NATURAL);
+        return $codes;
+    }
+
+    private function paperCrashQuery(string $subject = 'all', string $search = '')
+    {
+        $query = DB::connection('exam')->table('written_candidate_marks as m')
+            ->join('written_results as w', 'w.id', '=', 'm.written_result_id')
+            ->leftJoin('written_candidate_marks as m9', function ($join): void {
+                $join->on('m9.written_result_id', '=', 'm.written_result_id')->where('m9.subject_code', '=', '009');
+            })
+            ->where('w.status', 'active')
+            ->where('m.paper_crashed', 1)
+            ->where('m.subject_code', '<>', '009')
+            ->when($subject !== '' && $subject !== 'all', function ($q) use ($subject): void {
+                $q->where('m.subject_code', $subject === '008_009' ? '008' : $subject);
+            })
+            ->when($search !== '', fn ($q) => $q->where(fn ($n) => $n->where('w.reg', $search)->orWhere('w.user_id', $search)))
+            ->select([
+                'm.id', 'm.subject_code', 'm.actual_mark', 'm.counted_mark', 'm.crash_threshold',
+                'w.reg', 'w.user_id', 'w.cadre_category', 'w.written_qualified_track',
+                'm9.actual_mark as mark009_actual', 'm9.counted_mark as mark009_counted',
+            ])
+            ->orderBy('w.reg', 'asc')->orderBy('m.subject_code');
+
+        return $query;
+    }
+
+    private function highMarkQuery(string $subject = 'all', string $search = '')
+    {
+        $query = DB::connection('exam')->table('written_candidate_marks as m')
+            ->join('written_results as w', 'w.id', '=', 'm.written_result_id')
+            ->leftJoin('written_candidate_marks as m9', function ($join): void {
+                $join->on('m9.written_result_id', '=', 'm.written_result_id')->where('m9.subject_code', '=', '009');
+            })
+            ->where('w.status', 'active')
+            ->where('m.warning_codes', 'like', '%HIGH_MARK_REVIEW:%')
+            ->where(function ($q): void {
+                $q->whereNotIn('m.subject_code', ['008', '009'])
+                    ->orWhere(function ($combined): void {
+                        $combined->where('m.subject_code', '008')
+                            ->where('m.warning_codes', 'like', '%HIGH_MARK_REVIEW:008_009:%');
+                    });
+            })
+            ->when($subject !== '' && $subject !== 'all', function ($q) use ($subject): void {
+                if ($subject === '008_009') {
+                    $q->where('m.subject_code', '008')->where('m.warning_codes', 'like', '%HIGH_MARK_REVIEW:008_009:%');
+                } else {
+                    $q->where('m.subject_code', $subject)->where('m.warning_codes', 'like', '%HIGH_MARK_REVIEW:'.$subject.':%');
+                }
+            })
+            ->when($search !== '', fn ($q) => $q->where(fn ($n) => $n->where('w.reg', $search)->orWhere('w.user_id', $search)))
+            ->select([
+                'm.id', 'm.subject_code', 'm.actual_mark', 'm.warning_codes',
+                'w.reg', 'w.user_id', 'w.cadre_category', 'w.written_qualified_track',
+                'm9.actual_mark as mark009_actual',
+            ])
+            ->orderBy('w.reg', 'asc')->orderBy('m.subject_code');
+
+        return $query;
+    }
+
+    private function paperCrashStatistics(): array
+    {
+        $stats = [];
+        foreach ($this->reviewSubjectOptions() as $code) {
+            $subject = $code === '008_009' ? '008' : $code;
+            $stats[$code] = DB::connection('exam')->table('written_candidate_marks as m')
+                ->join('written_results as w', 'w.id', '=', 'm.written_result_id')
+                ->where('w.status', 'active')->where('m.paper_crashed', 1)->where('m.subject_code', $subject)
+                ->distinct()->count('m.written_result_id');
+        }
+        return $stats;
+    }
+
+    private function highMarkStatistics(): array
+    {
+        $stats = [];
+        foreach ($this->reviewSubjectOptions() as $code) {
+            $subject = $code === '008_009' ? '008' : $code;
+            $needle = '%HIGH_MARK_REVIEW:'.$code.':%';
+            $stats[$code] = DB::connection('exam')->table('written_candidate_marks as m')
+                ->join('written_results as w', 'w.id', '=', 'm.written_result_id')
+                ->where('w.status', 'active')->where('m.subject_code', $subject)->where('m.warning_codes', 'like', $needle)
+                ->distinct()->count('m.written_result_id');
+        }
+        return $stats;
+    }
+
+    private function reviewXlsx(Request $request, AdministrativeXlsxExportService $exports, WrittenAuditService $audit, string $type): BinaryFileResponse
+    {
+        $subject = trim((string) $request->query('subject', 'all'));
+        $search = trim((string) $request->query('search', ''));
+        $query = $type === 'paper_crash' ? $this->paperCrashQuery($subject, $search) : $this->highMarkQuery($subject, $search);
+        $directory = storage_path('app/private/written-review-exports');
+        File::ensureDirectoryExists($directory);
+        $label = $type === 'paper_crash' ? 'paper-crash' : 'high-mark-review';
+        $filename = 'written-'.$label.'-'.now()->format('Ymd-His').'.xlsx';
+        $path = $directory.DIRECTORY_SEPARATOR.uniqid($label.'-', true).'.xlsx';
+        $threshold = $type === 'paper_crash'
+            ? (float) config('written.paper_crash_percent', 30)
+            : (float) config('written.high_mark_review_percent', 75);
+        $rows = (function () use ($query, $type): \Generator {
+            foreach ($query->cursor() as $row) {
+                yield $this->reviewRow($row, $type);
+            }
+        })();
+        $count = $exports->create(
+            $path,
+            [
+                'Report' => $type === 'paper_crash' ? 'Written paper crash review' : 'Written high-mark review',
+                'Generated at' => now()->format('d-m-Y h:i A').' GMT+6',
+                'Generated by' => (string) $request->user()->name,
+                'Subject filter' => $subject === 'all' ? 'All' : $this->reviewSubjectLabel($subject),
+                'Search' => $search === '' ? 'None' : $search,
+                'Configured threshold' => number_format($threshold, 2, '.', '').'%',
+            ],
+            ['Registration Number', 'User ID', 'Category', 'Qualified Track', 'Subject', 'Actual Mark', 'Full Mark', 'Percentage', $type === 'paper_crash' ? 'Crash Threshold' : 'Review Threshold'],
+            $rows,
+        );
+        $audit->record(
+            strtoupper('WRITTEN_'.($type === 'paper_crash' ? 'PAPER_CRASH' : 'HIGH_MARK').'_XLSX_EXPORTED'),
+            $request->user(),
+            reason: 'Created a Written review export.',
+            summary: ['subject' => $subject, 'search' => $search, 'records' => $count, 'filename' => $filename],
+        );
+        return response()->download($path, $filename, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->deleteFileAfterSend(true);
+    }
+
+    private function reviewCsv(Request $request, WrittenAuditService $audit, string $type): StreamedResponse
+    {
+        $subject = trim((string) $request->query('subject', 'all'));
+        $search = trim((string) $request->query('search', ''));
+        $query = $type === 'paper_crash' ? $this->paperCrashQuery($subject, $search) : $this->highMarkQuery($subject, $search);
+        $filename = 'written-'.($type === 'paper_crash' ? 'paper-crash' : 'high-mark-review').'-'.now()->format('Ymd-His').'.csv';
+        $audit->record(
+            strtoupper('WRITTEN_'.($type === 'paper_crash' ? 'PAPER_CRASH' : 'HIGH_MARK').'_CSV_EXPORTED'),
+            $request->user(),
+            reason: 'Created a Written review CSV export.',
+            summary: ['subject' => $subject, 'search' => $search, 'filename' => $filename],
+        );
+        return response()->streamDownload(function () use ($query, $type): void {
+            $out = fopen('php://output', 'wb');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['Registration Number', 'User ID', 'Category', 'Qualified Track', 'Subject', 'Actual Mark', 'Full Mark', 'Percentage', $type === 'paper_crash' ? 'Crash Threshold' : 'Review Threshold']);
+            foreach ($query->cursor() as $row) {
+                fputcsv($out, $this->reviewRow($row, $type));
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    private function reviewRow(object $row, string $type): array
+    {
+        $combined = (string) $row->subject_code === '008';
+        $subject = $combined ? '008_009' : (string) $row->subject_code;
+        $actual = $combined ? (float) $row->actual_mark + (float) ($row->mark009_actual ?? 0) : (float) $row->actual_mark;
+        $full = $combined
+            ? (float) data_get(config('written.subjects'), '008.full_mark', 50) + (float) data_get(config('written.subjects'), '009.full_mark', 50)
+            : (float) data_get(config('written.subjects'), $subject.'.full_mark', 0);
+        $percentage = $full > 0 ? ($actual / $full) * 100 : 0;
+        $threshold = $type === 'paper_crash'
+            ? ($combined ? (float) $row->crash_threshold : (float) $row->crash_threshold)
+            : $full * ((float) config('written.high_mark_review_percent', 75) / 100);
+        $category = match ((int) $row->cadre_category) { 1 => 'GG', 2 => 'TT', 3 => 'GT', default => (string) $row->cadre_category };
+        $track = $row->written_qualified_track instanceof \BackedEnum ? $row->written_qualified_track->value : (string) ($row->written_qualified_track ?? '');
+
+        return [
+            (string) $row->reg,
+            (string) $row->user_id,
+            $category,
+            $track,
+            $this->reviewSubjectLabel($subject),
+            number_format($actual, 2, '.', ''),
+            number_format($full, 2, '.', ''),
+            number_format($percentage, 2, '.', '').'%',
+            number_format($threshold, 2, '.', ''),
+        ];
+    }
+
+    private function reviewSubjectLabel(string $subject): string
+    {
+        return $subject === '008_009' ? '008 + 009 combined' : $subject;
+    }
+
+    private function decodeArray(mixed $value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if ($value === null || $value === '') {
+            return [];
+        }
+        $decoded = json_decode((string) $value, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     /** @return array<string, mixed> */

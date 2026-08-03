@@ -37,6 +37,7 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/final-result/category-wise.txt', [PreliminaryController::class, 'finalResultCategoryTxt'])->name('final-result.category.txt');
         Route::get('/final-result/fill-template', [PreliminaryController::class, 'finalResultTemplate'])->name('final-result.template');
         Route::post('/final-result/fill-template', [PreliminaryController::class, 'generateFinalResultTemplate'])->name('final-result.template.generate');
+        Route::get('/exports/xlsx', [PreliminaryController::class, 'administrativeExportXlsx'])->name('exports.xlsx');
 
         Route::get('/results', [PreliminaryController::class, 'results'])->name('results.index');
         Route::get('/results/{result}/edit', [PreliminaryController::class, 'edit'])->name('results.edit');

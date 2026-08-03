@@ -17,6 +17,8 @@ use App\Models\PreliminaryProcessingState;
 use App\Models\PreliminaryReconciliationReport;
 use App\Models\PreliminaryResult;
 use App\Services\Documents\DocxPlaceholderTemplateService;
+use App\Services\Exports\AdministrativeXlsxExportService;
+use App\Services\Exports\AdministrativeExportCacheService;
 use App\Services\Preliminary\PreliminaryAuditService;
 use App\Services\Preliminary\PreliminaryCutoffService;
 use App\Services\Preliminary\PreliminaryDistributionService;
@@ -621,6 +623,7 @@ final class PreliminaryController extends Controller
                 'unrecognized_placeholders' => $summary['unknown_placeholders'],
                 'cutoff_mark' => (float) $state->cutoff_mark,
                 'finalized_at' => $state->result_finalized_at?->toIso8601String(),
+                'cache_hit' => false,
             ],
             batchId: $state->latest_import_batch_id,
             processingRunId: $state->latest_finalization_run_id,
@@ -631,6 +634,130 @@ final class PreliminaryController extends Controller
             $outputName,
             ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
         )->deleteFileAfterSend(true);
+    }
+
+    public function administrativeExportXlsx(
+        Request $request,
+        ExaminationContext $context,
+        AdministrativeXlsxExportService $exports,
+        AdministrativeExportCacheService $exportCache,
+        PreliminaryAuditService $audit,
+    ): BinaryFileResponse {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $state = $this->finalizedState();
+
+        $validated = $request->validate([
+            'scope' => ['required', 'string', 'in:passed,all'],
+            'order' => ['nullable', 'string', 'in:reg,mark'],
+            'direction' => ['nullable', 'string', 'in:asc,desc'],
+        ]);
+
+        $scope = $validated['scope'];
+        $order = $validated['order'] ?? 'reg';
+        $direction = $validated['direction'] ?? ($order === 'mark' ? 'desc' : 'asc');
+        $examination = $context->current();
+        $examinationKey = (string) ($examination?->id ?? config('database.connections.exam.database', 'exam'));
+        $filename = 'preliminary-'.($scope === 'passed' ? 'passed-candidates' : 'all-participants').'-'.$state->result_finalized_at->format('Ymd-His').'.xlsx';
+        $path = $exportCache->path('preliminary', $examinationKey, $state->result_finalized_at, $scope, $order, $direction);
+
+        if ($exportCache->isReady($path)) {
+            $audit->record(
+                'PRELIMINARY_ADMINISTRATIVE_XLSX_EXPORTED',
+                $request->user(),
+                'finalized',
+                'finalized',
+                'Downloaded a previously prepared administrative Excel export from the finalized Preliminary result.',
+                [
+                    'scope' => $scope, 'order' => $order, 'direction' => $direction,
+                    'filename' => $filename, 'cache_hit' => true,
+                    'finalized_at' => $state->result_finalized_at?->toIso8601String(),
+                ],
+                batchId: $state->latest_import_batch_id,
+                processingRunId: $state->latest_finalization_run_id,
+            );
+
+            return response()->download($path, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]);
+        }
+
+        $query = DB::connection('exam')->table('preliminary_results as p')
+            ->join('registrations as r', 'r.id', '=', 'p.registration_id')
+            ->where('r.status', 'active')
+            ->whereNotNull('p.mark')
+            ->when($scope === 'passed', fn ($q) => $q->where('p.result_status', 'pass'))
+            ->select([
+                'p.id', 'p.user_id', 'p.reg', 'r.name', 'r.cadre_category', 'p.mark',
+                'p.result_status', 'p.candidate_status', 'p.validation_status', 'p.raw_candidate_status',
+            ]);
+
+        if ($order === 'mark') {
+            $query->orderBy('p.mark', $direction)->orderBy('p.reg', 'asc');
+        } else {
+            $query->orderBy('p.reg', $direction);
+        }
+
+        $category = static fn (mixed $value): string => match ((int) $value) {
+            1 => '1 - GG', 2 => '2 - TT', 3 => '3 - GT', default => (string) $value,
+        };
+        $enumValue = static fn (mixed $value): mixed => $value instanceof \BackedEnum ? $value->value : $value;
+
+        $rows = (function () use ($query, $category, $enumValue): \Generator {
+            foreach ($query->cursor() as $row) {
+                yield [
+                    (string) $row->user_id,
+                    (string) $row->reg,
+                    (string) ($row->name ?? ''),
+                    $category($row->cadre_category),
+                    $row->mark === null ? '' : (float) $row->mark,
+                    strtoupper((string) ($enumValue($row->result_status) ?? '')),
+                    ucfirst((string) ($enumValue($row->candidate_status) ?? '')),
+                    strtoupper((string) ($enumValue($row->validation_status) ?? '')),
+                    (string) ($row->raw_candidate_status ?? ''),
+                ];
+            }
+        })();
+
+        $recordCount = $exports->create(
+            $path,
+            [
+                'Examination' => (string) ($examination?->name ?? 'Selected Examination'),
+                'Report' => $scope === 'passed' ? 'Preliminary passed candidates' : 'All Preliminary participants with marks',
+                'Generated at' => now()->format('d-m-Y h:i A').' GMT+6',
+                'Generated by' => (string) $request->user()->name,
+                'Result finalized at' => $state->result_finalized_at?->format('d-m-Y h:i A').' GMT+6',
+                'Cut-off mark' => number_format((float) $state->cutoff_mark, 2, '.', ''),
+                'Order' => strtoupper($order).' '.strtoupper($direction),
+            ],
+            ['User ID', 'Registration Number', 'Name', 'Category', 'Preliminary Mark', 'Result Status', 'Processing Status', 'Validation Status', 'Source Note'],
+            $rows,
+        );
+
+        $audit->record(
+            'PRELIMINARY_ADMINISTRATIVE_XLSX_EXPORTED',
+            $request->user(),
+            'finalized',
+            'finalized',
+            'Created an administrative Excel export from the finalized Preliminary result.',
+            [
+                'scope' => $scope,
+                'order' => $order,
+                'direction' => $direction,
+                'records' => $recordCount,
+                'filename' => $filename,
+                'finalized_at' => $state->result_finalized_at?->toIso8601String(),
+            ],
+            batchId: $state->latest_import_batch_id,
+            processingRunId: $state->latest_finalization_run_id,
+        );
+
+        $exportCache->prune($path);
+
+        return response()->download(
+            $path,
+            $filename,
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        );
     }
 
     private function registrationLines($registrations, int $perLine, string $separator): string
@@ -674,7 +801,7 @@ final class PreliminaryController extends Controller
             ->where('p.result_status', 'pass')
             ->when($category !== null, fn ($query) => $query->where('r.cadre_category', $category))
             // Registration number order is authoritative for the published list; mark order is never used here.
-            ->orderByRaw('CAST(p.reg AS UNSIGNED) ASC')
+            ->orderBy('p.reg', 'asc')
             ->pluck('p.reg');
     }
 

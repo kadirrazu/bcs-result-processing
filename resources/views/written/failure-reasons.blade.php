@@ -28,6 +28,6 @@
     <td><a class="btn btn-sm btn-outline-primary" href="{{ route('written.results.show',$row) }}">View</a></td>
 </tr>
 @empty<tr><td colspan="8" class="text-center text-secondary py-4">No candidates match this review filter.</td></tr>@endforelse
-</tbody></table></div>@if($rows->hasPages())<div class="card-footer">{{ $rows->links() }}</div>@endif</div>
+</tbody></table></div><div class="card-footer d-flex align-items-center justify-content-between gap-3 flex-wrap"><x-pagination-summary :paginator="$rows" />@if($rows->hasPages()){{ $rows->links() }}@endif</div></div>
 </div></div>
 @endsection
