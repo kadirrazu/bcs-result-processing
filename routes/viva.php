@@ -1,0 +1,12 @@
+<?php
+use App\Http\Controllers\VivaController;use App\Http\Middleware\ConfigureExaminationConnection;use App\Http\Middleware\EnsureExaminationSelected;use Illuminate\Support\Facades\Route;
+Route::middleware([EnsureExaminationSelected::class,ConfigureExaminationConnection::class])->prefix('viva')->name('viva.')->group(function(){
+ Route::get('/',[VivaController::class,'index'])->name('index');
+ Route::get('/templates/candidate-mapping',[VivaController::class,'mappingTemplate'])->name('template.mapping');Route::get('/templates/board-data',[VivaController::class,'boardTemplate'])->name('template.board');
+ Route::post('/mapping/import',[VivaController::class,'storeMapping'])->name('mapping.store');Route::get('/mapping/import/{batch}/result',[VivaController::class,'mappingResult'])->name('mapping.result');Route::get('/mapping/import/{batch}/status',[VivaController::class,'mappingStatus'])->name('mapping.status');
+ Route::post('/mapping/import/{batch}/retry',[VivaController::class,'retryMapping'])->name('mapping.retry');Route::post('/mapping/import/{batch}/validate',[VivaController::class,'validateMapping'])->name('mapping.validate');Route::post('/mapping/import/{batch}/approve',[VivaController::class,'approveMapping'])->name('mapping.approve');
+ Route::get('/mapping/import/{batch}/corrections',[VivaController::class,'mappingCorrectionTemplate'])->name('mapping.corrections.template');Route::post('/mapping/import/{batch}/corrections',[VivaController::class,'applyMappingCorrections'])->name('mapping.corrections.store');
+ Route::post('/board/import',[VivaController::class,'storeBoard'])->name('board.store');Route::get('/board/import/{batch}/result',[VivaController::class,'boardResult'])->name('board.result');Route::get('/board/import/{batch}/status',[VivaController::class,'boardStatus'])->name('board.status');
+ Route::post('/board/import/{batch}/retry',[VivaController::class,'retryBoard'])->name('board.retry');Route::post('/board/import/{batch}/validate',[VivaController::class,'validateBoard'])->name('board.validate');Route::post('/board/import/{batch}/approve',[VivaController::class,'approveBoard'])->name('board.approve');
+ Route::get('/board/import/{batch}/corrections',[VivaController::class,'boardCorrectionTemplate'])->name('board.corrections.template');Route::post('/board/import/{batch}/corrections',[VivaController::class,'applyBoardCorrections'])->name('board.corrections.store');
+});

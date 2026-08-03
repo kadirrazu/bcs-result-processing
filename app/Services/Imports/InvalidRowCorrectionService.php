@@ -43,6 +43,16 @@ final class InvalidRowCorrectionService
                 'headers' => array_values((array) config('written.headers', [])),
                 'log_channel' => 'written',
             ],
+            'viva_mapping' => [
+                'table' => 'viva_mapping_import_staging',
+                'headers' => array_values((array) config('viva.mapping_headers', [])),
+                'log_channel' => 'viva',
+            ],
+            'viva_board' => [
+                'table' => 'viva_board_import_staging',
+                'headers' => array_values((array) config('viva.board_headers', [])),
+                'log_channel' => 'viva',
+            ],
             default => throw new RuntimeException('Unsupported import correction module.'),
         };
     }
@@ -268,6 +278,22 @@ final class InvalidRowCorrectionService
             ];
         }
 
+        if ($module === 'viva_board') {
+            $payload = is_array($row->raw_payload ?? null) ? $row->raw_payload : (json_decode((string) ($row->raw_payload ?? ''), true) ?: []);
+            $result = []; foreach ((array) config('viva.board_headers', []) as $header) { $result[$header] = $payload[$header] ?? null; } return $result;
+        }
+
+        if ($module === 'viva_mapping') {
+            $payload = is_array($row->raw_payload ?? null)
+                ? $row->raw_payload
+                : (json_decode((string) ($row->raw_payload ?? ''), true) ?: []);
+            return [
+                'user' => $payload['user'] ?? $row->user_id,
+                'reg' => $payload['reg'] ?? $row->reg,
+                'code' => $payload['code'] ?? $row->code,
+            ];
+        }
+
         $payload = is_array($row->raw_payload ?? null)
             ? $row->raw_payload
             : (json_decode((string) ($row->raw_payload ?? ''), true) ?: []);
@@ -330,6 +356,32 @@ final class InvalidRowCorrectionService
                 'reg' => $this->normalizeReg($payload['reg'] ?? null),
                 'mark' => null,
                 'candidate_status' => null,
+                'validation_status' => 'pending',
+                'validation_errors' => null,
+                'validation_warnings' => null,
+                'updated_at' => $timestamp,
+            ];
+        }
+
+        if ($module === 'viva_board') {
+            $raw=[]; foreach ((array) config('viva.board_headers', []) as $header) { $raw[$header]=$this->nullable($payload[$header] ?? null); }
+            $flag=static fn($v): bool => trim((string)($v ?? '')) !== '';
+            return ['raw_payload'=>json_encode($raw, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),'viva_candidate_mapping_id'=>null,'registration_id'=>null,'code'=>$this->normalizeCode($payload['code']??null),'raw_viva_date'=>$this->nullable($payload['viva_date']??null),'viva_date'=>null,'member_id'=>$this->nullable($payload['member_id']??null),'raw_mark'=>$this->nullable($payload['mark']??null),'mark'=>null,'attendance_status'=>null,'raw_viva_cff'=>$this->nullable($payload['viva_cff']??null),'raw_viva_em'=>$this->nullable($payload['viva_em']??null),'raw_viva_phc'=>$this->nullable($payload['viva_phc']??null),'viva_cff'=>$flag($payload['viva_cff']??null),'viva_em'=>$flag($payload['viva_em']??null),'viva_phc'=>$flag($payload['viva_phc']??null),'raw_invalid_flag'=>$this->nullable($payload['invalid']??null),'raw_issue_flag'=>$this->nullable($payload['issue']??null),'invalid_flag'=>$flag($payload['invalid']??null),'issue_flag'=>$flag($payload['issue']??null),'validation_status'=>'pending','validation_errors'=>null,'validation_warnings'=>null,'updated_at'=>$timestamp];
+        }
+
+        if ($module === 'viva_mapping') {
+            $raw = [
+                'user' => $this->nullable($payload['user'] ?? null),
+                'reg' => $this->nullable($payload['reg'] ?? null),
+                'code' => $this->nullable($payload['code'] ?? null),
+            ];
+            return [
+                'raw_payload' => json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'registration_id' => null,
+                'written_result_id' => null,
+                'user_id' => $this->normalizeUser($payload['user'] ?? null),
+                'reg' => $this->normalizeReg($payload['reg'] ?? null),
+                'code' => $this->normalizeCode($payload['code'] ?? null),
                 'validation_status' => 'pending',
                 'validation_errors' => null,
                 'validation_warnings' => null,

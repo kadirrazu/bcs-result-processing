@@ -25,4 +25,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/written.php';
 
+    require __DIR__.'/viva.php';
+
 });

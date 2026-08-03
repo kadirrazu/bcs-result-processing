@@ -11,7 +11,7 @@ return [
                 'patterns' => ['preliminary.*'],
             ],
             ['label' => 'Written', 'route' => 'written.index', 'patterns' => ['written.*']],
-            ['label' => 'Viva', 'route' => null, 'patterns' => ['viva-marks.*']],
+            ['label' => 'Viva', 'route' => 'viva.index', 'patterns' => ['viva.*']],
             ['label' => 'Choice Lists', 'route' => null, 'patterns' => ['choices.*']],
             ['label' => 'Tabulation', 'route' => null, 'patterns' => ['tabulation.*']],
             ['label' => 'Merit', 'route' => null, 'patterns' => ['merit.*']],
