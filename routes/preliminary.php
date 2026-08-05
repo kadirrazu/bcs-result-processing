@@ -26,6 +26,7 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::post('/distribution/generate', [PreliminaryController::class, 'generateDistribution'])->name('distribution.generate');
         Route::get('/distribution/{report}', [PreliminaryController::class, 'distribution'])->name('distribution.show');
         Route::get('/distribution/{report}/csv', [PreliminaryController::class, 'distributionCsv'])->name('distribution.csv');
+        Route::get('/distribution/{report}/pdf', [PreliminaryController::class, 'distributionPdf'])->name('distribution.pdf');
         Route::post('/cutoff/propose', [PreliminaryController::class, 'proposeCutoff'])->name('cutoff.propose');
         Route::post('/cutoff/{decision}/approve', [PreliminaryController::class, 'approveCutoff'])->name('cutoff.approve');
 

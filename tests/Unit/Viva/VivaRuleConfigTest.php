@@ -14,7 +14,7 @@ final class VivaRuleConfigTest extends TestCase
         self::assertSame(100.0, $rules->fullMark());
         self::assertSame(50.0, $rules->passPercent());
         self::assertSame(50.0, $rules->passMark());
-        self::assertSame(80.0, $rules->highMarkReviewPercent());
-        self::assertSame(80.0, $rules->highMarkReviewMark());
+        self::assertSame(90.0, $rules->highMarkReviewPercent());
+        self::assertSame(90.0, $rules->highMarkReviewMark());
     }
 }

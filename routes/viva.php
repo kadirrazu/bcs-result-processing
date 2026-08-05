@@ -9,4 +9,18 @@ Route::middleware([EnsureExaminationSelected::class,ConfigureExaminationConnecti
  Route::post('/board/import',[VivaController::class,'storeBoard'])->name('board.store');Route::get('/board/import/{batch}/result',[VivaController::class,'boardResult'])->name('board.result');Route::get('/board/import/{batch}/status',[VivaController::class,'boardStatus'])->name('board.status');
  Route::post('/board/import/{batch}/retry',[VivaController::class,'retryBoard'])->name('board.retry');Route::post('/board/import/{batch}/validate',[VivaController::class,'validateBoard'])->name('board.validate');Route::post('/board/import/{batch}/approve',[VivaController::class,'approveBoard'])->name('board.approve');
  Route::get('/board/import/{batch}/corrections',[VivaController::class,'boardCorrectionTemplate'])->name('board.corrections.template');Route::post('/board/import/{batch}/corrections',[VivaController::class,'applyBoardCorrections'])->name('board.corrections.store');
+ Route::post('/reconciliation',[VivaController::class,'generateReconciliation'])->name('reconciliation.generate');
+ Route::get('/reconciliation/{run}',[VivaController::class,'reconciliationShow'])->name('reconciliation.show');
+ Route::get('/reconciliation/{run}/status',[VivaController::class,'reconciliationStatus'])->name('reconciliation.status');
+ Route::get('/reviews',[VivaController::class,'reviews'])->name('reviews');
+ Route::get('/candidates',[VivaController::class,'candidates'])->name('candidates.index');
+ Route::get('/candidates/{result}/edit',[VivaController::class,'editCandidate'])->name('candidates.edit');
+ Route::put('/candidates/{result}',[VivaController::class,'updateCandidate'])->name('candidates.update');
+ Route::post('/processing',[VivaController::class,'processResults'])->name('processing.start');
+ Route::get('/processing/{run}',[VivaController::class,'processingShow'])->name('processing.show');
+ Route::get('/processing/{run}/status',[VivaController::class,'processingStatus'])->name('processing.status');
+ Route::get('/results',[VivaController::class,'results'])->name('results.index');
+ Route::get('/results/export/xlsx',[VivaController::class,'exportResults'])->name('results.export');
+ Route::get('/final-review',[VivaController::class,'finalReview'])->name('final-review');
+ Route::post('/finalize',[VivaController::class,'finalizeResult'])->name('finalize');
 });

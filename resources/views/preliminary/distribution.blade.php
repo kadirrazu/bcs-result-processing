@@ -11,6 +11,7 @@
                 <div class="text-secondary">Mark-wise count, cumulative count and audited cut-off workflow</div>
             </div>
             <div class="col-auto ms-auto d-flex gap-2">
+                <a class="btn btn-outline-danger" href="{{ route('preliminary.distribution.pdf', $report) }}">Download PDF</a>
                 <a class="btn btn-outline-primary" href="{{ route('preliminary.distribution.csv', $report) }}">Download CSV</a>
                 <a class="btn btn-outline-secondary" href="{{ route('preliminary.index') }}">Back</a>
             </div>

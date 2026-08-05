@@ -14,7 +14,8 @@ final class VivaResult extends ExaminationModel
         'mark', 'attendance_status', 'raw_viva_cff', 'raw_viva_em', 'raw_viva_phc', 'viva_cff', 'viva_em',
         'viva_phc', 'raw_invalid_flag', 'raw_issue_flag', 'invalid_flag', 'issue_flag', 'quota_mismatch',
         'quota_mismatch_details', 'high_mark_review', 'status', 'validation_status', 'viva_result_status',
-        'comment', 'source_batch_id', 'finalized_at', 'last_edited_by', 'last_edited_at', 'last_edit_reason',
+        'comment', 'source_batch_id', 'viva_fail_reasons', 'processing_snapshot', 'processing_version',
+        'processing_run_id', 'processed_by', 'processed_at', 'finalized_at', 'last_edited_by', 'last_edited_at', 'last_edit_reason',
     ];
 
     protected function casts(): array
@@ -24,7 +25,8 @@ final class VivaResult extends ExaminationModel
             'viva_phc' => 'boolean', 'invalid_flag' => 'boolean', 'issue_flag' => 'boolean',
             'quota_mismatch' => 'boolean', 'quota_mismatch_details' => 'array', 'high_mark_review' => 'boolean',
             'status' => VivaCandidateStatus::class, 'validation_status' => VivaValidationStatus::class,
-            'viva_result_status' => VivaResultStatus::class, 'finalized_at' => 'datetime', 'last_edited_at' => 'datetime',
+            'viva_result_status' => VivaResultStatus::class, 'viva_fail_reasons' => 'array', 'processing_snapshot' => 'array',
+            'processed_at' => 'datetime', 'finalized_at' => 'datetime', 'last_edited_at' => 'datetime',
         ];
     }
 }

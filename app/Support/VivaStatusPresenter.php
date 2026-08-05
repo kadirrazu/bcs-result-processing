@@ -24,11 +24,11 @@ final class VivaStatusPresenter
         $value = strtolower((string) self::value($status));
 
         return match (true) {
-            in_array($value, ['approved', 'completed', 'result_finalized', 'mapping_imported', 'board_data_imported', 'reconciliation_generated'], true)
+            in_array($value, ['approved', 'completed', 'result_finalized', 'mapping_imported', 'board_data_imported', 'reconciliation_generated', 'processing_completed'], true)
                 => 'bg-green-lt text-green',
             in_array($value, ['processing_ready'], true)
                 => 'bg-teal-lt text-teal',
-            in_array($value, ['running', 'staging', 'validating', 'approving', 'result_finalizing'], true)
+            in_array($value, ['running', 'staging', 'validating', 'approving', 'reconciliation_running', 'processing_running', 'result_finalizing'], true)
                 => 'bg-blue-lt text-blue',
             in_array($value, ['queued', 'validation_queued', 'approval_queued'], true)
                 => 'bg-azure-lt text-azure',
@@ -51,8 +51,11 @@ final class VivaStatusPresenter
             'not_started' => 'Not started',
             'mapping_imported' => 'Candidate mapping ready',
             'board_data_imported' => 'Board data ready',
-            'reconciliation_generated' => 'Attendance summary ready',
-            'processing_ready' => 'Ready for final review',
+            'reconciliation_running' => 'Reconciliation in progress',
+            'reconciliation_generated' => 'Reconciliation ready',
+            'processing_ready' => 'Ready for Viva processing',
+            'processing_running' => 'Viva result processing in progress',
+            'processing_completed' => 'Viva result processing completed',
             'result_finalizing' => 'Final review in progress',
             'result_finalized' => 'Viva processing finalized',
             'reopened' => 'Needs reprocessing',

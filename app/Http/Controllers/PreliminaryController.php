@@ -16,6 +16,7 @@ use App\Models\PreliminaryProcessingAudit;
 use App\Models\PreliminaryProcessingState;
 use App\Models\PreliminaryReconciliationReport;
 use App\Models\PreliminaryResult;
+use App\Reports\Pdf\PreliminaryDistributionPdfReport;
 use App\Services\Documents\DocxPlaceholderTemplateService;
 use App\Services\Exports\AdministrativeXlsxExportService;
 use App\Services\Exports\AdministrativeExportCacheService;
@@ -315,6 +316,25 @@ final class PreliminaryController extends Controller
             'currentCutoff' => PreliminaryCutoffDecision::query()->where('status', 'approved')->latest('id')->first(),
             'latestFinalization' => PreliminaryFinalizationRun::query()->latest('id')->first(),
             'cutoffHistory' => PreliminaryCutoffDecision::query()->latest('id')->limit(25)->get(),
+        ]);
+    }
+
+    public function distributionPdf(
+        PreliminaryDistributionReport $report,
+        PreliminaryDistributionPdfReport $pdf,
+        ExaminationContext $context,
+    ) {
+        $this->authorize('viewAny', PreliminaryResult::class);
+
+        $examination = $context->current();
+        abort_if($examination === null, 409, 'No examination is selected.');
+
+        $generated = $pdf->generate($report, $examination->name);
+
+        return response($generated['content'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$generated['filename'].'"',
+            'Cache-Control' => 'private, no-store, max-age=0',
         ]);
     }
 
