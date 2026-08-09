@@ -1,0 +1,16 @@
+@extends('layouts.app')
+@section('title','Circular View')
+@section('content')
+<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">Circular View</h2><div class="text-secondary">Version {{ $version }} · {{ $state->status->label() }} · Structured like the official BCS Circular.</div></div><div class="col-auto ms-auto d-flex gap-2"><a class="btn btn-outline-secondary" href="{{ route('circular.index') }}">Workspace</a><a class="btn btn-primary" href="{{ route('circular.entries.create') }}">Add Entry</a></div></div></div></div>
+<div class="page-body"><div class="container-xl">
+@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
+@php($sections=['GG'=>'ক. সাধারণ ক্যাডারসমূহ ও ক্যাডারের পদসমূহ','TT'=>'খ. প্রফেশনাল বা টেকনিক্যাল ক্যাডারসমূহ/ক্যাডারের প্রফেশনাল বা টেকনিক্যাল পদসমূহ'])
+@foreach($sections as $type=>$title)
+ @php($section=$entries->filter(fn($e)=>$e->cadre_type->value===$type))
+ <div class="card mb-4"><div class="card-header"><div><h3 class="card-title">{{ $title }}</h3><div class="text-secondary small">{{ $section->count() }} entries · Total active posts {{ number_format($section->where('status','active')->sum('post_count')) }}</div></div></div>
+ <div class="table-responsive"><table class="table table-bordered table-vcenter mb-0"><thead><tr><th style="width:70px">ক্রমিক</th><th>ক্যাডারের নাম</th><th>পদের নাম</th><th style="width:90px">কোড</th><th style="width:90px">শূন্য পদ</th>@if($type==='TT')<th>শিক্ষাগত যোগ্যতার বিষয় কোড</th><th>লিখিত পরীক্ষার পদ-সংশ্লিষ্ট বিষয়ের কোড</th>@endif<th style="width:90px"></th></tr></thead><tbody>
+ @forelse($section as $entry)<tr class="{{ $entry->status!=='active'?'text-secondary':'' }}"><td>{{ $entry->cadre_serial }}@if($entry->sub_serial).{{ $entry->sub_serial }}@endif</td><td><div class="fw-semibold">{{ $entry->cadre_name_bn_snapshot ?: $entry->cadre_name_snapshot }}</div><div class="small text-secondary">{{ $entry->cadre_name_snapshot }}</div></td><td><div>{{ $entry->post_name_bn_snapshot ?: $entry->post_name_snapshot ?: '—' }}</div><div class="small text-secondary">{{ $entry->post_name_snapshot }}</div>@if($entry->note)<div class="small text-secondary mt-1">{{ $entry->note }}</div>@endif</td><td class="fw-semibold">{{ $entry->effective_code }}</td><td>{{ number_format($entry->post_count) }}</td>@if($type==='TT')<td>@foreach($entry->bachelorSubjects as $s)<div><span class="fw-semibold">{{ $s->subject_code }}</span><span class="text-secondary small"> — {{ $bachelorMap[$s->subject_code] ?? '' }}</span></div>@endforeach</td><td>@foreach($entry->prsSubjects as $s)<div><span class="fw-semibold">{{ $s->prs_code }}</span><span class="text-secondary small"> — {{ $prsMap[$s->prs_code] ?? '' }}</span></div>@endforeach</td>@endif<td><a class="btn btn-sm btn-outline-primary" href="{{ route('circular.entries.edit',$entry) }}">Edit</a></td></tr>@empty<tr><td colspan="{{ $type==='TT'?8:6 }}" class="text-center text-secondary py-4">No entries.</td></tr>@endforelse
+ </tbody><tfoot><tr><th colspan="4" class="text-end">মোট =</th><th>{{ number_format($section->where('status','active')->sum('post_count')) }}</th>@if($type==='TT')<th colspan="3"></th>@else<th></th>@endif</tr></tfoot></table></div></div>
+@endforeach
+</div></div>
+@endsection

@@ -1,0 +1,10 @@
+<div class="row g-3">
+ <div class="col-md-6"><label class="form-label required">Parent cadre</label><select name="parent_cadre_id" class="form-select" required><option value="">Select parent cadre</option>@foreach($parents as $parent)<option value="{{ $parent->id }}" @selected((string)old('parent_cadre_id',$record->parent_cadre_id ?? '')===(string)$parent->id)>{{ $parent->cadre_code }} - {{ $parent->cadre_name }}</option>@endforeach</select></div>
+ <div class="col-md-3"><label class="form-label required">Sub cadre code</label><input type="number" name="sub_cadre_code" class="form-control" value="{{ old('sub_cadre_code',$record->sub_cadre_code ?? '') }}" required></div>
+ <div class="col-md-3"><label class="form-label">Abbreviation</label><input name="sub_cadre_abbr" class="form-control" value="{{ old('sub_cadre_abbr',$record->sub_cadre_abbr ?? '') }}"></div>
+ <div class="col-md-6"><label class="form-label required">Post name</label><input name="post_name" class="form-control" value="{{ old('post_name',$record->post_name ?? '') }}" required></div>
+ <div class="col-md-6"><label class="form-label required">পদের নাম</label><input name="post_name_bn" class="form-control" value="{{ old('post_name_bn',$record->post_name_bn ?? '') }}" required></div>
+ <div class="col-md-3"><label class="form-label required">Display order</label><input type="number" min="0" name="display_order" class="form-control" value="{{ old('display_order',$record->display_order ?? 0) }}" required></div>
+ <div class="col-12"><label class="form-check form-switch"><input type="hidden" name="is_active" value="0"><input class="form-check-input" type="checkbox" name="is_active" value="1" @checked(old('is_active',$record->is_active ?? true))><span class="form-check-label">Active</span></label></div>
+ @if(isset($record) && $record)<div class="col-12"><label class="form-label required">Reason for correction</label><textarea name="correction_reason" class="form-control @error('correction_reason') is-invalid @enderror" rows="3" required>{{ old('correction_reason') }}</textarea>@error('correction_reason')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>@endif
+</div>

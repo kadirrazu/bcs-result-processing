@@ -165,7 +165,7 @@
                                 && preg_match('/[\x{0980}-\x{09FF}]/u', $printable) === 1;
                         @endphp
                         <td @class([
-                            'bangla' => $attribute === 'cadre_title_bn' || $containsBangla,
+                            'bangla' => in_array($attribute, ['cadre_name_bn', 'post_name_bn'], true) || $containsBangla,
                             'center' => in_array($attribute, ['cadre_type', 'display_order', 'is_active'], true),
                             'nowrap' => in_array($attribute, ['cadre_code', 'cadre_abbr', 'subject_code', 'cadre_type'], true),
                         ])>{{ $printable }}</td>

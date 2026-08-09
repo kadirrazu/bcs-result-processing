@@ -148,6 +148,22 @@ return [
             'days' => 365,
         ],
 
+
+
+        'circular' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/circular/circular.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 365,
+        ],
+
+        'master_data' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/master-data/master-data.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 365,
+        ],
+
         'registration' => [
             'driver' => 'daily',
             'path' => storage_path('logs/registration/registration.log'),

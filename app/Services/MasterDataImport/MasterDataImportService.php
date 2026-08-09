@@ -2,6 +2,7 @@
 
 namespace App\Services\MasterDataImport;
 
+use App\Models\CadreMaster;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -18,14 +19,21 @@ final class MasterDataImportService
         $key = $definition->uniqueBy();
         $summary = ['total' => count($rows), 'inserted' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0];
 
-        DB::connection((new $model)->getConnectionName())->transaction(function () use ($rows, $mode, $model, $key, &$summary): void {
+        DB::connection((new $model)->getConnectionName())->transaction(function () use ($definition, $rows, $mode, $model, $key, &$summary): void {
             foreach ($rows as $row) {
                 if (! ($row['valid'] ?? false)) {
                     $summary['failed']++;
                     continue;
                 }
 
-                $existing = $model::query()->where($key, $row['data'][$key])->first();
+                $data = $row['data'];
+                if ($definition->key === 'cadre-sub-masters') {
+                    $parent = CadreMaster::query()->where('cadre_code', (int) $data['parent_cadre_code'])->firstOrFail();
+                    $data['parent_cadre_id'] = $parent->id;
+                    unset($data['parent_cadre_code']);
+                }
+
+                $existing = $model::query()->where($key, $data[$key])->first();
 
                 if ($existing && $mode === 'insert') {
                     $summary['skipped']++;
@@ -38,10 +46,10 @@ final class MasterDataImportService
                 }
 
                 if ($existing) {
-                    $existing->update($row['data']);
+                    $existing->update($data);
                     $summary['updated']++;
                 } else {
-                    $model::query()->create($row['data']);
+                    $model::query()->create($data);
                     $summary['inserted']++;
                 }
             }

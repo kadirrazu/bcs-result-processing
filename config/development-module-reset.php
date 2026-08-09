@@ -75,5 +75,18 @@ return [
             ],
             'downstream' => ['Tabulation, Merit and later modules'],
         ],
+
+        'circular' => [
+            'label' => 'Circular',
+            'tables' => [
+                'circular_processing_audits',
+                'circular_import_staging',
+                'circular_import_batches',
+                'circular_entry_prs',
+                'circular_entry_bachelor_subjects',
+                'circular_entries',
+                'circular_processing_states',
+            ],
+        ],
     ],
 ];

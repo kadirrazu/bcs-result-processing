@@ -12,6 +12,7 @@ return [
             ],
             ['label' => 'Written', 'route' => 'written.index', 'patterns' => ['written.*']],
             ['label' => 'Viva', 'route' => 'viva.index', 'patterns' => ['viva.*']],
+            ['label' => 'Circular', 'route' => 'circular.index', 'patterns' => ['circular.*']],
             ['label' => 'Choice Lists', 'route' => null, 'patterns' => ['choices.*']],
             ['label' => 'Tabulation', 'route' => null, 'patterns' => ['tabulation.*']],
             ['label' => 'Merit', 'route' => null, 'patterns' => ['merit.*']],

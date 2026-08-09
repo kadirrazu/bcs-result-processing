@@ -11,8 +11,10 @@ final class MasterDataExportQuery
     {
         $query = $definition->model()::query();
 
-        return $definition->key() === 'cadre-masters'
-            ? $query->orderBy('display_order')->orderBy('cadre_code')->get()
-            : $query->orderBy('subject_code')->get();
+        return match ($definition->key()) {
+            'cadre-masters' => $query->orderBy('display_order')->orderBy('cadre_code')->get(),
+            'cadre-sub-masters' => $query->with('parentCadre')->orderBy('parent_cadre_id')->orderBy('display_order')->orderBy('sub_cadre_code')->get(),
+            default => $query->orderBy('subject_code')->get(),
+        };
     }
 }

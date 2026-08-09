@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BachelorSubjectController;
 use App\Http\Controllers\CadreMasterController;
+use App\Http\Controllers\CadreSubMasterController;
 use App\Http\Controllers\MasterDataExportController;
 use App\Http\Controllers\MasterDataImportController;
 use App\Http\Controllers\PostRelatedSubjectController;
@@ -20,5 +21,6 @@ Route::prefix('master-data/imports')->name('master-data.imports.')->group(functi
 });
 
 Route::resource('cadre-masters', CadreMasterController::class)->except('destroy');
+Route::resource('cadre-sub-masters', CadreSubMasterController::class)->except('destroy');
 Route::resource('bachelor-subjects', BachelorSubjectController::class)->except('destroy');
 Route::resource('post-related-subjects', PostRelatedSubjectController::class)->except('destroy');

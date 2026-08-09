@@ -33,7 +33,7 @@ final class MasterDataExcelExportService
                 $value = is_bool($value) ? (int) $value : $value;
 
                 // Codes are written explicitly as text so leading zeroes survive editing.
-                if (in_array($attribute, ['subject_code', 'cadre_abbr'], true)) {
+                if (in_array($attribute, ['subject_code', 'cadre_abbr', 'sub_cadre_abbr'], true)) {
                     $sheet->setCellValueExplicit([$columnIndex + 1, $rowIndex + 2], (string) $value, DataType::TYPE_STRING);
                 } else {
                     $sheet->setCellValue([$columnIndex + 1, $rowIndex + 2], $value);

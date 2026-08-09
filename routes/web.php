@@ -27,4 +27,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/viva.php';
 
+    require __DIR__.'/circular.php';
+
 });

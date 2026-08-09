@@ -11,13 +11,14 @@
         @endcan
 
         @can('viewAny', \App\Models\CadreMaster::class)
-            <li class="nav-item dropdown {{ request()->routeIs(['cadre-masters.*', 'bachelor-subjects.*', 'post-related-subjects.*', 'master-data.*', 'registration-masters.*']) ? 'active' : '' }}">
+            <li class="nav-item dropdown {{ request()->routeIs(['cadre-masters.*', 'cadre-sub-masters.*', 'bachelor-subjects.*', 'post-related-subjects.*', 'master-data.*', 'registration-masters.*']) ? 'active' : '' }}">
                 <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">
                     <span class="nav-link-title">Master Data</span>
                 </a>
 
                 <div class="dropdown-menu">
-                    <a class="dropdown-item {{ request()->routeIs('cadre-masters.*') ? 'active' : '' }}" href="{{ route('cadre-masters.index') }}">Cadre Masters</a>
+                    <a class="dropdown-item {{ request()->routeIs('cadre-masters.*') ? 'active' : '' }}" href="{{ route('cadre-masters.index') }}">Cadre Master</a>
+                    <a class="dropdown-item {{ request()->routeIs('cadre-sub-masters.*') ? 'active' : '' }}" href="{{ route('cadre-sub-masters.index') }}">Sub Cadre Master</a>
                     <a class="dropdown-item {{ request()->routeIs('bachelor-subjects.*') ? 'active' : '' }}" href="{{ route('bachelor-subjects.index') }}">Bachelor Subjects</a>
                     <a class="dropdown-item {{ request()->routeIs('post-related-subjects.*') ? 'active' : '' }}" href="{{ route('post-related-subjects.index') }}">Post-related Subjects</a>
 

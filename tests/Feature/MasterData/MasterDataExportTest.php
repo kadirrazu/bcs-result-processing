@@ -39,8 +39,8 @@ final class MasterDataExportTest extends TestCase
         CadreMaster::query()->create([
             'cadre_code' => 110,
             'cadre_abbr' => 'ADMN',
-            'cadre_title' => 'BCS (Administration)',
-            'cadre_title_bn' => 'বিসিএস (প্রশাসন)',
+            'cadre_name' => 'BCS (Administration)',
+            'cadre_name_bn' => 'বিসিএস (প্রশাসন)',
             'cadre_type' => 'GG',
             'display_order' => 10,
             'is_active' => true,

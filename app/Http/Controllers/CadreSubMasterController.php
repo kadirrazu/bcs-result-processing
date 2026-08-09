@@ -1,0 +1,13 @@
+<?php
+namespace App\Http\Controllers;
+use App\Actions\CadreSubMasters\CreateCadreSubMasterAction; use App\Actions\CadreSubMasters\UpdateCadreSubMasterAction; use App\Data\CadreSubMasterData; use App\Http\Requests\StoreCadreSubMasterRequest; use App\Http\Requests\UpdateCadreSubMasterRequest; use App\Models\CadreMaster; use App\Models\CadreSubMaster; use App\Queries\CadreSubMasters\ListCadreSubMastersQuery; use App\Support\Pagination\PaginationSettings; use Illuminate\Http\RedirectResponse; use Illuminate\Http\Request; use Illuminate\View\View;
+final class CadreSubMasterController extends Controller
+{
+ public function __construct(private readonly ListCadreSubMastersQuery $list,private readonly CreateCadreSubMasterAction $createAction,private readonly UpdateCadreSubMasterAction $updateAction){}
+ public function index(Request $request):View{$this->authorize('viewAny',CadreSubMaster::class);$search=trim((string)$request->query('search'));$p=PaginationSettings::fromRequest($request);return view('master-data.sub-cadres.index',['records'=>$this->list->execute($search,$p->perPage),'search'=>$search,'perPage'=>$p->perPage,'pageSizes'=>PaginationSettings::ALLOWED_PER_PAGE]);}
+ public function create():View{$this->authorize('create',CadreSubMaster::class);return view('master-data.sub-cadres.create',['parents'=>CadreMaster::query()->where('is_active',true)->orderBy('display_order')->get()]);}
+ public function store(StoreCadreSubMasterRequest $request):RedirectResponse{$this->createAction->execute(CadreSubMasterData::fromValidated($request->validated(),$request->boolean('is_active')),$request->user());return redirect()->route('cadre-sub-masters.index')->with('success','Sub Cadre Master created successfully.');}
+ public function show(CadreSubMaster $cadreSubMaster):RedirectResponse{$this->authorize('view',$cadreSubMaster);return redirect()->route('cadre-sub-masters.edit',$cadreSubMaster);}
+ public function edit(CadreSubMaster $cadreSubMaster):View{$this->authorize('update',$cadreSubMaster);return view('master-data.sub-cadres.edit',['record'=>$cadreSubMaster,'parents'=>CadreMaster::query()->where('is_active',true)->orWhereKey($cadreSubMaster->parent_cadre_id)->orderBy('display_order')->get()]);}
+ public function update(UpdateCadreSubMasterRequest $request,CadreSubMaster $cadreSubMaster):RedirectResponse{$this->updateAction->execute($cadreSubMaster,CadreSubMasterData::fromValidated($request->validated(),$request->boolean('is_active')),$request->user(),trim((string)$request->validated('correction_reason')));return redirect()->route('cadre-sub-masters.index')->with('success','Sub Cadre Master updated and audited successfully.');}
+}
