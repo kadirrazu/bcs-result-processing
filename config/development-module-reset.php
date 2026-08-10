@@ -78,14 +78,14 @@ return [
 
         'circular' => [
             'label' => 'Circular',
+            // Keep this list in exact sync with examination migrations owned by the
+            // Circular module. Shared/foundation tables are intentionally not
+            // duplicated here unless the migration-registry contract owns them.
             'tables' => [
-                'circular_processing_audits',
-                'circular_import_staging',
+                'circular_authority_previews',
+                'circular_confirmations',
                 'circular_import_batches',
-                'circular_entry_prs',
-                'circular_entry_bachelor_subjects',
-                'circular_entries',
-                'circular_processing_states',
+                'circular_import_staging',
             ],
         ],
     ],

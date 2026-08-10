@@ -6,7 +6,11 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreCircularEntryRequest extends FormRequest
 {
-    public function authorize(): bool { return $this->user() !== null; }
+    public function authorize(): bool
+    {
+        return $this->user() !== null;
+    }
+
     public function rules(): array
     {
         return [
@@ -21,6 +25,7 @@ class StoreCircularEntryRequest extends FormRequest
             'prs_codes' => ['nullable', 'array'],
             'prs_codes.*' => ['string', 'max:20'],
             'note' => ['nullable', 'string', 'max:5000'],
+            'correction_reason' => ['required', 'string', 'min:3', 'max:2000'],
         ];
     }
 }

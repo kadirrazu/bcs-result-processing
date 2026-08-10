@@ -1,8 +1,96 @@
 @extends('layouts.app')
 @section('title','Cadre Master')
 @section('content')
-<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">Cadre Master</h2><div class="text-secondary">Reusable main cadre codes and bilingual reporting names.</div></div><div class="col-auto ms-auto d-flex gap-2"><a class="btn btn-outline-primary" href="{{ route('master-data.imports.create','cadre-masters') }}">Import Excel</a><a class="btn btn-primary" href="{{ route('cadre-masters.create') }}">Add Cadre</a></div></div></div></div>
-<div class="page-body"><div class="container-xl">@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-<div class="card mb-3"><div class="card-body"><form class="row g-2"><div class="col-md-5"><input class="form-control" name="search" value="{{ $search }}" placeholder="Code, abbreviation, cadre name or post name"></div><div class="col-auto"><button class="btn btn-primary">Search</button></div><div class="col-auto"><a class="btn btn-outline-secondary" href="{{ route('cadre-masters.index') }}">Clear</a></div></form></div></div>
-<div class="card"><div class="card-header"><div><h3 class="card-title">Main cadre catalogue</h3><div class="text-secondary small">Displaying {{ number_format($records->firstItem() ?? 0) }} to {{ number_format($records->lastItem() ?? 0) }} of {{ number_format($records->total()) }}</div></div></div><div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>SL</th><th>CODE</th><th>ABBR</th><th>CADRE NAME</th><th>POST NAME</th><th>TYPE</th><th>SUB CODES</th><th>STATUS</th><th></th></tr></thead><tbody>@forelse($records as $record)<tr><td>{{ ($records->firstItem() ?? 1)+$loop->index }}</td><td class="fw-semibold">{{ $record->cadre_code }}</td><td>{{ $record->cadre_abbr }}</td><td><div>{{ $record->cadre_name }}</div><div class="text-secondary small">{{ $record->cadre_name_bn }}</div></td><td><div>{{ $record->post_name ?: '—' }}</div><div class="text-secondary small">{{ $record->post_name_bn }}</div></td><td>{{ $record->cadre_type->value }}</td><td>{{ $record->sub_cadres_count }}</td><td><span class="badge {{ $record->is_active?'bg-green-lt text-green':'bg-secondary-lt text-secondary' }}">{{ $record->is_active?'Active':'Inactive' }}</span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ route('cadre-masters.edit',$record) }}">Edit</a></td></tr>@empty<tr><td colspan="9" class="text-center text-secondary py-4">No cadre master records.</td></tr>@endforelse</tbody></table></div>@if($records->hasPages())<div class="card-footer">{{ $records->links() }}</div>@endif</div></div></div>
+<div class="page-header">
+    <div class="container-xl">
+        <div class="row align-items-center">
+            <div class="col">
+                <h2 class="page-title">Cadre Master</h2>
+                <div class="text-secondary">Reusable main cadre codes and bilingual reporting names.</div>
+            </div>
+            <div class="col-auto ms-auto">
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-outline-danger" href="{{ route('master-data.exports.pdf', 'cadre-masters') }}">Export PDF</a>
+                    <a class="btn btn-outline-success" href="{{ route('master-data.exports.excel', 'cadre-masters') }}">Export Excel</a>
+                    <a class="btn btn-outline-primary" href="{{ route('master-data.imports.create','cadre-masters') }}">Import Excel</a>
+                    <a class="btn btn-primary" href="{{ route('cadre-masters.create') }}">Add Cadre</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="page-body">
+    <div class="container-xl">
+        @if(session('success'))
+            <div class="alert alert-success">{{ session('success') }}</div>
+        @endif
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <form class="row g-2">
+                    <div class="col-md-5">
+                        <input class="form-control" name="search" value="{{ $search }}" placeholder="Code, abbreviation, cadre name or post name">
+                    </div>
+                    <div class="col-auto"><button class="btn btn-primary">Search</button></div>
+                    <div class="col-auto"><a class="btn btn-outline-secondary" href="{{ route('cadre-masters.index') }}">Clear</a></div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h3 class="card-title">Main cadre catalogue</h3>
+                    <div class="text-secondary small">
+                        Displaying {{ number_format($records->firstItem() ?? 0) }} to {{ number_format($records->lastItem() ?? 0) }} of {{ number_format($records->total()) }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                    <tr>
+                        <th>SL</th><th>CODE</th><th>ABBR</th><th>CADRE NAME</th><th>POST NAME</th><th>TYPE</th><th>SUB CODES</th><th>STATUS</th><th></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($records as $record)
+                        <tr>
+                            <td>{{ ($records->firstItem() ?? 1) + $loop->index }}</td>
+                            <td class="fw-semibold">{{ $record->cadre_code }}</td>
+                            <td>{{ $record->cadre_abbr }}</td>
+                            <td>
+                                <div>{{ $record->cadre_name }}</div>
+                                <div class="text-secondary small">{{ $record->cadre_name_bn }}</div>
+                            </td>
+                            <td>
+                                <div>{{ $record->post_name ?: '—' }}</div>
+                                <div class="text-secondary small">{{ $record->post_name_bn }}</div>
+                            </td>
+                            <td>{{ $record->cadre_type->value }}</td>
+                            <td>{{ $record->sub_cadres_count }}</td>
+                            <td>
+                                <span class="badge {{ $record->is_active ? 'bg-green-lt text-green' : 'bg-secondary-lt text-secondary' }}">
+                                    {{ $record->is_active ? 'Active' : 'Inactive' }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <a class="btn btn-sm btn-outline-primary" href="{{ route('cadre-masters.edit',$record) }}">Edit</a>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="9" class="text-center text-secondary py-4">No cadre master records.</td></tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+
+            @if($records->hasPages())
+                <div class="card-footer">{{ $records->links() }}</div>
+            @endif
+        </div>
+    </div>
+</div>
 @endsection

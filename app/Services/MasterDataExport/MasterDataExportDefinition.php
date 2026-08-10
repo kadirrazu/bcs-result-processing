@@ -9,7 +9,7 @@ final readonly class MasterDataExportDefinition
  public function orientation():string{return in_array($this->key(),['cadre-masters','cadre-sub-masters'],true)?'landscape':'portrait';}
  public function columns():array{return match($this->key()){
   'cadre-masters'=>['cadre_code'=>'Code','cadre_abbr'=>'Abbreviation','cadre_name'=>'Cadre Name','cadre_name_bn'=>'Cadre Name (BN)','post_name'=>'Post Name','post_name_bn'=>'Post Name (BN)','cadre_type'=>'Type','display_order'=>'Display Order','is_active'=>'Status'],
-  'cadre-sub-masters'=>['sub_cadre_code'=>'Sub Code','sub_cadre_abbr'=>'Abbreviation','post_name'=>'Post Name','post_name_bn'=>'Post Name (BN)','display_order'=>'Display Order','is_active'=>'Status'],
+  'cadre-sub-masters'=>['parent_cadre_code'=>'Parent Code','sub_cadre_code'=>'Sub Code','sub_cadre_abbr'=>'Abbreviation','post_name'=>'Post Name','post_name_bn'=>'Post Name (BN)','display_order'=>'Display Order','is_active'=>'Status'],
   default=>['subject_code'=>'Code','subject_name'=>'Name','is_active'=>'Status'],
  };}
 }
