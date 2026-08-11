@@ -20,3 +20,10 @@
 - Added examination-specific registration and import-batch schema.
 - Added high-volume Excel import, CRUD, filters, reports and tests.
 - Corrected processing navigation to Registration → Preliminary → Written → Viva → Choices.
+
+## 2026-08-11 — Choice Validation CV1/CV2 foundation
+- Added config-driven Choice source template (`user`, `reg`, `opt_01..opt_N`; default N=20).
+- Added strict blocking header guard `CHOICE_EXCEEDS_MAXIMUM_ALLOWED_LIMIT` for option columns beyond configured maximum.
+- Added raw source validation for minimum one choice and sequence gaps.
+- Added versioned Choice source storage using parent + positional child records, preserving full source snapshot without a fixed opt-column schema ceiling.
+- Added Choice source import/review/approval workspace, navigation and reset-registry integration.

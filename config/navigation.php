@@ -13,7 +13,7 @@ return [
             ['label' => 'Written', 'route' => 'written.index', 'patterns' => ['written.*']],
             ['label' => 'Viva', 'route' => 'viva.index', 'patterns' => ['viva.*']],
             ['label' => 'Circular', 'route' => 'circular.index', 'patterns' => ['circular.*']],
-            ['label' => 'Choice Lists', 'route' => null, 'patterns' => ['choices.*']],
+            ['label' => 'Choice Validation', 'route' => 'choice-validation.index', 'patterns' => ['choice-validation.*']],
             ['label' => 'Tabulation', 'route' => null, 'patterns' => ['tabulation.*']],
             ['label' => 'Merit', 'route' => null, 'patterns' => ['merit.*']],
             ['label' => 'Allocation', 'route' => null, 'patterns' => ['allocation.*']],

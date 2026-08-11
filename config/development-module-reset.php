@@ -88,5 +88,26 @@ return [
                 'circular_import_staging',
             ],
         ],
+
+        'choice_validation' => [
+            'label' => 'Choice Validation',
+            'tables' => [
+                'choice_validation_import_batches',
+                'choice_validation_import_staging',
+                'choice_validation_sources',
+                'choice_validation_source_items',
+                'choice_validation_processing_states',
+                'choice_validation_processing_audits',
+                'choice_validation_runs',
+                'choice_validation_results',
+                'choice_validation_items',
+                'choice_validation_manual_corrections',
+                'choice_validation_finalization_runs',
+            ],
+            'scoped_deletes' => [
+                ['table' => 'import_correction_entries', 'column' => 'module', 'values' => ['choice_validation']],
+            ],
+            'downstream' => ['Tabulation, Merit, Choice Optimization and Allocation'],
+        ],
     ],
 ];

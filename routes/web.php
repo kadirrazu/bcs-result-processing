@@ -29,4 +29,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/circular.php';
 
+    require __DIR__.'/choice-validation.php';
+
 });

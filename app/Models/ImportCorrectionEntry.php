@@ -9,6 +9,9 @@ final class ImportCorrectionEntry extends ExaminationModel
 
     protected $guarded = [];
 
+    /** Shared correction table stores created_at only; no updated_at column exists. */
+    public $timestamps = false;
+
     protected function casts(): array
     {
         return [
