@@ -107,7 +107,20 @@ return [
             'scoped_deletes' => [
                 ['table' => 'import_correction_entries', 'column' => 'module', 'values' => ['choice_validation']],
             ],
-            'downstream' => ['Tabulation, Merit, Choice Optimization and Allocation'],
+            'downstream' => ['Merit, Choice Optimization and Allocation'],
         ],
+
+        'tabulation' => [
+            'label' => 'Tabulation',
+            'tables' => [
+                'tabulation_processing_audits',
+                'tabulation_finalization_runs',
+                'tabulation_results',
+                'tabulation_processing_runs',
+                'tabulation_processing_states',
+            ],
+            'downstream' => ['Merit and later modules'],
+        ],
+
     ],
 ];

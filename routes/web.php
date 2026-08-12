@@ -31,4 +31,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/choice-validation.php';
 
+    require __DIR__.'/tabulation.php';
+
 });

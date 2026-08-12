@@ -14,7 +14,7 @@ return [
             ['label' => 'Viva', 'route' => 'viva.index', 'patterns' => ['viva.*']],
             ['label' => 'Circular', 'route' => 'circular.index', 'patterns' => ['circular.*']],
             ['label' => 'Choice Validation', 'route' => 'choice-validation.index', 'patterns' => ['choice-validation.*']],
-            ['label' => 'Tabulation', 'route' => null, 'patterns' => ['tabulation.*']],
+            ['label' => 'Tabulation', 'route' => 'tabulation.index', 'patterns' => ['tabulation.*']],
             ['label' => 'Merit', 'route' => null, 'patterns' => ['merit.*']],
             ['label' => 'Allocation', 'route' => null, 'patterns' => ['allocation.*']],
             ['label' => 'Reports', 'route' => null, 'patterns' => ['examination-reports.*']],
