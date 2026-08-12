@@ -173,12 +173,34 @@
 @endif
 
 <div class="card mb-3">
-    <div class="card-header"><h3 class="card-title">Choice Source Excel Import</h3></div>
+    <div class="card-header">
+        <div>
+            <h3 class="card-title mb-1">Choice Source Excel Import</h3>
+            <div class="card-subtitle">Upload the candidate Choice source exactly in the configured column contract.</div>
+        </div>
+    </div>
     <div class="card-body">
-        <div class="alert alert-info">Required headers are generated dynamically from configuration: <strong>user, reg, opt_01 ... opt_N</strong>. At least one raw choice is required. Any opt column beyond the configured maximum is a file-level blocking <code>CHOICE_EXCEEDS_MAXIMUM_ALLOWED_LIMIT</code> header error.</div>
-        <form method="POST" action="{{ route('choice-validation.import.upload') }}" enctype="multipart/form-data" class="row g-2 align-items-end">@csrf
-            <div class="col-md-8"><label class="form-label">Choice source XLSX/CSV</label><input class="form-control" type="file" name="file" required></div>
-            <div class="col-md-4"><button class="btn btn-primary w-100">Upload &amp; Stage Source</button></div>
+        <div class="bg-light rounded border p-3 mb-3">
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                <span class="badge bg-azure-lt text-azure">Identity: user, reg</span>
+                <span class="badge bg-blue-lt text-blue">Choices: opt_01 ... opt_{{ str_pad($maximumAllowedChoices,2,'0',STR_PAD_LEFT) }}</span>
+                <span class="badge bg-green-lt text-green">Minimum: 1 choice</span>
+                <span class="badge bg-purple-lt text-purple">Maximum: {{ $maximumAllowedChoices }}</span>
+            </div>
+            <div class="text-secondary small">
+                The expected Choice columns are generated from configuration. A header beyond the configured maximum is a file-level blocking
+                <code>CHOICE_EXCEEDS_MAXIMUM_ALLOWED_LIMIT</code> error. Row-level invalid data can be corrected separately after validation.
+            </div>
+        </div>
+
+        <form method="POST" action="{{ route('choice-validation.import.upload') }}" enctype="multipart/form-data">
+            @csrf
+            <label class="form-label required">Choice source file</label>
+            <div class="d-flex flex-column flex-lg-row gap-2 align-items-stretch">
+                <input class="form-control flex-fill" type="file" name="file" accept=".xlsx,.csv" required>
+                <button class="btn btn-primary flex-shrink-0 px-4">Upload &amp; Stage Source</button>
+            </div>
+            <div class="form-hint mt-2">Accepted formats: XLSX or CSV. Download the current template from the page header before preparing a new source file.</div>
         </form>
     </div>
 </div>

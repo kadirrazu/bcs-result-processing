@@ -36,8 +36,29 @@ final class RegistrationController extends Controller
             'district_code', 'division_code', 'bachelor_subject_code',
         ]);
 
+        $summary = Registration::query()
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('SUM(CASE WHEN cadre_category = ? THEN 1 ELSE 0 END) as gg', [CadreCategory::General->value])
+            ->selectRaw('SUM(CASE WHEN cadre_category = ? THEN 1 ELSE 0 END) as tt', [CadreCategory::Technical->value])
+            ->selectRaw('SUM(CASE WHEN cadre_category = ? THEN 1 ELSE 0 END) as gt', [CadreCategory::GeneralAndTechnical->value])
+            ->selectRaw("SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active")
+            ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled")
+            ->selectRaw("SUM(CASE WHEN status = 'withheld' THEN 1 ELSE 0 END) as withheld")
+            ->selectRaw("SUM(CASE WHEN validation_status = 'invalid' THEN 1 ELSE 0 END) as invalid_validation")
+            ->first();
+
         return view('registrations.index', [
             'records' => $this->listRegistrations->execute($filters, $pagination->perPage),
+            'registrationSummary' => [
+                'total' => (int) ($summary?->total ?? 0),
+                'gg' => (int) ($summary?->gg ?? 0),
+                'tt' => (int) ($summary?->tt ?? 0),
+                'gt' => (int) ($summary?->gt ?? 0),
+                'active' => (int) ($summary?->active ?? 0),
+                'cancelled' => (int) ($summary?->cancelled ?? 0),
+                'withheld' => (int) ($summary?->withheld ?? 0),
+                'invalid_validation' => (int) ($summary?->invalid_validation ?? 0),
+            ],
             'filters' => $filters,
             'perPage' => $pagination->perPage,
             'pageSizes' => PaginationSettings::ALLOWED_PER_PAGE,
