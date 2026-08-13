@@ -30,7 +30,7 @@ final class TabulationIndividualPdfReport
         $preliminary = $result->preliminary_result_id ? PreliminaryResult::query()->find($result->preliminary_result_id) : null;
         $written = WrittenResult::query()->findOrFail($result->written_result_id);
         $viva = VivaResult::query()->findOrFail($result->viva_result_id);
-        $verificationRows = $this->verificationService->build($result, $preliminary, $written, $viva);
+        $verificationRows = $this->verificationService->build($result, $registration, $preliminary, $written, $viva);
 
         $font = $this->fontResolver->resolve();
         $defaults = (new ConfigVariables)->getDefaults();

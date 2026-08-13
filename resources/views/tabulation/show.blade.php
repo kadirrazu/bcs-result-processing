@@ -118,7 +118,7 @@
                             <div class="list-group-item py-2">
                                 <div class="row align-items-center g-2">
                                     <div class="col-6 text-secondary">Qualified Track</div>
-                                    <div class="col-6 fw-medium">{{ strtoupper((string) $written->qualified_track) }}</div>
+                                    <div class="col-6 fw-medium">{{ strtoupper((string) ($written->written_qualified_track?->value ?? $written->written_qualified_track ?? '—')) }}</div>
                                 </div>
                             </div>
                             <div class="list-group-item py-2">
@@ -223,6 +223,9 @@
             <div class="table-responsive">
                 <table class="table table-vcenter mb-0">
                     <tbody>
+                        <tr><th class="w-40">Cadre Category Snapshot</th><td>{{ $result->cadre_category ?? '—' }}</td></tr>
+                        <tr><th>Written Qualified Track Snapshot</th><td><span class="badge bg-azure-lt text-azure">{{ strtoupper((string) ($result->written_qualified_track ?: '—')) }}</span></td></tr>
+                        <tr><th>Birth Date Snapshot</th><td>{{ $result->birth_date?->format('Y-m-d') ?? '—' }}</td></tr>
                         <tr><th class="w-40">General Written / Technical Written</th><td>{{ $result->general_written_total ?? '—' }} / {{ $result->technical_written_total ?? '—' }}</td></tr>
                         <tr><th>Viva Mark</th><td>{{ $result->viva_mark }}</td></tr>
                         <tr><th>General / Technical Grand Total</th><td>{{ $result->generalGrandTotalDisplay() }} / {{ $result->technicalGrandTotalDisplay() }}</td></tr>
@@ -236,8 +239,8 @@
                         </tr>
                         <tr><th>General / Technical Merit Eligible</th><td>{{ $result->general_merit_eligible ? 'YES' : 'NO' }} / {{ $result->technical_merit_eligible ? 'YES' : 'NO' }}</td></tr>
                         <tr><th>Validation</th><td>{{ strtoupper((string) $result->validation_status) }}</td></tr>
-                        <tr><th>Warnings</th><td>{{ implode(', ', (array) $result->review_warnings) ?: 'None' }}</td></tr>
-                        <tr><th>Validation Errors</th><td>{{ implode(', ', (array) $result->validation_errors) ?: 'None' }}</td></tr>
+                        <tr><th>Warnings</th><td>{{ implode(', ', (array) $result->review_warnings) ?: 'NONE' }}</td></tr>
+                        <tr><th>Validation Errors</th><td>{{ implode(', ', (array) $result->validation_errors) ?: 'NONE' }}</td></tr>
                         <tr><th>Processed At</th><td>{{ $result->processed_at }}</td></tr>
                     </tbody>
                 </table>

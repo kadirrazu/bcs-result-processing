@@ -15,11 +15,12 @@ final class TabulationReviewReportingPhaseContractTest extends TestCase
         $summaryService = file_get_contents(app_path('Services/Tabulation/TabulationReviewSummaryService.php'));
 
         $this->assertStringContainsString('TabulationReviewSummaryService', $controller);
-        $this->assertStringContainsString("registration_lookup.name as candidate_name", $controller);
+        $this->assertStringContainsString('registration_lookup.name as candidate_name', $controller);
         $this->assertStringContainsString("whereJsonContains('tabulation_results.review_warnings'", $controller);
         $this->assertStringContainsString('Source → Derived Verification', $show);
         $this->assertStringContainsString('Source → Derived Verification', $pdf);
-        $this->assertStringContainsString('Reconciliation Summary', $results);
+        $this->assertStringContainsString('Tabulated Population', $results);
+        $this->assertStringContainsString('Merit Eligibility Outcome', $results);
         $this->assertStringContainsString('Name, REG or USER', $results);
         $this->assertStringContainsString('general_only_merit_eligible', $summaryService);
         $this->assertStringContainsString('technical_high_warning', $summaryService);

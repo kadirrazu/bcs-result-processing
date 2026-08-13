@@ -3,19 +3,24 @@
 namespace App\Services\Tabulation;
 
 use App\Models\PreliminaryResult;
+use App\Models\Registration;
 use App\Models\TabulationResult;
 use App\Models\VivaResult;
 use App\Models\WrittenResult;
+use DateTimeInterface;
 
 final class TabulationSourceDerivedVerificationService
 {
     public function build(
         TabulationResult $result,
+        Registration $registration,
         ?PreliminaryResult $preliminary,
         WrittenResult $written,
         VivaResult $viva,
     ): array {
         return [
+            $this->row('Registration Category', $registration->cadre_category?->value, $result->cadre_category),
+            $this->row('Birth Date', $registration->birth_date, $result->birth_date),
             $this->row('Preliminary Mark', $preliminary?->mark, $result->preliminary_mark),
             $this->row('General Written Total', $written->general_counted_total, $result->general_written_total),
             $this->row('Technical Written Total', $written->technical_counted_total, $result->technical_written_total),
@@ -29,14 +34,18 @@ final class TabulationSourceDerivedVerificationService
     {
         return [
             'label' => $label,
-            'source' => $source,
-            'derived' => $derived,
+            'source' => $source instanceof DateTimeInterface ? $source->format('Y-m-d') : $source,
+            'derived' => $derived instanceof DateTimeInterface ? $derived->format('Y-m-d') : $derived,
             'matches' => $this->normalize($source) === $this->normalize($derived),
         ];
     }
 
     private function normalize(mixed $value): mixed
     {
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
         if ($value instanceof \BackedEnum) {
             $value = $value->value;
         }

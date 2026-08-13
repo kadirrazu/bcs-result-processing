@@ -16,6 +16,7 @@ use App\Models\WrittenResult;
 use App\Reports\Pdf\TabulationIndividualPdfReport;
 use App\Services\Exports\AdministrativeXlsxExportService;
 use App\Services\Tabulation\TabulationFinalizationService;
+use App\Services\Tabulation\TabulationDatasetIntegrityService;
 use App\Services\Tabulation\TabulationReadinessService;
 use App\Services\Tabulation\TabulationReviewSummaryService;
 use App\Services\Tabulation\TabulationRollbackService;
@@ -39,9 +40,11 @@ final class TabulationController extends Controller
         TabulationReadinessService $readiness,
         TabulationRuleConfig $rules,
         TabulationStaleService $stale,
+        TabulationDatasetIntegrityService $integrity,
     ): View {
         $this->authorize('viewAny', TabulationResult::class);
-        $stale->synchronize();
+        $readinessInspection = $readiness->inspect();
+        $stale->synchronize($readinessInspection, false);
 
         $state = TabulationProcessingState::query()->firstOrCreate(['id' => 1], ['status' => 'not_started']);
         $audits = TabulationProcessingAudit::query()->latest('id')->limit(10)->get();
@@ -52,13 +55,14 @@ final class TabulationController extends Controller
 
         return view('tabulation.index', [
             'state' => $state,
-            'readiness' => $readiness->inspect(),
+            'readiness' => $readinessInspection,
             'rules' => $rules->snapshot(),
             'latestRun' => TabulationProcessingRun::query()->latest('id')->first(),
             'latestFinalization' => TabulationFinalizationRun::query()->latest('id')->first(),
             'finalizationHistory' => TabulationFinalizationRun::query()->latest('id')->limit(10)->get(),
             'audits' => $audits,
             'auditActors' => $auditActors,
+            'hashIntegrity' => $integrity->inspect(null, false),
         ]);
     }
 
@@ -103,10 +107,13 @@ final class TabulationController extends Controller
     public function results(
         Request $request,
         TabulationStaleService $stale,
+        TabulationReadinessService $readiness,
         TabulationReviewSummaryService $summaryService,
+        TabulationDatasetIntegrityService $integrity,
     ): View {
         $this->authorize('viewAny', TabulationResult::class);
-        $stale->synchronize();
+        $readinessInspection = $readiness->inspect();
+        $stale->synchronize($readinessInspection, false);
 
         $state = TabulationProcessingState::query()->first();
         $runId = $request->integer('run') ?: $state?->latest_run_id;
@@ -174,6 +181,7 @@ final class TabulationController extends Controller
             'warning' => $warning,
             'state' => $state,
             'reviewSummary' => $summaryService->forRun($run),
+            'hashIntegrity' => $integrity->inspect((int) $run->id, false),
         ]);
     }
 
@@ -202,7 +210,7 @@ final class TabulationController extends Controller
             'preliminary' => $preliminary,
             'written' => $written,
             'viva' => $viva,
-            'verificationRows' => $verificationService->build($result, $preliminary, $written, $viva),
+            'verificationRows' => $verificationService->build($result, $registration, $preliminary, $written, $viva),
         ]);
     }
 
@@ -280,7 +288,7 @@ final class TabulationController extends Controller
         $path = $dir.'/tabulation-final-v'.$run->processing_version.'-'.now()->format('Ymd-His').'.xlsx';
 
         $headers = [
-            'User', 'Reg', 'Name', 'Qualified Track',
+            'User', 'Reg', 'Name', 'Qualified Track', 'Tab Cadre Category', 'Tab Birth Date',
             'Preliminary Mark', 'Preliminary Result',
             'Source General Written', 'Source General P/F',
             'Source Technical Written', 'Source Technical P/F',
@@ -322,6 +330,8 @@ final class TabulationController extends Controller
                     $row->reg,
                     $row->name,
                     $row->written_qualified_track,
+                    $row->cadre_category,
+                    $row->birth_date,
                     $row->preliminary_mark,
                     $row->source_preliminary_result,
                     $row->source_general_written,

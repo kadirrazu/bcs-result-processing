@@ -16,6 +16,7 @@ final class TabulationGenerationService
         private readonly TabulationRuleConfig $rules,
         private readonly WrittenSubjectConfig $writtenConfig,
         private readonly TabulationSourceSnapshotComparator $snapshotComparator,
+        private readonly TabulationDatasetHasher $datasetHasher,
     ){}
 
     public function process(int $runId):TabulationProcessingRun
@@ -42,6 +43,7 @@ final class TabulationGenerationService
                 ->where('v.status','active')
                 ->select([
                     'v.id as viva_result_id','v.registration_id','v.written_result_id','v.user_id','v.reg','v.mark as viva_mark','v.viva_result_status',
+                    'r.cadre_category','r.birth_date',
                     'w.written_qualified_track','w.general_result_status','w.technical_result_status','w.general_counted_total','w.technical_counted_total','w.finalized_at as written_finalized_at',
                     'p.id as preliminary_result_id','p.mark as preliminary_mark','p.finalized_at as preliminary_finalized_at',
                 ]);
@@ -70,6 +72,9 @@ final class TabulationGenerationService
                     $generalMerit=$generalPf==='PASS'&&$vivaPass;
                     $technicalMerit=$technicalPf==='PASS'&&$vivaPass;
 
+                    if($row->birth_date===null)$errors[]='MERIT_TIE_BREAK_BIRTH_DATE_MISSING';
+                    if($row->cadre_category===null)$errors[]='CADRE_CATEGORY_MISSING';
+
                     if($row->preliminary_result_id===null||$row->preliminary_finalized_at===null)$errors[]='FINALIZED_PRELIMINARY_SOURCE_MISSING';
                     if($row->written_finalized_at===null)$errors[]='FINALIZED_WRITTEN_SOURCE_MISSING';
                     if($generalTrackSurvives&&$generalPf!=='PASS')$errors[]='QUALIFIED_TRACK_GENERAL_PF_INCONSISTENT';
@@ -95,7 +100,7 @@ final class TabulationGenerationService
                     if($generalMerit)$generalEligible++;if($technicalMerit)$technicalEligible++;
                     $insert[]=[
                         'processing_run_id'=>$run->id,'processing_version'=>$run->processing_version,'registration_id'=>$row->registration_id,'preliminary_result_id'=>$row->preliminary_result_id,
-                        'written_result_id'=>$row->written_result_id,'viva_result_id'=>$row->viva_result_id,'user_id'=>$row->user_id,'reg'=>$row->reg,'written_qualified_track'=>$row->written_qualified_track,
+                        'written_result_id'=>$row->written_result_id,'viva_result_id'=>$row->viva_result_id,'user_id'=>$row->user_id,'reg'=>$row->reg,'cadre_category'=>$row->cadre_category,'birth_date'=>$row->birth_date,'written_qualified_track'=>$row->written_qualified_track,
                         'preliminary_mark'=>$row->preliminary_mark,'general_written_total'=>$generalTotal,'technical_written_total'=>$technicalTotal,'viva_mark'=>$viva,'general_grand_total'=>$generalGrand,'technical_grand_total'=>$technicalGrand,
                         'general_pf'=>$generalPf,'technical_pf'=>$technicalPf,'general_merit_eligible'=>$generalMerit,'technical_merit_eligible'=>$technicalMerit,'validation_status'=>$status,
                         'validation_errors'=>$errors?json_encode(array_values(array_unique($errors))):null,'review_warnings'=>$warnings?json_encode(array_values(array_unique($warnings))):null,
@@ -109,9 +114,10 @@ final class TabulationGenerationService
                 $run->update(['processed_rows'=>$done,'valid_rows'=>$valid,'warning_rows'=>$warning,'error_rows'=>$error,'general_pass_count'=>$generalPass,'technical_pass_count'=>$technicalPass,'general_merit_eligible_count'=>$generalEligible,'technical_merit_eligible_count'=>$technicalEligible,'progress_percent'=>$total?min(99.9,round($done/$total*100,4)):100]);
             },'v.id','viva_result_id');
 
-            $summary=['total_rows'=>$total,'valid_rows'=>$valid,'warning_rows'=>$warning,'error_rows'=>$error,'general_pass_count'=>$generalPass,'technical_pass_count'=>$technicalPass,'general_merit_eligible_count'=>$generalEligible,'technical_merit_eligible_count'=>$technicalEligible];
-            $run->update(['status'=>'completed','processed_rows'=>$done,'progress_percent'=>100,'current_step'=>'Generation completed; review and finalize','summary'=>$summary,'finished_at'=>now()]);
-            $state->update(['status'=>$error>0?'needs_review':'review_ready','summary'=>$summary,'source_snapshot'=>$run->source_snapshot,'is_stale'=>false,'stale_reason'=>null]);
+            $datasetHash=$this->datasetHasher->hash((int)$run->id);
+            $summary=['total_rows'=>$total,'valid_rows'=>$valid,'warning_rows'=>$warning,'error_rows'=>$error,'general_pass_count'=>$generalPass,'technical_pass_count'=>$technicalPass,'general_merit_eligible_count'=>$generalEligible,'technical_merit_eligible_count'=>$technicalEligible,'dataset_hash'=>$datasetHash];
+            $run->update(['status'=>'completed','dataset_hash'=>$datasetHash,'processed_rows'=>$done,'progress_percent'=>100,'current_step'=>'Generation completed; review and finalize','summary'=>$summary,'finished_at'=>now()]);
+            $state->update(['status'=>$error>0?'needs_review':'review_ready','summary'=>$summary,'source_snapshot'=>$run->source_snapshot,'dataset_hash'=>$datasetHash,'is_stale'=>false,'stale_reason'=>null]);
             return $run->refresh();
         }catch(Throwable $e){
             $run->update(['status'=>'failed','failure_message'=>mb_substr($e->getMessage(),0,65000),'finished_at'=>now()]);

@@ -31,8 +31,9 @@ final class CircularC5ContractTest extends TestCase
     public function authority_service_hash_binds_preview_to_exact_dataset(): void
     {
         $service = file_get_contents(app_path('Services/Circular/CircularAuthorityWorkflowService.php'));
-        $this->assertStringContainsString("hash('sha256'", $service);
+        $this->assertStringContainsString('CircularDatasetHasher $datasetHasher', $service);
         $this->assertStringContainsString('datasetHash', $service);
+        $this->assertStringContainsString("return \$this->datasetHasher->hash(\$version);", $service);
         $this->assertStringContainsString('CircularProcessingStatus::Confirmed', $service);
         $this->assertStringContainsString('CircularProcessingStatus::Finalized', $service);
     }
