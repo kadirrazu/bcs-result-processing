@@ -33,4 +33,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/tabulation.php';
 
+    require __DIR__.'/merit.php';
+
 });

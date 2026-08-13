@@ -46,6 +46,33 @@ final class ChoiceValidationFinalizedDatasetService
             ->findOrFail($state->latest_finalization_run_id);
     }
 
+    /**
+     * Lightweight finalized metadata for operator/read-only pages.
+     * Does not re-hash Choice Validation rows. Strict downstream work must use
+     * verifiedSummary().
+     *
+     * @return array<string,mixed>
+     */
+    public function storedFinalizedSummary(): array
+    {
+        $state = $this->state();
+
+        if (! $this->isReady($state)) {
+            throw ValidationException::withMessages([
+                'choice_validation' => 'A current, non-stale finalized Choice Validation dataset is required.',
+            ]);
+        }
+
+        $run = ChoiceValidationFinalizationRun::query()->find($state->latest_finalization_run_id);
+        if (! $run || ! $run->dataset_hash) {
+            throw ValidationException::withMessages([
+                'choice_validation' => 'Choice Validation finalized hash metadata could not be resolved.',
+            ]);
+        }
+
+        return $this->summaryFromRun($run);
+    }
+
     /** @return array<string,mixed> */
     public function verifiedSummary(): array
     {

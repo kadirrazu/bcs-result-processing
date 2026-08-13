@@ -86,6 +86,43 @@ final class CircularFinalizedDatasetService
             ->get();
     }
 
+    /**
+     * Lightweight finalized metadata for operator/read-only pages.
+     * Does not recompute the Circular dataset hash. Strict downstream work must
+     * use verifiedSummary()/verifiedConfirmation().
+     *
+     * @return array<string,mixed>
+     */
+    public function storedFinalizedSummary(): array
+    {
+        if (! $this->isReady()) {
+            throw ValidationException::withMessages([
+                'circular' => 'A finalized, confirmed, current and non-stale Circular version is required before this dataset can be consumed downstream.',
+            ]);
+        }
+
+        $version = (int) $this->state()->finalized_version;
+        $confirmation = CircularConfirmation::query()
+            ->where('version', $version)
+            ->latest('confirmed_at')
+            ->latest('id')
+            ->first();
+
+        if (! $confirmation || ! $confirmation->dataset_hash) {
+            throw ValidationException::withMessages([
+                'circular' => 'Circular finalized hash metadata could not be resolved.',
+            ]);
+        }
+
+        return [
+            'ready' => true,
+            'version' => $version,
+            'dataset_hash' => (string) $confirmation->dataset_hash,
+            'hash_verified' => false,
+            'finalized_at' => $this->state()->finalized_at,
+        ];
+    }
+
     /** @return array<string, mixed> */
     public function verifiedSummary(): array
     {

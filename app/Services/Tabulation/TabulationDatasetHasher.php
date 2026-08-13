@@ -25,6 +25,7 @@ final class TabulationDatasetHasher
                         'reg' => (string) $row->reg,
                         'cadre_category' => $row->cadre_category === null ? null : (int) $row->cadre_category,
                         'birth_date' => $row->birth_date?->format('Y-m-d'),
+                        'graduation_year' => $row->graduation_year === null ? null : (int) $row->graduation_year,
                         'written_qualified_track' => $row->written_qualified_track,
                         'preliminary_mark' => $row->preliminary_mark === null ? null : (string) $row->preliminary_mark,
                         'general_written_total' => $row->general_written_total === null ? null : (string) $row->general_written_total,

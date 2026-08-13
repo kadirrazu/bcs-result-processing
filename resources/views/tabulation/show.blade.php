@@ -226,6 +226,7 @@
                         <tr><th class="w-40">Cadre Category Snapshot</th><td>{{ $result->cadre_category ?? '—' }}</td></tr>
                         <tr><th>Written Qualified Track Snapshot</th><td><span class="badge bg-azure-lt text-azure">{{ strtoupper((string) ($result->written_qualified_track ?: '—')) }}</span></td></tr>
                         <tr><th>Birth Date Snapshot</th><td>{{ $result->birth_date?->format('Y-m-d') ?? '—' }}</td></tr>
+                        <tr><th>Graduation Year Snapshot</th><td>{{ $result->graduation_year ?? '—' }}</td></tr>
                         <tr><th class="w-40">General Written / Technical Written</th><td>{{ $result->general_written_total ?? '—' }} / {{ $result->technical_written_total ?? '—' }}</td></tr>
                         <tr><th>Viva Mark</th><td>{{ $result->viva_mark }}</td></tr>
                         <tr><th>General / Technical Grand Total</th><td>{{ $result->generalGrandTotalDisplay() }} / {{ $result->technicalGrandTotalDisplay() }}</td></tr>

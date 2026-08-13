@@ -21,6 +21,7 @@ final class TabulationSourceDerivedVerificationService
         return [
             $this->row('Registration Category', $registration->cadre_category?->value, $result->cadre_category),
             $this->row('Birth Date', $registration->birth_date, $result->birth_date),
+            $this->row('Graduation Year', $registration->graduation_year, $result->graduation_year),
             $this->row('Preliminary Mark', $preliminary?->mark, $result->preliminary_mark),
             $this->row('General Written Total', $written->general_counted_total, $result->general_written_total),
             $this->row('Technical Written Total', $written->technical_counted_total, $result->technical_written_total),

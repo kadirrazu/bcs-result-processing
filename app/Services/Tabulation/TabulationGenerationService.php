@@ -43,7 +43,7 @@ final class TabulationGenerationService
                 ->where('v.status','active')
                 ->select([
                     'v.id as viva_result_id','v.registration_id','v.written_result_id','v.user_id','v.reg','v.mark as viva_mark','v.viva_result_status',
-                    'r.cadre_category','r.birth_date',
+                    'r.cadre_category','r.birth_date','r.graduation_year',
                     'w.written_qualified_track','w.general_result_status','w.technical_result_status','w.general_counted_total','w.technical_counted_total','w.finalized_at as written_finalized_at',
                     'p.id as preliminary_result_id','p.mark as preliminary_mark','p.finalized_at as preliminary_finalized_at',
                 ]);
@@ -100,7 +100,7 @@ final class TabulationGenerationService
                     if($generalMerit)$generalEligible++;if($technicalMerit)$technicalEligible++;
                     $insert[]=[
                         'processing_run_id'=>$run->id,'processing_version'=>$run->processing_version,'registration_id'=>$row->registration_id,'preliminary_result_id'=>$row->preliminary_result_id,
-                        'written_result_id'=>$row->written_result_id,'viva_result_id'=>$row->viva_result_id,'user_id'=>$row->user_id,'reg'=>$row->reg,'cadre_category'=>$row->cadre_category,'birth_date'=>$row->birth_date,'written_qualified_track'=>$row->written_qualified_track,
+                        'written_result_id'=>$row->written_result_id,'viva_result_id'=>$row->viva_result_id,'user_id'=>$row->user_id,'reg'=>$row->reg,'cadre_category'=>$row->cadre_category,'birth_date'=>$row->birth_date,'graduation_year'=>$row->graduation_year,'written_qualified_track'=>$row->written_qualified_track,
                         'preliminary_mark'=>$row->preliminary_mark,'general_written_total'=>$generalTotal,'technical_written_total'=>$technicalTotal,'viva_mark'=>$viva,'general_grand_total'=>$generalGrand,'technical_grand_total'=>$technicalGrand,
                         'general_pf'=>$generalPf,'technical_pf'=>$technicalPf,'general_merit_eligible'=>$generalMerit,'technical_merit_eligible'=>$technicalMerit,'validation_status'=>$status,
                         'validation_errors'=>$errors?json_encode(array_values(array_unique($errors))):null,'review_warnings'=>$warnings?json_encode(array_values(array_unique($warnings))):null,

@@ -122,5 +122,19 @@ return [
             'downstream' => ['Merit and later modules'],
         ],
 
+        'merit' => [
+            'label' => 'Merit Generation',
+            'tables' => [
+                'merit_processing_audits',
+                'merit_finalization_runs',
+                'merit_cadre_ranks',
+                'merit_results',
+                'merit_processing_runs',
+                'merit_processing_states',
+            ],
+            'downstream' => ['Choice Optimization and Allocation'],
+        ],
+
+
     ],
 ];
