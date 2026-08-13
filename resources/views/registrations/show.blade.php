@@ -27,6 +27,20 @@
 <div class="card mt-3">
     <div class="card-header">
         <div>
+            <h3 class="card-title">Education identity references</h3>
+            <div class="card-subtitle">Optional matching evidence retained for historical BCS dataset review.</div>
+        </div>
+    </div>
+    <div class="card-body"><dl class="row mb-0">
+        @foreach(['SSC Roll' => $registration->ssc_roll, 'SSC Year' => $registration->ssc_year, 'HSC Roll' => $registration->hsc_roll, 'HSC Year' => $registration->hsc_year, 'Graduation Year' => $registration->graduation_year] as $label => $value)
+            <dt class="col-sm-4 py-2">{{ $label }}</dt><dd class="col-sm-8 py-2">{{ $value ?? '—' }}</dd>
+        @endforeach
+    </dl></div>
+</div>
+
+<div class="card mt-3">
+    <div class="card-header">
+        <div>
             <h3 class="card-title">Manual correction audit history</h3>
             <div class="card-subtitle">Latest 50 audited edits for this registration.</div>
         </div>

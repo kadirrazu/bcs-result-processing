@@ -30,6 +30,17 @@ final class RegistrationRowValidator
         }
 
         foreach ([
+            'ssc_year' => 'SSC_YEAR',
+            'hsc_year' => 'HSC_YEAR',
+            'graduation_year' => 'GRADUATION_YEAR',
+        ] as $field => $label) {
+            $year = $registration[$field] ?? null;
+            if ($year !== null && ($year < 1900 || $year > ((int) date('Y') + 1))) {
+                $errors[] = "{$label} must be a four-digit year between 1900 and next calendar year.";
+            }
+        }
+
+        foreach ([
             'sex_code' => 'sex',
             'district_code' => 'district',
             'division_code' => 'division',

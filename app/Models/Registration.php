@@ -12,7 +12,8 @@ final class Registration extends ExaminationModel
 {
     protected $fillable = [
         'user_id', 'reg', 'national_id', 'name', 'father_name', 'mother_name',
-        'name_bn', 'father_name_bn', 'mother_name_bn', 'birth_date', 'sex_code',
+        'name_bn', 'father_name_bn', 'mother_name_bn', 'birth_date', 'ssc_roll', 'ssc_year',
+        'hsc_roll', 'hsc_year', 'graduation_year', 'sex_code',
         'district_code', 'division_code', 'university_code', 'bachelor_subject_code',
         'post_related_subject_code', 'cadre_category', 'has_ff_quota', 'has_em_quota',
         'has_phc_quota', 'has_quota', 'status', 'validation_status', 'comment',
@@ -23,6 +24,9 @@ final class Registration extends ExaminationModel
     {
         return [
             'birth_date' => 'date',
+            'ssc_year' => 'integer',
+            'hsc_year' => 'integer',
+            'graduation_year' => 'integer',
             'cadre_category' => CadreCategory::class,
             'has_quota' => 'boolean',
             'status' => RegistrationStatus::class,
@@ -42,6 +46,8 @@ final class Registration extends ExaminationModel
                     $nested->where('reg', $search)
                         ->orWhere('user_id', $search)
                         ->orWhere('national_id', $search)
+                        ->orWhere('ssc_roll', $search)
+                        ->orWhere('hsc_roll', $search)
                         ->orWhere('name', 'like', "%{$search}%");
                 });
             })

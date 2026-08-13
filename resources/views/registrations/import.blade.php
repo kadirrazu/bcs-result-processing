@@ -4,7 +4,7 @@
 <div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">Registration Import Console</h2><div class="text-secondary">Queued, chunked and auditable processing for 300,000+ rows with live progress and rollback.</div></div></div></div></div>
 <div class="page-body"><div class="container-xl">
     <div class="card mb-3"><div class="card-body">
-        <p>Use the official template. The upload returns immediately. A queue worker validates fixed headers and processes the spreadsheet in bounded chunks while this console shows progress. Keep the imports queue worker running.</p>
+        <p>Use the official template. The upload returns immediately. A queue worker validates the required headers and processes the spreadsheet in bounded chunks while this console shows progress. The optional SSC/HSC roll-year and graduation-year columns may be left blank or omitted from an older source file. Keep the imports queue worker running.</p>
         <a class="btn btn-outline-secondary mb-3" href="{{ route('registrations.import.template') }}">Download Template</a>
         <form method="post" enctype="multipart/form-data" action="{{ route('registrations.import.store') }}">@csrf
             <input class="form-control mb-3 @error('file') is-invalid @enderror" type="file" name="file" accept=".xlsx,.xls" required>

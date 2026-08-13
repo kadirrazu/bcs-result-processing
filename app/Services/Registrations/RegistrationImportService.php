@@ -192,6 +192,11 @@ final class RegistrationImportService
             'mother_name_bn' => $this->nullable($raw['mname_bn'] ?? null),
             'raw_birth_date' => $this->rawDate($raw['b_date'] ?? null),
             'birth_date' => null,
+            'ssc_roll' => $this->nullable($raw['ssc_roll'] ?? null),
+            'ssc_year' => $this->nullable($raw['ssc_year'] ?? null),
+            'hsc_roll' => $this->nullable($raw['hsc_roll'] ?? null),
+            'hsc_year' => $this->nullable($raw['hsc_year'] ?? null),
+            'graduation_year' => $this->nullable($raw['graduation_year'] ?? null),
             'sex_code' => $this->nullable($raw['sex'] ?? null),
             'district_code' => $this->nullable($raw['district'] ?? null),
             'division_code' => null,
@@ -236,14 +241,33 @@ final class RegistrationImportService
     /** @param list<mixed> $values @return list<string> */
     private function validateHeaders(array $values): array
     {
-        $expected = config('registrations.headers');
+        $required = array_values((array) config('registrations.required_headers', []));
+        $allowed = array_values((array) config('registrations.headers', []));
         $headers = array_map(
             static fn (mixed $value): string => strtolower(trim((string) $value)),
-            array_slice(array_pad($values, count($expected), null), 0, count($expected)),
+            $values,
         );
 
-        if ($headers !== $expected) {
-            throw new RuntimeException('Headers do not match the downloaded registration template.');
+        // Spreadsheet readers may include unused trailing cells; they are not source headers.
+        while ($headers !== [] && end($headers) === '') {
+            array_pop($headers);
+        }
+
+        if ($headers === [] || in_array('', $headers, true)) {
+            throw new RuntimeException('Registration source contains a blank header.');
+        }
+        if (count($headers) !== count(array_unique($headers))) {
+            throw new RuntimeException('Registration source contains duplicate headers.');
+        }
+
+        $unknown = array_values(array_diff($headers, $allowed));
+        if ($unknown !== []) {
+            throw new RuntimeException('Unknown registration header(s): '.implode(', ', $unknown).'.');
+        }
+
+        $missing = array_values(array_diff($required, $headers));
+        if ($missing !== []) {
+            throw new RuntimeException('Missing required registration header(s): '.implode(', ', $missing).'.');
         }
 
         return $headers;

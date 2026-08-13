@@ -62,7 +62,7 @@ final class RegistrationApprovalService
                     $payload = [];
                     $timestamp = now()->format('Y-m-d H:i:s');
                     foreach ($rows as $row) {
-                        $payload[] = [
+                        $candidate = [
                             'user_id' => $row->user_id,
                             'reg' => $row->reg,
                             'national_id' => $row->national_id,
@@ -73,6 +73,11 @@ final class RegistrationApprovalService
                             'father_name_bn' => $row->father_name_bn,
                             'mother_name_bn' => $row->mother_name_bn,
                             'birth_date' => $row->birth_date,
+                            'ssc_roll' => $row->ssc_roll,
+                            'ssc_year' => $row->ssc_year,
+                            'hsc_roll' => $row->hsc_roll,
+                            'hsc_year' => $row->hsc_year,
+                            'graduation_year' => $row->graduation_year,
                             'sex_code' => $row->sex_code,
                             'district_code' => $row->district_code,
                             'division_code' => $row->division_code,
@@ -89,8 +94,13 @@ final class RegistrationApprovalService
                             'comment' => $this->commentWithWarnings($row->comment, $row->validation_warnings),
                             'source_batch_id' => $batchId,
                             'created_at' => $timestamp,
-                            'updated_at' => $timestamp,
                         ];
+
+                        $before = $existing->get($row->reg);
+                        $candidate['updated_at'] = $this->businessRelevantChanged($before, $candidate)
+                            ? $timestamp
+                            : ($before['updated_at'] ?? $timestamp);
+                        $payload[] = $candidate;
                     }
 
                     DB::connection('exam')->transaction(function () use (
@@ -102,6 +112,7 @@ final class RegistrationApprovalService
                             [
                                 'user_id', 'national_id', 'name', 'father_name', 'mother_name',
                                 'name_bn', 'father_name_bn', 'mother_name_bn', 'birth_date',
+                                'ssc_roll', 'ssc_year', 'hsc_roll', 'hsc_year', 'graduation_year',
                                 'sex_code', 'district_code', 'division_code', 'university_code',
                                 'bachelor_subject_code', 'post_related_subject_code', 'cadre_category',
                                 'has_ff_quota', 'has_em_quota', 'has_phc_quota', 'has_quota',
@@ -191,6 +202,35 @@ final class RegistrationApprovalService
             ]);
             throw $exception;
         }
+    }
+
+    /** @param array<string,mixed>|null $before @param array<string,mixed> $candidate */
+    private function businessRelevantChanged(?array $before, array $candidate): bool
+    {
+        if ($before === null) {
+            return true;
+        }
+
+        $ignored = [
+            'ssc_roll', 'ssc_year', 'hsc_roll', 'hsc_year', 'graduation_year',
+            'source_batch_id', 'validation_status', 'created_at', 'updated_at',
+        ];
+
+        foreach ($candidate as $field => $value) {
+            if (in_array($field, $ignored, true)) {
+                continue;
+            }
+
+            $old = $before[$field] ?? null;
+            if ($old === null && $value === null) {
+                continue;
+            }
+            if ((string) $old !== (string) $value) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function commentWithWarnings(?string $comment, ?string $warningsJson): ?string

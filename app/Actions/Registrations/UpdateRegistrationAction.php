@@ -40,7 +40,20 @@ final class UpdateRegistrationAction
                 return $registration->refresh();
             }
 
-            $registration->save();
+            $changedCandidateFields = array_values(array_diff(array_keys($dirty), ['updated_at']));
+            $auxiliaryOnly = $changedCandidateFields !== []
+                && array_diff($changedCandidateFields, $this->auxiliaryIdentityFields()) === [];
+
+            // These identity-enrichment fields do not affect Tabulation/Merit calculations.
+            // Preserve updated_at so Tabulation's Registration source snapshot does not become
+            // stale for a non-result-affecting correction. The edit remains fully audited.
+            if ($auxiliaryOnly) {
+                $registration->timestamps = false;
+                $registration->save();
+                $registration->timestamps = true;
+            } else {
+                $registration->save();
+            }
             $registration->refresh();
 
             $after = $this->snapshot($registration);
@@ -68,6 +81,12 @@ final class UpdateRegistrationAction
 
             return $registration;
         });
+    }
+
+    /** @return list<string> */
+    private function auxiliaryIdentityFields(): array
+    {
+        return ['ssc_roll', 'ssc_year', 'hsc_roll', 'hsc_year', 'graduation_year'];
     }
 
     /** @return array<string, mixed> */

@@ -33,6 +33,23 @@
 </div>
 
 <div class="card mb-3">
+    <div class="card-header">
+        <div>
+            <h3 class="card-title">Education identity references</h3>
+            <div class="card-subtitle">Optional identifiers retained for future previous-BCS candidate matching and Choice Optimization review.</div>
+        </div>
+    </div>
+    <div class="card-body"><div class="row g-3">
+        <div class="col-md-4"><label class="form-label">SSC Roll</label><input name="ssc_roll" maxlength="30" class="form-control @error('ssc_roll') is-invalid @enderror" value="{{ old('ssc_roll', $record?->ssc_roll) }}">@error('ssc_roll')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+        <div class="col-md-2"><label class="form-label">SSC Year</label><input name="ssc_year" type="number" min="1900" max="{{ now()->year + 1 }}" class="form-control @error('ssc_year') is-invalid @enderror" value="{{ old('ssc_year', $record?->ssc_year) }}">@error('ssc_year')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+        <div class="col-md-4"><label class="form-label">HSC Roll</label><input name="hsc_roll" maxlength="30" class="form-control @error('hsc_roll') is-invalid @enderror" value="{{ old('hsc_roll', $record?->hsc_roll) }}">@error('hsc_roll')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+        <div class="col-md-2"><label class="form-label">HSC Year</label><input name="hsc_year" type="number" min="1900" max="{{ now()->year + 1 }}" class="form-control @error('hsc_year') is-invalid @enderror" value="{{ old('hsc_year', $record?->hsc_year) }}">@error('hsc_year')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+        <div class="col-md-3"><label class="form-label">Graduation Year</label><input name="graduation_year" type="number" min="1900" max="{{ now()->year + 1 }}" class="form-control @error('graduation_year') is-invalid @enderror" value="{{ old('graduation_year', $record?->graduation_year) }}">@error('graduation_year')<div class="invalid-feedback">{{ $message }}</div>@enderror</div>
+        <div class="col-md-9 d-flex align-items-end"><div class="form-hint mb-2">All fields are optional. Roll values are stored as text so leading zeroes are preserved.</div></div>
+    </div></div>
+</div>
+
+<div class="card mb-3">
     <div class="card-header"><h3 class="card-title">Central master references</h3></div>
     <div class="card-body"><div class="row g-3">
         <div class="col-md-3"><label class="form-label">Division</label><select id="division-code" class="form-select" disabled><option value="">Mapped from district</option>@foreach($divisions as $item)<option value="{{ $item->code }}" @selected((string) old('division_code', $record?->division_code) === (string) $item->code)>{{ $item->code }} - {{ $item->name }}</option>@endforeach</select><small class="form-hint">Automatically mapped from the selected district.</small></div>

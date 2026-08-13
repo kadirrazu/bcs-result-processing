@@ -98,6 +98,11 @@ final class RegistrationStagingValidationService
                         $university = $this->nullableInt($row->university_code);
                         $bachelor = $this->nullableInt($row->bachelor_subject_code);
                         $sex = $this->nullableInt($row->sex_code);
+                        $sscRoll = $this->nullableText($row->ssc_roll);
+                        $hscRoll = $this->nullableText($row->hsc_roll);
+                        $sscYear = $this->nullableYear($row->ssc_year, 'SSC_YEAR', $errors);
+                        $hscYear = $this->nullableYear($row->hsc_year, 'HSC_YEAR', $errors);
+                        $graduationYear = $this->nullableYear($row->graduation_year, 'GRADUATION_YEAR', $errors);
 
                         if (! preg_match('/^[A-Z0-9]{1,10}$/', $userId)) {
                             $errors[] = 'USER must be alphanumeric and at most 10 characters.';
@@ -186,6 +191,11 @@ final class RegistrationStagingValidationService
                             'user_id' => $userId,
                             'reg' => $reg,
                             'birth_date' => $birthDate,
+                            'ssc_roll' => $sscRoll,
+                            'ssc_year' => $sscYear,
+                            'hsc_roll' => $hscRoll,
+                            'hsc_year' => $hscYear,
+                            'graduation_year' => $graduationYear,
                             'sex_code' => $sex,
                             'district_code' => $district,
                             'division_code' => $division,
@@ -206,7 +216,8 @@ final class RegistrationStagingValidationService
                     }
 
                     $updateColumns = [
-                        'user_id', 'reg', 'birth_date', 'sex_code', 'district_code', 'division_code',
+                        'user_id', 'reg', 'birth_date', 'ssc_roll', 'ssc_year', 'hsc_roll', 'hsc_year', 'graduation_year',
+                        'sex_code', 'district_code', 'division_code',
                         'university_code', 'bachelor_subject_code', 'post_related_subject_code',
                         'cadre_category', 'has_ff_quota', 'has_em_quota', 'has_phc_quota',
                         'has_quota', 'candidate_status', 'validation_status', 'validation_errors',
@@ -289,6 +300,35 @@ final class RegistrationStagingValidationService
         $value = trim((string) ($value ?? ''));
 
         return $value !== '' && preg_match('/^-?\d+$/', $value) === 1 ? (int) $value : null;
+    }
+
+    private function nullableText(mixed $value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+
+        return $value === '' ? null : $value;
+    }
+
+    /** @param list<string> $errors */
+    private function nullableYear(mixed $value, string $label, array &$errors): ?int
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{4}$/', $raw) !== 1) {
+            $errors[] = "{$label} must be a four-digit year.";
+            return null;
+        }
+
+        $year = (int) $raw;
+        if ($year < 1900 || $year > ((int) date('Y') + 1)) {
+            $errors[] = "{$label} must be between 1900 and next calendar year.";
+            return null;
+        }
+
+        return $year;
     }
 
     /**

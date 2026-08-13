@@ -34,7 +34,7 @@
 </div>
 
 <div class="card mb-3"><div class="card-body"><form method="get" class="row g-2">
-<div class="col-lg-3"><input name="search" class="form-control" value="{{ $filters['search'] ?? '' }}" placeholder="Reg, User ID, NID or name"></div>
+<div class="col-lg-3"><input name="search" class="form-control" value="{{ $filters['search'] ?? '' }}" placeholder="Reg, User ID, NID, SSC/HSC roll or name"></div>
 <div class="col-md-2"><select name="cadre_category" class="form-select"><option value="">All categories</option>@foreach($categories as $item)<option value="{{ $item->value }}" @selected((string)($filters['cadre_category'] ?? '') === (string)$item->value)>{{ $item->code() }} - {{ $item->label() }}</option>@endforeach</select></div>
 <div class="col-md-2"><select name="has_quota" class="form-select"><option value="">All quota states</option><option value="1" @selected(($filters['has_quota'] ?? '') === '1')>Has quota</option><option value="0" @selected(($filters['has_quota'] ?? '') === '0')>No quota</option></select></div>
 <div class="col-md-2"><select name="status" class="form-select"><option value="">All statuses</option>@foreach($statuses as $item)<option value="{{ $item->value }}" @selected(($filters['status'] ?? '') === $item->value)>{{ ucfirst($item->value) }}</option>@endforeach</select></div>

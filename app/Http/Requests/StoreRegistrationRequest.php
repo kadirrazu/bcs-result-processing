@@ -31,6 +31,11 @@ class StoreRegistrationRequest extends FormRequest
             'father_name_bn' => ['nullable', 'string', 'max:200'],
             'mother_name_bn' => ['nullable', 'string', 'max:200'],
             'birth_date' => ['nullable', 'date'],
+            'ssc_roll' => ['nullable', 'string', 'max:30'],
+            'ssc_year' => ['nullable', 'integer', 'digits:4', 'between:1900,'.((int) date('Y') + 1)],
+            'hsc_roll' => ['nullable', 'string', 'max:30'],
+            'hsc_year' => ['nullable', 'integer', 'digits:4', 'between:1900,'.((int) date('Y') + 1)],
+            'graduation_year' => ['nullable', 'integer', 'digits:4', 'between:1900,'.((int) date('Y') + 1)],
             'sex_code' => ['nullable', Rule::exists('genders', 'code')->where('is_active', true)],
             'district_code' => ['nullable', Rule::exists('districts', 'code')->where('is_active', true)],
             'division_code' => ['nullable', Rule::exists('divisions', 'code')->where('is_active', true)],
@@ -49,7 +54,7 @@ class StoreRegistrationRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $nullable = ['national_id','father_name','mother_name','name_bn','father_name_bn','mother_name_bn','birth_date','sex_code','district_code','division_code','university_code','bachelor_subject_code','post_related_subject_code','has_ff_quota','has_em_quota','has_phc_quota','comment'];
+        $nullable = ['national_id','father_name','mother_name','name_bn','father_name_bn','mother_name_bn','birth_date','ssc_roll','ssc_year','hsc_roll','hsc_year','graduation_year','sex_code','district_code','division_code','university_code','bachelor_subject_code','post_related_subject_code','has_ff_quota','has_em_quota','has_phc_quota','comment'];
         $values = [];
         foreach ($nullable as $field) {
             $value = $this->input($field);
