@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             DesignationSeeder::class,
             DefaultAdminUserSeeder::class,
+            RegistrationReferenceMasterSeeder::class,
         ]);
 
     }

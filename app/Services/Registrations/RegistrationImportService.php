@@ -79,7 +79,18 @@ final class RegistrationImportService
             };
 
             $totalRows = $this->quickTotalRows($path, $extension);
-            $chunkSize = max(500, (int) $batch->chunk_size);
+            $requestedChunkSize = max(500, (int) $batch->chunk_size);
+            $stagingColumnCount = count($this->toStagingRow(
+                $batchId,
+                0,
+                [],
+                now()->format('Y-m-d H:i:s'),
+            ));
+            $chunkSize = $this->effectiveStagingChunkSize(
+                $requestedChunkSize,
+                $totalRows,
+                $stagingColumnCount,
+            );
             $totalChunks = $totalRows > 0 ? (int) ceil($totalRows / $chunkSize) : 0;
 
             $batch->update([
@@ -122,6 +133,7 @@ final class RegistrationImportService
                         $chunk++;
                         $buffer = [];
                         $this->updateProgress($batch, $staged, $sourceRow, $chunk, $totalRows, $totalChunks);
+                        $this->yieldAfterStagingWrite();
                     }
                 }
 
@@ -133,6 +145,7 @@ final class RegistrationImportService
                 $staged += count($buffer);
                 $chunk++;
                 $this->updateProgress($batch, $staged, $sourceRow, $chunk, $totalRows, $totalChunks);
+                $this->yieldAfterStagingWrite();
             }
 
             $reader->close();
@@ -322,6 +335,34 @@ final class RegistrationImportService
         }
 
         return false;
+    }
+
+    private function effectiveStagingChunkSize(int $requestedRows, int $totalRows, int $columnCount): int
+    {
+        $largeThreshold = max(1, (int) config('registrations.large_import_threshold', 100000));
+        $largeChunkSize = max(500, (int) config('registrations.large_staging_chunk_size', 500));
+
+        $effectiveRequestedRows = $totalRows >= $largeThreshold
+            ? min($requestedRows, $largeChunkSize)
+            : $requestedRows;
+
+        return $this->safeBulkWriteSize($effectiveRequestedRows, $columnCount);
+    }
+
+    private function yieldAfterStagingWrite(): void
+    {
+        $milliseconds = max(0, (int) config('registrations.staging_throttle_ms', 15));
+        if ($milliseconds > 0) {
+            usleep($milliseconds * 1000);
+        }
+    }
+
+    private function safeBulkWriteSize(int $requestedRows, int $columnCount): int
+    {
+        $budget = max(1000, (int) config('registrations.bulk_placeholder_budget', 60000));
+        $maxRowsByPlaceholders = max(1, intdiv($budget, max(1, $columnCount)));
+
+        return max(1, min($requestedRows, $maxRowsByPlaceholders));
     }
 
     private function quickTotalRows(string $path, string $extension): int

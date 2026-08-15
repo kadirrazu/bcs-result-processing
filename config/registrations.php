@@ -3,11 +3,16 @@
 return [
     'queue' => env('REGISTRATION_IMPORT_QUEUE', 'imports'),
 
-    // Keep this below MySQL's prepared-statement placeholder limit.
-    'staging_chunk_size' => (int) env('REGISTRATION_STAGING_CHUNK_SIZE', 2000),
+    // MySQL prepared statements are limited to 65,535 placeholders.
+    // Keep a safety margin because Registration staging/merge rows contain many columns.
+    'bulk_placeholder_budget' => (int) env('REGISTRATION_BULK_PLACEHOLDER_BUDGET', 60000),
+    'staging_chunk_size' => (int) env('REGISTRATION_STAGING_CHUNK_SIZE', 1500),
+    'large_import_threshold' => (int) env('REGISTRATION_LARGE_IMPORT_THRESHOLD', 100000),
+    'large_staging_chunk_size' => (int) env('REGISTRATION_LARGE_STAGING_CHUNK_SIZE', 500),
+    'staging_throttle_ms' => (int) env('REGISTRATION_STAGING_THROTTLE_MS', 15),
     'validation_chunk_size' => (int) env('REGISTRATION_VALIDATION_CHUNK_SIZE', 5000),
     'validation_write_chunk_size' => (int) env('REGISTRATION_VALIDATION_WRITE_CHUNK_SIZE', 2000),
-    'merge_chunk_size' => (int) env('REGISTRATION_MERGE_CHUNK_SIZE', 2000),
+    'merge_chunk_size' => (int) env('REGISTRATION_MERGE_CHUNK_SIZE', 1500),
 
     // Required source headers preserve the existing Registration import contract.
     'required_headers' => [

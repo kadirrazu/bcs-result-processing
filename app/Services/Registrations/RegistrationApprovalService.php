@@ -43,7 +43,11 @@ final class RegistrationApprovalService
             $processed = 0;
             $inserted = 0;
             $updated = 0;
-            $chunkSize = max(500, (int) config('registrations.merge_chunk_size', 2000));
+            $requestedChunkSize = max(500, (int) config('registrations.merge_chunk_size', 1500));
+            $chunkSize = $this->safeBulkWriteSize(
+                $requestedChunkSize,
+                $this->registrationMergeColumnCount(),
+            );
 
             DB::connection('exam')->table('registration_import_staging')
                 ->where('batch_id', $batchId)
@@ -202,6 +206,21 @@ final class RegistrationApprovalService
             ]);
             throw $exception;
         }
+    }
+
+    private function safeBulkWriteSize(int $requestedRows, int $columnCount): int
+    {
+        $budget = max(1000, (int) config('registrations.bulk_placeholder_budget', 60000));
+        $maxRowsByPlaceholders = max(1, intdiv($budget, max(1, $columnCount)));
+
+        return max(1, min($requestedRows, $maxRowsByPlaceholders));
+    }
+
+    private function registrationMergeColumnCount(): int
+    {
+        // Candidate payload currently contains 31 insert fields plus updated_at.
+        // Keep this explicit so the placeholder budget is enforced before the upsert.
+        return 32;
     }
 
     /** @param array<string,mixed>|null $before @param array<string,mixed> $candidate */
