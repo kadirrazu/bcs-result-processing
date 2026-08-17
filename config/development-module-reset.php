@@ -3,6 +3,14 @@
 return [
     'allowed_environments' => ['local', 'development'],
 
+    // Large development resets are intentionally deleted in committed chunks.
+    // This avoids one very large InnoDB undo/redo transaction while preserving
+    // table dependency order and without disabling foreign-key checks.
+    'delete_chunk_size' => max(
+        1000,
+        (int) env('EXAMINATION_RESET_DELETE_CHUNK_SIZE', 10000)
+    ),
+
     'modules' => [
         'registration' => [
             'label' => 'Registration',

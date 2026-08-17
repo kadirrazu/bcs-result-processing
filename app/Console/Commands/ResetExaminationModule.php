@@ -66,6 +66,7 @@ final class ResetExaminationModule extends Command
         }
 
         $this->warn('Only the selected module data will be deleted. Other module tables will remain unchanged.');
+        $this->line('After confirmation, a row-based progress bar will show reset progress.');
         $typed = (string) $this->ask('Type RESET exactly to continue');
 
         if ($typed !== 'RESET') {
@@ -200,7 +201,10 @@ final class ResetExaminationModule extends Command
         $schema = $connection->getSchemaBuilder();
         $tables = array_values(array_unique((array) ($definition['tables'] ?? [])));
         $scopedDeletes = (array) ($definition['scoped_deletes'] ?? []);
-        $summary = [];
+        $chunkSize = max(
+            1000,
+            (int) config('development-module-reset.delete_chunk_size', 10000)
+        );
 
         // Fail before deleting anything if the registry contains a missing table.
         foreach ($tables as $table) {
@@ -216,44 +220,115 @@ final class ResetExaminationModule extends Command
             }
         }
 
-        /*
-         * DELETE (not TRUNCATE) is deliberate:
-         * - it works safely with FK relationships in dependency order;
-         * - it can participate in a transaction on transactional engines;
-         * - it never resets or touches tables outside the selected module.
-         */
-        $connection->transaction(function () use (
-            $connection,
-            $tables,
-            $scopedDeletes,
-            &$summary
-        ): void {
-            foreach ($scopedDeletes as $scope) {
-                $table = (string) ($scope['table'] ?? '');
-                $column = (string) ($scope['column'] ?? '');
-                $values = array_values((array) ($scope['values'] ?? []));
+        $this->components->info(
+            'Preparing reset plan and counting rows. Large tables will be deleted in chunks of '
+            .number_format($chunkSize).'.'
+        );
 
-                if ($table === '' || $column === '' || $values === []) {
-                    continue;
+        $plan = [];
+        $totalRows = 0;
+
+        foreach ($scopedDeletes as $scope) {
+            $table = (string) ($scope['table'] ?? '');
+            $column = (string) ($scope['column'] ?? '');
+            $values = array_values((array) ($scope['values'] ?? []));
+
+            if ($table === '' || $column === '' || $values === []) {
+                continue;
+            }
+
+            $before = (int) $connection->table($table)
+                ->whereIn($column, $values)
+                ->count();
+
+            $plan[] = [
+                'type' => 'scope',
+                'table' => $table,
+                'column' => $column,
+                'values' => $values,
+                'label' => "{$table} ({$column}: ".implode('|', $values).')',
+                'before' => $before,
+            ];
+            $totalRows += $before;
+        }
+
+        foreach ($tables as $table) {
+            $table = (string) $table;
+            $before = (int) $connection->table($table)->count();
+
+            $plan[] = [
+                'type' => 'table',
+                'table' => $table,
+                'label' => $table,
+                'before' => $before,
+            ];
+            $totalRows += $before;
+        }
+
+        $summary = [];
+        $progress = $this->output->createProgressBar(max(1, $totalRows));
+        $progress->setFormat(
+            ' %current%/%max% [%bar%] %percent:3s%% | %elapsed:6s% | %message%'
+        );
+        $progress->setMessage('Starting reset...');
+        $progress->start();
+
+        if ($totalRows === 0) {
+            $progress->advance();
+        }
+
+        try {
+            foreach ($plan as $item) {
+                $progress->setMessage('Deleting '.$item['label']);
+
+                $deleted = 0;
+
+                do {
+                    $query = $connection->table($item['table']);
+
+                    if ($item['type'] === 'scope') {
+                        $query->whereIn($item['column'], $item['values']);
+                    }
+
+                    /*
+                     * Each chunk is intentionally committed independently.
+                     * Compared with one huge module-wide transaction, this keeps
+                     * InnoDB undo/redo pressure bounded and makes large local
+                     * development resets much more responsive.
+                     *
+                     * We deliberately do NOT use TRUNCATE or disable FK checks.
+                     */
+                    $affected = (int) $query
+                        ->limit($chunkSize)
+                        ->delete();
+
+                    if ($affected > 0) {
+                        $deleted += $affected;
+                        $progress->advance($affected);
+                    }
+                } while ($affected === $chunkSize);
+
+                $afterQuery = $connection->table($item['table']);
+                if ($item['type'] === 'scope') {
+                    $afterQuery->whereIn($item['column'], $item['values']);
                 }
 
-                $query = $connection->table($table)->whereIn($column, $values);
-                $before = (int) (clone $query)->count();
-                $query->delete();
-                $after = (int) $connection->table($table)->whereIn($column, $values)->count();
+                $after = (int) $afterQuery->count();
+                $summary[] = [$item['label'], (int) $item['before'], $after];
 
-                $summary[] = ["{$table} ({$column}: ".implode('|', $values).')', $before, $after];
+                if ($after !== 0) {
+                    throw new \RuntimeException(
+                        "Reset verification failed for [{$item['label']}]: {$after} row(s) remain."
+                    );
+                }
             }
-
-            foreach ($tables as $table) {
-                $before = (int) $connection->table((string) $table)->count();
-                $connection->table((string) $table)->delete();
-                $after = (int) $connection->table((string) $table)->count();
-
-                $summary[] = [(string) $table, $before, $after];
-            }
-        }, 3);
+        } finally {
+            $progress->setMessage('Reset finished');
+            $progress->finish();
+            $this->newLine(2);
+        }
 
         return $summary;
     }
+
 }
