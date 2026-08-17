@@ -115,8 +115,14 @@ final class MeritController extends Controller
 
         $q = MeritResult::query()
             ->leftJoin('registrations as registration_lookup', 'registration_lookup.id', '=', 'merit_results.registration_id')
+            ->leftJoin('tabulation_results as tabulation_lookup', 'tabulation_lookup.id', '=', 'merit_results.tabulation_result_id')
             ->where('merit_results.processing_run_id', $runId)
-            ->select('merit_results.*', 'registration_lookup.name as candidate_name');
+            ->select(
+                'merit_results.*',
+                'registration_lookup.name as candidate_name',
+                'tabulation_lookup.general_grand_total as general_grand_total',
+                'tabulation_lookup.technical_grand_total as technical_grand_total',
+            );
 
         if ($search !== '') {
             $q->where(function ($x) use ($search): void {

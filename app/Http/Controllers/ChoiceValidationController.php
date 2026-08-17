@@ -28,6 +28,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use App\Models\ChoiceValidationFinalizationRun;
 use App\Services\ChoiceValidation\ChoiceValidationFinalizationService;
@@ -221,26 +222,81 @@ final class ChoiceValidationController extends Controller
     public function processChoices(Request $request, ExaminationContext $context, CircularFinalizedDatasetService $circular): RedirectResponse
     {
         $this->authorize('process', ChoiceSource::class);
-        $state=ChoiceValidationProcessingState::query()->firstOrCreate(['id'=>1],['status'=>'not_started']);
-        abort_unless($state->approved_source_version,409,'Approve a Choice source dataset first.');
-        abort_if(ChoiceValidationRun::query()->whereIn('status',['queued','running'])->exists(),409,'A Choice Validation run is already active.');
-        $examId=$context->currentId(); abort_if($examId===null,409,'No examination is selected.');
-        $circularVersion=$circular->finalizedVersion();
-        $version=((int)$state->current_validation_version)+1;
-        $total=ChoiceSource::query()->where('source_version',$state->approved_source_version)->count(); abort_if($total<1,409,'Approved Choice source dataset is empty.');
-        $run=ChoiceValidationRun::query()->create(['source_version'=>$state->approved_source_version,'validation_version'=>$version,'circular_version'=>$circularVersion,'status'=>'queued','total_candidates'=>$total,'started_by'=>$request->user()->id]);
-        $state->update([
-            'status' => 'validation_queued',
-            'latest_validation_run_id' => $run->id,
-            'is_stale' => false,
-            'stale_reason' => null,
-            'finalized_validation_version' => null,
-            'latest_finalization_run_id' => null,
-            'finalized_at' => null,
-        ]);
-        ChoiceValidationProcessingAudit::query()->create(['action'=>'CHOICE_VALIDATION_QUEUED','actor_id'=>$request->user()->id,'actor_name'=>$request->user()->name ?? null,'reason'=>'Queued Choice Validation against finalized Circular.','summary'=>['run_id'=>$run->id,'source_version'=>$run->source_version,'validation_version'=>$version,'circular_version'=>$circularVersion],'created_at'=>now()]);
-        ProcessChoiceValidation::dispatch((int)$examId,(int)$run->id);
-        return redirect()->route('choice-validation.results',['run'=>$run->id])->with('success','Choice Validation queued.');
+        ChoiceValidationProcessingState::query()->firstOrCreate(['id' => 1], ['status' => 'not_started']);
+
+        $examId = $context->currentId();
+        abort_if($examId === null, 409, 'No examination is selected.');
+        $circularVersion = $circular->finalizedVersion();
+
+        $run = DB::connection('exam')->transaction(function () use ($request, $circularVersion): ChoiceValidationRun {
+            // Serialize version allocation so retry/double-click cannot reserve the same
+            // source_version + validation_version pair.
+            $state = ChoiceValidationProcessingState::query()
+                ->whereKey(1)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            abort_unless($state->approved_source_version, 409, 'Approve a Choice source dataset first.');
+            abort_if(
+                ChoiceValidationRun::query()->whereIn('status', ['queued', 'running'])->exists(),
+                409,
+                'A Choice Validation run is already active.'
+            );
+
+            $sourceVersion = (int) $state->approved_source_version;
+            $existingRunVersion = (int) (ChoiceValidationRun::query()
+                ->where('source_version', $sourceVersion)
+                ->max('validation_version') ?? 0);
+
+            // A failed/aborted run may already have reserved a validation version while
+            // current_validation_version still points to the last completed version.
+            // Never reuse a previously allocated version.
+            $version = max((int) $state->current_validation_version, $existingRunVersion) + 1;
+
+            $total = ChoiceSource::query()->where('source_version', $sourceVersion)->count();
+            abort_if($total < 1, 409, 'Approved Choice source dataset is empty.');
+
+            $run = ChoiceValidationRun::query()->create([
+                'source_version' => $sourceVersion,
+                'validation_version' => $version,
+                'circular_version' => $circularVersion,
+                'status' => 'queued',
+                'total_candidates' => $total,
+                'started_by' => $request->user()->id,
+            ]);
+
+            $state->update([
+                'status' => 'validation_queued',
+                'latest_validation_run_id' => $run->id,
+                'is_stale' => false,
+                'stale_reason' => null,
+                'finalized_validation_version' => null,
+                'latest_finalization_run_id' => null,
+                'finalized_at' => null,
+            ]);
+
+            ChoiceValidationProcessingAudit::query()->create([
+                'action' => 'CHOICE_VALIDATION_QUEUED',
+                'actor_id' => $request->user()->id,
+                'actor_name' => $request->user()->name ?? null,
+                'reason' => 'Queued Choice Validation against finalized Circular.',
+                'summary' => [
+                    'run_id' => $run->id,
+                    'source_version' => $run->source_version,
+                    'validation_version' => $version,
+                    'circular_version' => $circularVersion,
+                ],
+                'created_at' => now(),
+            ]);
+
+            return $run;
+        });
+
+        ProcessChoiceValidation::dispatch((int) $examId, (int) $run->id);
+
+        return redirect()
+            ->route('choice-validation.results', ['run' => $run->id])
+            ->with('success', 'Choice Validation queued.');
     }
 
     public function results(Request $request, ?ChoiceValidationRun $run=null): View

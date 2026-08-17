@@ -1,1 +1,72 @@
-<?php\n\nnamespace Tests\\Feature\\Registration;\n\nuse Tests\\TestCase;\n\nfinal class RegistrationLargeImportPerformanceContractTest extends TestCase\n{\n    public function test_large_registration_staging_uses_safe_adaptive_chunks_and_db_yield(): void\n    {\n        $config = file_get_contents(config_path('registrations.php'));\n        $service = file_get_contents(app_path('Services/Registrations/RegistrationImportService.php'));\n        $migration = file_get_contents(database_path('examination-migrations/2026_08_15_123000_optimize_registration_import_staging_indexes.php'));\n\n        $this->assertStringContainsString("REGISTRATION_LARGE_IMPORT_THRESHOLD', 100000", $config);\n        $this->assertStringContainsString("REGISTRATION_LARGE_STAGING_CHUNK_SIZE', 500", $config);\n        $this->assertStringContainsString("REGISTRATION_STAGING_THROTTLE_MS', 15", $config);\n\n        $this->assertStringContainsString('effectiveStagingChunkSize(', $service);\n        $this->assertStringContainsString('$totalRows >= $largeThreshold', $service);\n        $this->assertStringContainsString('min($requestedRows, $largeChunkSize)', $service);\n        $this->assertStringContainsString('yieldAfterStagingWrite()', $service);\n        $this->assertStringContainsString('usleep($milliseconds * 1000)', $service);\n\n        $this->assertStringContainsString("dropIndex('registration_import_staging_reg_index')", $migration);\n        $this->assertStringContainsString("dropIndex('registration_import_staging_user_id_index')", $migration);\n        $this->assertStringNotContainsString("dropUnique", $migration);\n    }\n}\n
+<?php
+
+namespace Tests\Feature\Registration;
+
+use Tests\TestCase;
+
+final class RegistrationLargeImportPerformanceContractTest extends TestCase
+{
+    public function test_large_registration_staging_uses_safe_adaptive_chunks_and_db_yield(): void
+    {
+        $config = file_get_contents(config_path('registrations.php'));
+        $service = file_get_contents(app_path('Services/Registrations/RegistrationImportService.php'));
+        $migration = file_get_contents(
+            database_path('examination-migrations/2026_08_15_123000_optimize_registration_import_staging_indexes.php')
+        );
+
+        $this->assertStringContainsString(
+            "REGISTRATION_LARGE_IMPORT_THRESHOLD', 100000",
+            $config
+        );
+
+        $this->assertStringContainsString(
+            "REGISTRATION_LARGE_STAGING_CHUNK_SIZE', 500",
+            $config
+        );
+
+        $this->assertStringContainsString(
+            "REGISTRATION_STAGING_THROTTLE_MS', 15",
+            $config
+        );
+
+        $this->assertStringContainsString(
+            'effectiveStagingChunkSize(',
+            $service
+        );
+
+        $this->assertStringContainsString(
+            '$totalRows >= $largeThreshold',
+            $service
+        );
+
+        $this->assertStringContainsString(
+            'min($requestedRows, $largeChunkSize)',
+            $service
+        );
+
+        $this->assertStringContainsString(
+            'yieldAfterStagingWrite()',
+            $service
+        );
+
+        $this->assertStringContainsString(
+            'usleep($milliseconds * 1000)',
+            $service
+        );
+
+        $this->assertStringContainsString(
+            "dropIndex('registration_import_staging_reg_index')",
+            $migration
+        );
+
+        $this->assertStringContainsString(
+            "dropIndex('registration_import_staging_user_id_index')",
+            $migration
+        );
+
+        $this->assertStringNotContainsString(
+            'dropUnique',
+            $migration
+        );
+    }
+}

@@ -7,7 +7,7 @@ return new class extends Migration {
         $schema=Schema::connection('exam');
         $schema->create('choice_validation_runs',function(Blueprint $table):void{
             $table->id();$table->unsignedInteger('source_version')->index();$table->unsignedInteger('validation_version')->index();$table->unsignedInteger('circular_version')->index();
-            $table->string('status',32)->default('queued')->index();$table->unsignedInteger('total_candidates')->default(0);$table->unsignedInteger('processed_candidates')->default(0);
+            $table->string('status',80)->default('queued')->index();$table->unsignedInteger('total_candidates')->default(0);$table->unsignedInteger('processed_candidates')->default(0);
             $table->unsignedInteger('valid_candidates')->default(0);$table->unsignedInteger('not_applicable_candidates')->default(0);$table->unsignedInteger('zero_valid_choice_candidates')->default(0);
             $table->unsignedInteger('kept_choices')->default(0);$table->unsignedInteger('removed_choices')->default(0);$table->unsignedInteger('expanded_choices')->default(0);
             $table->decimal('progress_percent',7,4)->default(0);$table->unsignedBigInteger('started_by')->nullable()->index();$table->timestamp('started_at')->nullable();$table->timestamp('finished_at')->nullable();$table->text('failure_message')->nullable();$table->timestamps();
