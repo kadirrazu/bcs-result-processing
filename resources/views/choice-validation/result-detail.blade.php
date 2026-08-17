@@ -19,9 +19,6 @@
 @endsection
 
 @section('content')
-@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-@if(session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
-
 <div class="card mb-3">
     <div class="card-header"><h3 class="card-title">Candidate &amp; Validation Summary</h3></div>
     <div class="card-body">

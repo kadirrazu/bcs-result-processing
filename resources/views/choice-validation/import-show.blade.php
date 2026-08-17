@@ -35,7 +35,6 @@
     $showProgress = in_array($batch->status, $activeStatuses, true);
 @endphp
 
-@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
 <div id="choice-import-progress" class="card mb-3" data-status-url="{{ route('choice-validation.import.status', $batch) }}" @unless($showProgress) style="display:none" @endunless>

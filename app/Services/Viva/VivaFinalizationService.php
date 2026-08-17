@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 final class VivaFinalizationService
 {
-    public function __construct(private readonly VivaAuditService $audit,private readonly VivaRuleConfig $rules){}
+    public function __construct(private readonly VivaAuditService $audit,private readonly VivaRuleConfig $rules,private readonly \App\Services\Dependencies\DownstreamStalePropagationService $downstream){}
     public function finalize(User $actor,string $confirmation,?string $notes=null):VivaFinalizationRun
     {
         if($confirmation!=='FINALIZE'){throw ValidationException::withMessages(['confirmation'=>'Type FINALIZE exactly to confirm the final Viva checkpoint.']);}
@@ -44,6 +44,11 @@ final class VivaFinalizationService
             $before=$state->status instanceof \BackedEnum?$state->status->value:(string)$state->status;
             $state->update(['status'=>'result_finalized','result_finalized_by'=>$actor->id,'result_finalized_at'=>now(),'summary'=>array_merge((array)$state->summary,['finalization_run_id'=>$finalization->id,'finalization'=>$summary]),'is_stale'=>false,'stale_reason'=>null]);
             $this->audit->record('VIVA_RESULT_FINALIZED',$actor,$before,'result_finalized','Authorized final Viva review completed.',summary:['finalization_run_id'=>$finalization->id,'processing_run_id'=>$latestRun->id,'processing_version'=>$latestRun->processing_version,'counts'=>$summary,'confidential_output'=>true]);
+            $this->downstream->propagate(
+                'viva',
+                'Viva result was finalized/re-finalized. Tabulation and Choice Validation generated from an older Viva result must be regenerated.',
+                (int) $actor->id,
+            );
             return $finalization;
         },3);
     }

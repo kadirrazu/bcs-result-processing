@@ -22,6 +22,7 @@ final class ChoiceValidationFinalizationService
     public function __construct(
         private readonly CircularFinalizedDatasetService $circular,
         private readonly ChoiceValidationDatasetHasher $hasher,
+        private readonly \App\Services\Dependencies\DownstreamStalePropagationService $downstream,
     ) {}
 
     /**
@@ -285,6 +286,12 @@ final class ChoiceValidationFinalizationService
 
             return $finalization;
         }, 3);
+
+        $this->downstream->propagate(
+            'choice_validation',
+            'Choice Validation v'.$finalization->validation_version.' was finalized. Merit generated from an older Choice Validation must be regenerated.',
+            (int) $actor->id,
+        );
 
         Log::channel('stack')->info('CHOICE_VALIDATION_FINALIZED', [
             'finalization_run_id' => $finalization->id,

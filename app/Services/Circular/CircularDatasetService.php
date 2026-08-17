@@ -14,7 +14,6 @@ final class CircularDatasetService
 {
     private const DOWNSTREAM_STAGES = [
         'choice_validation' => 'Choice Validation',
-        'tabulation' => 'Tabulation',
         'merit_generation' => 'Merit Generation',
         'choice_optimization' => 'Choice Optimization',
         'allocation_preparation' => 'Allocation Preparation / Allocation',
@@ -23,6 +22,7 @@ final class CircularDatasetService
     public function __construct(
         private readonly CircularEntryValidator $validator,
         private readonly CircularAuditService $audit,
+        private readonly \App\Services\Dependencies\DownstreamStalePropagationService $downstream,
     ) {}
 
     public function approveImport(CircularImportBatch $batch, User $actor, ?string $note = null): int
@@ -82,6 +82,14 @@ final class CircularDatasetService
                 'version' => $version,
                 'rows' => $batch->valid_rows,
             ]);
+
+            if (($before['version'] ?? 0) > 0) {
+                $this->downstream->propagate(
+                    'circular',
+                    'Circular dataset advanced to version '.$version.'. Re-run dependent modules.',
+                    (int) $actor->id,
+                );
+            }
 
             return $version;
         });
@@ -350,6 +358,12 @@ final class CircularDatasetService
             ['version' => $oldVersion],
             ['version' => $newVersion],
             ['downstream_impact' => $summary['downstream_impact']]
+        );
+
+        $this->downstream->propagate(
+            'circular',
+            $staleReason,
+            (int) $actor->id,
         );
 
         return $newVersion;

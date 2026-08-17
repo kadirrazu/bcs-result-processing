@@ -23,6 +23,7 @@ use App\Services\ChoiceValidation\ChoiceTemplateService;
 use App\Services\ChoiceValidation\ChoiceManualCorrectionService;
 use App\Services\ChoiceValidation\ChoiceCandidateRevalidationService;
 use App\Services\ChoiceValidation\ChoiceEffectiveSourceResolver;
+use App\Services\ChoiceValidation\ChoiceValidationReadinessService;
 use App\Support\Examinations\ExaminationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -41,7 +42,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class ChoiceValidationController extends Controller
 {
-    public function index(ChoiceColumnResolver $columns, ChoiceValidationFinalizationService $finalization): View
+    public function index(ChoiceColumnResolver $columns, ChoiceValidationFinalizationService $finalization, ChoiceValidationReadinessService $readiness): View
     {
         $this->authorize('viewAny', ChoiceSource::class);
         $state = ChoiceValidationProcessingState::query()->firstOrCreate(['id' => 1], ['status' => 'not_started']);
@@ -49,6 +50,7 @@ final class ChoiceValidationController extends Controller
         $latestValidationRun = ChoiceValidationRun::query()->latest('id')->first();
         $finalizationReadiness = $finalization->readiness();
         $latestFinalizationRun = ChoiceValidationFinalizationRun::query()->latest('id')->first();
+        $validationReadiness = $readiness->summary();
 
         return view('choice-validation.index', [
             'state' => $state,
@@ -66,6 +68,7 @@ final class ChoiceValidationController extends Controller
             'latestValidationRun' => $latestValidationRun,
             'finalizationReadiness' => $finalizationReadiness,
             'latestFinalizationRun' => $latestFinalizationRun,
+            'validationReadiness' => $validationReadiness,
             'validationCounts' => [
                 'valid' => ChoiceValidationResult::query()->where('validation_version', (int) $state->current_validation_version)->where('status', 'valid')->count(),
                 'not_applicable' => ChoiceValidationResult::query()->where('validation_version', (int) $state->current_validation_version)->where('status', 'like', 'not_applicable%')->count(),
@@ -219,13 +222,14 @@ final class ChoiceValidationController extends Controller
         );
     }
 
-    public function processChoices(Request $request, ExaminationContext $context, CircularFinalizedDatasetService $circular): RedirectResponse
+    public function processChoices(Request $request, ExaminationContext $context, CircularFinalizedDatasetService $circular, ChoiceValidationReadinessService $readiness): RedirectResponse
     {
         $this->authorize('process', ChoiceSource::class);
         ChoiceValidationProcessingState::query()->firstOrCreate(['id' => 1], ['status' => 'not_started']);
 
         $examId = $context->currentId();
         abort_if($examId === null, 409, 'No examination is selected.');
+        $readiness->assertReady();
         $circularVersion = $circular->finalizedVersion();
 
         $run = DB::connection('exam')->transaction(function () use ($request, $circularVersion): ChoiceValidationRun {

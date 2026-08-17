@@ -18,6 +18,7 @@ final class ChoiceManualCorrectionService
     public function __construct(
         private readonly ChoiceColumnResolver $columns,
         private readonly ChoiceEffectiveSourceResolver $effectiveSource,
+        private readonly \App\Services\Dependencies\DownstreamStalePropagationService $downstream,
     ) {}
 
     /** @param array<string,mixed> $input */
@@ -127,6 +128,12 @@ final class ChoiceManualCorrectionService
             'level' => 'info',
             'days' => 30,
         ]);
+        $this->downstream->propagate(
+            'choice_validation',
+            "Choice source for REG {$source->reg} was manually corrected and requires candidate revalidation.",
+            (int) $actor->id,
+        );
+
         $logger->info('CHOICE_MANUAL_CORRECTION', [
             'reg' => $source->reg,
             'source_version' => $source->source_version,

@@ -25,10 +25,10 @@
     $approvableRows = $latestBatch ? max(0, (int) $latestBatch->valid_rows - $approvedRows) : 0;
     $sourcePartiallyApproved = $approvedRows > 0 && $invalidRows > 0;
     $sourceFullyApproved = $latestBatch && $latestBatch->status === 'approved' && $invalidRows === 0;
+    $validationActive = $latestValidationRun && in_array($latestValidationRun->status,['queued','running'],true);
+    $validationCanRun = (bool) ($validationReadiness['ready'] ?? false) && !$validationActive;
 @endphp
 
-@if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-@if(session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
 <div class="row row-cards mb-3 align-items-stretch">
@@ -36,6 +36,50 @@
     <div class="col-sm-6 col-lg-3 d-flex"><div class="card card-sm h-100 w-100"><div class="card-body"><div class="text-secondary">Approved Source Rows</div><div class="h2 mb-0">{{ number_format($sourceCount) }}</div><div class="small text-secondary">Source v{{ $state->approved_source_version ?? '—' }}</div></div></div></div>
     <div class="col-sm-6 col-lg-3 d-flex"><div class="card card-sm h-100 w-100"><div class="card-body"><div class="text-secondary">Pending Invalid Correction</div><div class="h2 mb-0">{{ number_format($pendingCorrectionRows) }}</div><div class="small text-secondary">Does not block valid-row approval</div></div></div></div>
     <div class="col-sm-6 col-lg-3 d-flex"><div class="card card-sm h-100 w-100"><div class="card-body"><div class="text-secondary">Module State</div><div class="h3 mb-0">{{ \App\Support\ChoiceValidationStatusPresenter::label($state->status) }}</div>@if($state->is_stale)<div class="small text-warning">Choice Validation is outdated</div>@endif</div></div></div>
+</div>
+
+<div class="card mb-3 shadow-sm">
+    <div class="card-header">
+        <div>
+            <h3 class="card-title mb-1">Upstream Readiness / Validation Preconditions</h3>
+            <div class="text-secondary small">Run Validation is available only when every required upstream dataset is finalized and ready.</div>
+        </div>
+        <div class="ms-auto">
+            @if($validationReadiness['ready'])
+                <span class="badge bg-green-lt text-green">ALL READY</span>
+            @else
+                <span class="badge bg-red-lt text-red">VALIDATION BLOCKED</span>
+            @endif
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-vcenter card-table mb-0">
+            <thead><tr><th>Dependency</th><th>Status</th><th>Readiness Detail</th></tr></thead>
+            <tbody>
+                @foreach($validationReadiness['checks'] as $check)
+                    <tr>
+                        <td class="fw-medium">{{ $check['label'] }}</td>
+                        <td>
+                            @if($check['ready'])
+                                <span class="badge bg-green-lt text-green">READY</span>
+                            @else
+                                <span class="badge bg-red-lt text-red">NOT_READY</span>
+                            @endif
+                        </td>
+                        <td class="{{ $check['ready'] ? 'text-secondary' : 'text-red' }}">{{ $check['detail'] }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+    @if(!$validationReadiness['ready'])
+        <div class="card-footer bg-red-lt">
+            <div class="fw-medium text-red mb-1">Validation cannot start</div>
+            @foreach($validationReadiness['reasons'] as $reason)
+                <div class="small text-red">• {{ $reason }}</div>
+            @endforeach
+        </div>
+    @endif
 </div>
 
 <div class="card mb-3 shadow-sm">
@@ -116,7 +160,7 @@
                         <div class="d-flex gap-2 flex-wrap">
                             @if($state->approved_source_version)
                                 <form method="POST" action="{{ route('choice-validation.process') }}">@csrf
-                                    <button class="btn btn-sm btn-primary" @disabled($latestValidationRun && in_array($latestValidationRun->status,['queued','running'],true))>
+                                    <button class="btn btn-sm btn-primary" @disabled(!$validationCanRun) title="{{ !$validationCanRun ? ($validationReadiness['reasons'][0] ?? ($validationActive ? 'A Choice Validation run is already active.' : 'Validation prerequisites are not ready.')) : 'Run Choice Validation' }}">
                                         {{ $state->is_stale ? 'Re-run Validation' : 'Run Validation' }}
                                     </button>
                                 </form>
@@ -125,6 +169,9 @@
                                 <a class="btn btn-sm btn-outline-primary" href="{{ route('choice-validation.results',$latestValidationRun) }}">Review Results</a>
                             @endif
                             @if(!$state->approved_source_version)<span class="text-secondary">Approve valid source rows first.</span>@endif
+                            @if($state->approved_source_version && !$validationReadiness['ready'])
+                                <span class="small text-red">{{ $validationReadiness['reasons'][0] ?? 'Validation prerequisites are not ready.' }}</span>
+                            @endif
                         </div>
                     </td>
                 </tr>

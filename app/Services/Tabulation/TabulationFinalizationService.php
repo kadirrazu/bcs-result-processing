@@ -3,7 +3,7 @@ namespace App\Services\Tabulation;
 use App\Models\TabulationFinalizationRun;use App\Models\TabulationProcessingRun;use App\Models\TabulationProcessingState;use App\Models\TabulationResult;use App\Models\User;use Illuminate\Support\Facades\DB;use Illuminate\Validation\ValidationException;
 final class TabulationFinalizationService
 {
- public function __construct(private readonly TabulationReadinessService $readiness,private readonly TabulationAuditService $audit,private readonly TabulationSourceSnapshotComparator $snapshotComparator,private readonly TabulationDatasetHasher $datasetHasher){}
+ public function __construct(private readonly TabulationReadinessService $readiness,private readonly TabulationAuditService $audit,private readonly \App\Services\Dependencies\DownstreamStalePropagationService $downstream,private readonly TabulationSourceSnapshotComparator $snapshotComparator,private readonly TabulationDatasetHasher $datasetHasher){}
  public function finalize(User $actor,string $confirmation,?string $notes=null):TabulationFinalizationRun
  {
   if($confirmation!=='FINALIZE')throw ValidationException::withMessages(['confirmation'=>'Type FINALIZE exactly to confirm Tabulation.']);
@@ -22,7 +22,7 @@ final class TabulationFinalizationService
    $final=TabulationFinalizationRun::query()->create(['processing_run_id'=>$run->id,'processing_version'=>$run->processing_version,'status'=>'current','source_snapshot'=>$run->source_snapshot,'dataset_hash'=>$currentHash,'summary'=>$summary,'finalized_by'=>$actor->id,'finalized_at'=>now(),'notes'=>$notes]);
    $before=(string)$state->status;$state->update(['status'=>'finalized','latest_finalization_run_id'=>$final->id,'dataset_hash'=>$currentHash,'finalized_by'=>$actor->id,'finalized_at'=>now(),'summary'=>$summary,'is_stale'=>false,'stale_reason'=>null]);
    $this->audit->record('TABULATION_FINALIZED',$actor,$before,'finalized','Authorized final Tabulation review completed.',$summary,$run->id);
-   return $final;
+   $this->downstream->propagate('tabulation','A new Tabulation dataset was finalized. Merit generated from an older Tabulation must be regenerated.',(int)$actor->id);return $final;
   },3);
  }
 }

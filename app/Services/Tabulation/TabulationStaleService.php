@@ -3,7 +3,7 @@ namespace App\Services\Tabulation;
 use App\Models\TabulationFinalizationRun;use App\Models\TabulationProcessingState;use Illuminate\Support\Facades\Schema;
 final class TabulationStaleService
 {
-    public function __construct(private readonly TabulationReadinessService $readiness,private readonly TabulationSourceSnapshotComparator $snapshotComparator,private readonly TabulationDatasetHasher $datasetHasher){}
+    public function __construct(private readonly TabulationReadinessService $readiness,private readonly TabulationSourceSnapshotComparator $snapshotComparator,private readonly TabulationDatasetHasher $datasetHasher,private readonly \App\Services\Dependencies\DownstreamStalePropagationService $downstream){}
     public function synchronize(?array $readinessInspection = null, bool $verifyDatasetHash = true):bool
     {
         if(!Schema::connection('exam')->hasTable('tabulation_processing_states'))return false;
@@ -25,5 +25,6 @@ final class TabulationStaleService
         $state=TabulationProcessingState::query()->first();if(!$state||!$state->latest_run_id)return;
         $state->update(['is_stale'=>true,'status'=>'stale','stale_reason'=>$reason,'finalized_at'=>null,'finalized_by'=>null]);
         if(Schema::connection('exam')->hasTable('tabulation_finalization_runs'))TabulationFinalizationRun::query()->where('status','current')->update(['status'=>'superseded']);
+        $this->downstream->propagate('tabulation',$reason);
     }
 }

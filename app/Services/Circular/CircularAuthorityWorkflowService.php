@@ -19,6 +19,7 @@ final class CircularAuthorityWorkflowService
         private readonly CircularAuthorityPreviewPdfReport $report,
         private readonly CircularAuditService $audit,
         private readonly CircularDatasetHasher $datasetHasher,
+        private readonly \App\Services\Dependencies\DownstreamStalePropagationService $downstream,
     ) {}
 
     public function datasetHash(int $version): string
@@ -136,6 +137,13 @@ final class CircularAuthorityWorkflowService
             ]);
 
             $this->audit->record('circular_finalized', $actor, $confirmation->confirmation_notes, ['status', 'finalized_version'], ['status' => CircularProcessingStatus::Confirmed->value], ['status' => CircularProcessingStatus::Finalized->value, 'version' => $version], ['confirmation_id' => $confirmation->id, 'dataset_hash' => $confirmation->dataset_hash]);
+
+            $this->downstream->propagate(
+                'circular',
+                'Circular v'.$version.' was finalized. Any downstream dataset generated from an older Circular version must be regenerated.',
+                (int) $actor->id,
+            );
+
             return $version;
         });
     }

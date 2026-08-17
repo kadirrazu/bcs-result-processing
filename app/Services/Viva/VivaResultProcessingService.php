@@ -5,13 +5,18 @@ namespace App\Services\Viva;
 use App\Models\VivaProcessingRun;
 use App\Models\VivaProcessingState;
 use App\Models\VivaResult;
+use App\Services\ChoiceValidation\ChoiceValidationVivaStaleService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
 final class VivaResultProcessingService
 {
-    public function __construct(private readonly VivaRuleConfig $rules) {}
+    public function __construct(
+        private readonly VivaRuleConfig $rules,
+        private readonly ChoiceValidationVivaStaleService $choiceValidationStale,
+    ) {}
 
     public function process(int $runId, int $actorId): VivaProcessingRun
     {
@@ -167,6 +172,21 @@ final class VivaResultProcessingService
                 'is_stale' => false,
                 'stale_reason' => null,
             ]);
+
+            // Choice Validation is derived from finalized Viva candidate status /
+            // surviving Written track. A newly processed Viva result invalidates
+            // any older Choice Validation. Failure to write this eager marker must
+            // not corrupt an otherwise completed Viva run; landing readiness also
+            // performs the same synchronization as a safety net.
+            try {
+                $this->choiceValidationStale->synchronize($actorId);
+            } catch (Throwable $staleException) {
+                Log::warning('Could not eagerly mark Choice Validation stale after Viva processing.', [
+                    'viva_processing_run_id' => $run->id,
+                    'actor_id' => $actorId,
+                    'exception' => $staleException,
+                ]);
+            }
 
             return $run->fresh();
         } catch (Throwable $exception) {

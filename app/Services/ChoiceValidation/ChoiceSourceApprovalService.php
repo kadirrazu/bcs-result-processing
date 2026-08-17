@@ -12,7 +12,10 @@ use RuntimeException;
 
 final class ChoiceSourceApprovalService
 {
-    public function __construct(private readonly ChoiceColumnResolver $columns) {}
+    public function __construct(
+        private readonly ChoiceColumnResolver $columns,
+        private readonly \App\Services\Dependencies\DownstreamStalePropagationService $downstream,
+    ) {}
 
     /**
      * Approve every currently valid, not-yet-approved staging row.
@@ -162,6 +165,14 @@ final class ChoiceSourceApprovalService
                 'batch_id' => $batch->id,
                 'created_at' => now(),
             ]);
+
+            if ($hadValidation) {
+                $this->downstream->propagate(
+                    'choice_validation',
+                    'Approved Choice source rows changed after Choice Validation. Re-run Choice Validation.',
+                    (int) $actor->getAuthIdentifier(),
+                );
+            }
 
             return [
                 'source_version' => $sourceVersion,
