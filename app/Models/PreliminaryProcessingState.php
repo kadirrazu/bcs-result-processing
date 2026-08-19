@@ -7,7 +7,17 @@ use App\Enums\PreliminaryProcessingStatus;
 /** Singleton-like examination record powering the preliminary processing board. */
 final class PreliminaryProcessingState extends ExaminationModel
 {
+    /**
+     * This is a singleton examination state row. Runtime code consistently
+     * addresses it as id=1, so Eloquent must never allocate a new auto-increment
+     * key after a module reset.
+     */
+    public $incrementing = false;
+
+    protected $keyType = 'int';
+
     protected $fillable = [
+        'id',
         'status', 'latest_import_batch_id', 'latest_reconciliation_report_id',
         'latest_distribution_report_id', 'current_cutoff_decision_id', 'latest_finalization_run_id',
         'cutoff_mark', 'cutoff_set_by', 'cutoff_set_at', 'cutoff_requires_review',
