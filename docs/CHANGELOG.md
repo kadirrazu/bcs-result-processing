@@ -15,6 +15,24 @@
 - Database design principles.
 - Standard module development workflow.
 
+
+## 2026-08-20 — Tabulation Module final lock
+- Added final as-built Tabulation specification and locked dependency contract.
+- Locked Tabulation readiness to Registration + Preliminary + Written + Viva; Circular/Choice Validation do not gate or stale Tabulation.
+- Documented APPEARED-only population, one-row-per-candidate/GT dual-track semantics, derived grand totals, merit eligibility, 75% warning-only high-total review, source snapshots, dataset hash, finalization, rollback, reporting and audit behavior.
+- Status: **TABULATION MODULE = COMPLETE / LOCKED**.
+
+## 2026-08-20 — Merit Generation Module final lock
+- Added final as-built Merit Generation specification.
+- Locked Merit readiness to finalized/hash-verified Circular + Tabulation + Choice Validation with Circular-version parity for Choice Validation.
+- Documented deterministic common/general/technical ranking, locked tie-break order, cadre-wise merit, `all_merit_tech`, stale handling, finalization, rollback, review/reporting and export contracts.
+- Status: **MERIT GENERATION MODULE = COMPLETE / LOCKED**.
+
+## 2026-08-20 — Completion checkpoint through Merit
+- Added formal project completion/lock checkpoint through Merit.
+- Confirmed no known functional/business-rule work remains from Registration through Merit at this checkpoint.
+- Next development boundary: Choice Optimization, then integration with the existing validated Allocation Engine.
+
 ## v1.8 - Registration Module
 - Added central gender, division, district and university masters.
 - Added examination-specific registration and import-batch schema.

@@ -28,6 +28,11 @@
 - Processing Console UI
 - Deployment and Environment
 
+## Completed Result Processing Modules
+- [88 — Tabulation Module — Final Locked As-Built Specification v1.0](88-tabulation-module-final-locked-v1.0.md)
+- [89 — Merit Generation Module — Final Locked As-Built Specification v1.0](89-merit-generation-module-final-locked-v1.0.md)
+- [90 — Completion & Lock Checkpoint Through Merit](90-completion-lock-checkpoint-through-merit.md)
+
 ## Change History
 See [CHANGELOG.md](CHANGELOG.md).
 
