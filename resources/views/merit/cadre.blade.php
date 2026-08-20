@@ -42,36 +42,44 @@
                 <table class="table table-vcenter">
                     <thead>
                         <tr>
-                            <th>Cadre Merit</th>
+                            <th class="text-center">Cadre Merit</th>
                             <th>Candidate</th>
-                            <th>Source Merit</th>
-                            <th>Choice Position</th>
-                            <th>Common</th>
-                            <th>General</th>
-                            <th>Technical</th>
-                            <th>all_merit_tech</th>
+                            <th>Grand Total (G/T)</th>
+                            <th class="text-center">Source Merit</th>
+                            <th class="text-center">Choice Position</th>
+                            <th class="text-center">Common</th>
+                            <th class="text-center">General</th>
+                            <th class="text-center">Technical</th>
+                            <th style="width:160px;">all_merit_tech</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
                     @forelse($rows as $r)
                         <tr>
-                            <td><strong>{{ $r->cadre_merit_position }}</strong></td>
+                            <td class="text-center"><strong>{{ $r->cadre_merit_position }}</strong></td>
                             <td><strong>{{ $r->reg }}</strong><br><span>{{ $r->candidate_name ?: '—' }}</span><br><span class="text-secondary small">{{ $r->user_id }}</span></td>
-                            <td>{{ $r->source_merit_position }}</td>
-                            <td>{{ $r->choice_position }}</td>
-                            <td>{{ $r->common_merit_position ?? '—' }}</td>
-                            <td>{{ $r->general_merit_position ?? '—' }}</td>
-                            <td>{{ $r->technical_merit_position ?? '—' }}</td>
-                            <td><code>{{ \App\Models\MeritResult::allMeritTechJson($r->all_merit_tech) }}</code></td>
-                            <td>
+                            <td class="text-nowrap">
+                                <div><span class="text-secondary small">General</span> <strong>{{ $r->general_grand_total !== null ? number_format((float) $r->general_grand_total, 2) : '—' }}</strong></div>
+                                <div><span class="text-secondary small">Technical</span> <strong>{{ $r->technical_grand_total !== null ? number_format((float) $r->technical_grand_total, 2) : '—' }}</strong></div>
+                            </td>
+                            <td class="text-center">{{ $r->source_merit_position }}</td>
+                            <td class="text-center">{{ $r->choice_position }}</td>
+                            <td class="text-center">{{ $r->common_merit_position ?? '—' }}</td>
+                            <td class="text-center">{{ $r->general_merit_position ?? '—' }}</td>
+                            <td class="text-center">{{ $r->technical_merit_position ?? '—' }}</td>
+                            <td style="width:160px; max-width:160px;">
+                                @php($allMeritTechDisplay = \App\Models\MeritResult::allMeritTechJson($r->all_merit_tech))
+                                <code class="d-block text-wrap" style="white-space:normal; overflow-wrap:anywhere;">{{ $allMeritTechDisplay === '[]' ? '-' : $allMeritTechDisplay }}</code>
+                            </td>
+                            <td class="text-nowrap">
                                 @if(in_array((string) $state?->status,['review_ready','finalized'],true)&&!$state?->is_stale&&$state?->latest_run_id===$runId)
                                     <a class="btn btn-sm btn-outline-primary" href="{{ route('merit.show',$r->merit_result_id) }}">{{ $state?->status==='finalized' ? 'Finalized View' : 'Review View' }}</a>
                                 @endif
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="text-center text-secondary py-4">No candidates match the selected search.</td></tr>
+                        <tr><td colspan="10" class="text-center text-secondary py-4">No candidates match the selected search.</td></tr>
                     @endforelse
                     </tbody>
                 </table>

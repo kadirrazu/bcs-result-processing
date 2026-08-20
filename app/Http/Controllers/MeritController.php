@@ -112,6 +112,22 @@ final class MeritController extends Controller
         $search = trim((string) $request->query('search', ''));
         $track = strtoupper(trim((string) $request->query('track', '')));
         $scope = trim((string) $request->query('scope', ''));
+        $sortBy = trim((string) $request->query('sort_by', ''));
+        $sortDirection = strtolower(trim((string) $request->query('sort_direction', 'asc')));
+
+        $sortableMeritColumns = [
+            'common_merit_position',
+            'general_merit_position',
+            'technical_merit_position',
+        ];
+
+        if (! in_array($sortBy, $sortableMeritColumns, true)) {
+            $sortBy = '';
+        }
+
+        if (! in_array($sortDirection, ['asc', 'desc'], true)) {
+            $sortDirection = 'asc';
+        }
 
         $q = MeritResult::query()
             ->leftJoin('registrations as registration_lookup', 'registration_lookup.id', '=', 'merit_results.registration_id')
@@ -120,6 +136,7 @@ final class MeritController extends Controller
             ->select(
                 'merit_results.*',
                 'registration_lookup.name as candidate_name',
+                'registration_lookup.cadre_category as original_cadre_category',
                 'tabulation_lookup.general_grand_total as general_grand_total',
                 'tabulation_lookup.technical_grand_total as technical_grand_total',
             );
@@ -132,7 +149,11 @@ final class MeritController extends Controller
             });
         }
 
-        if (in_array($track, ['GG', 'GN', 'TT', 'T', 'GT'], true)) {
+        if ($track === 'GG_GN') {
+            $q->whereIn('merit_results.written_qualified_track', ['GG', 'GN']);
+        } elseif ($track === 'TT_T') {
+            $q->whereIn('merit_results.written_qualified_track', ['TT', 'T']);
+        } elseif (in_array($track, ['GG', 'GN', 'TT', 'T', 'GT'], true)) {
             $q->where('merit_results.written_qualified_track', $track);
         }
 
@@ -144,10 +165,21 @@ final class MeritController extends Controller
             default => null,
         };
 
-        $rows = $q->orderByRaw('merit_results.common_merit_position IS NULL')
-            ->orderBy('merit_results.common_merit_position')
-            ->orderBy('merit_results.reg')
-            ->paginate((int) config('merit.page_size', 100))
+        if ($sortBy !== '') {
+            $qualifiedSortColumn = 'merit_results.'.$sortBy;
+
+            // Keep candidates without the selected rank at the end for both
+            // ASC and DESC; only ranked candidates change direction.
+            $q->orderByRaw($qualifiedSortColumn.' IS NULL')
+                ->orderBy($qualifiedSortColumn, $sortDirection)
+                ->orderBy('merit_results.reg');
+        } else {
+            $q->orderByRaw('merit_results.common_merit_position IS NULL')
+                ->orderBy('merit_results.common_merit_position')
+                ->orderBy('merit_results.reg');
+        }
+
+        $rows = $q->paginate((int) config('merit.page_size', 100))
             ->withQueryString();
 
         $cadres = MeritCadreRank::query()
@@ -165,6 +197,8 @@ final class MeritController extends Controller
             'search' => $search,
             'track' => $track,
             'scope' => $scope,
+            'sortBy' => $sortBy,
+            'sortDirection' => $sortDirection,
             'reviewSummary' => $summary->forRun($run),
             'latestFinalization' => MeritFinalizationRun::query()->where('processing_run_id', $runId)->latest('id')->first(),
         ]);
@@ -275,7 +309,20 @@ final class MeritController extends Controller
             ->where('merit_cadre_ranks.cadre_code', $cadreCode)
             ->join('merit_results as m', 'm.id', '=', 'merit_cadre_ranks.merit_result_id')
             ->leftJoin('registrations as r', 'r.id', '=', 'merit_cadre_ranks.registration_id')
-            ->select('merit_cadre_ranks.*', 'm.id as merit_result_id', 'm.reg', 'm.user_id', 'm.common_merit_position', 'm.general_merit_position', 'm.technical_merit_position', 'm.all_merit_tech', 'r.name as candidate_name');
+            ->leftJoin('tabulation_results as t', 't.id', '=', 'm.tabulation_result_id')
+            ->select(
+                'merit_cadre_ranks.*',
+                'm.id as merit_result_id',
+                'm.reg',
+                'm.user_id',
+                'm.common_merit_position',
+                'm.general_merit_position',
+                'm.technical_merit_position',
+                'm.all_merit_tech',
+                'r.name as candidate_name',
+                't.general_grand_total',
+                't.technical_grand_total',
+            );
 
         if ($search !== '') {
             $rowsQuery->where(function ($q) use ($search): void {
@@ -305,16 +352,40 @@ final class MeritController extends Controller
         $rows = (function () use ($run) {
             $q = DB::connection('exam')->table('merit_results as m')
                 ->leftJoin('registrations as r', 'r.id', '=', 'm.registration_id')
+                ->leftJoin('tabulation_results as t', 't.id', '=', 'm.tabulation_result_id')
                 ->where('m.processing_run_id', $run->id)
                 ->orderByRaw('m.common_merit_position IS NULL')
                 ->orderBy('m.common_merit_position')
                 ->orderBy('m.reg')
-                ->select('m.*', 'r.name');
+                ->select(
+                    'm.*',
+                    'r.name',
+                    't.general_grand_total',
+                    't.technical_grand_total',
+                );
+
             foreach ($q->cursor() as $row) {
+                $category = match ((int) $row->cadre_category) {
+                    1 => 'GG',
+                    2 => 'TT',
+                    3 => 'GT',
+                    default => '',
+                };
+
                 yield [
-                    $row->reg, $row->user_id, $row->name, $row->cadre_category, $row->written_qualified_track,
-                    $row->common_merit_position, $row->general_merit_position, $row->technical_merit_position,
-                    MeritResult::allMeritTechJson($row->all_merit_tech), $row->status_reason ?: 'MERIT_RANKED', $row->processing_version,
+                    $row->reg,
+                    $row->user_id,
+                    $row->name,
+                    $category,
+                    $row->written_qualified_track,
+                    $row->general_grand_total,
+                    $row->technical_grand_total,
+                    $row->common_merit_position,
+                    $row->general_merit_position,
+                    $row->technical_merit_position,
+                    ($allMeritTech = MeritResult::allMeritTechJson($row->all_merit_tech)) === '[]' ? '-' : $allMeritTech,
+                    $row->status_reason ?: 'MERIT_RANKED',
+                    $row->processing_version,
                 ];
             }
         })();
@@ -327,7 +398,21 @@ final class MeritController extends Controller
             'General Ranked' => $run->general_ranked_count,
             'Technical Ranked' => $run->technical_ranked_count,
             'Cadre-wise Rank Rows' => $run->cadre_rank_rows,
-        ], ['REG', 'USER', 'Name', 'Registration Category', 'Written Qualified Track', 'Common Merit', 'General Merit', 'Technical Merit', 'all_merit_tech', 'Status', 'Version'], $rows);
+        ], [
+            'REG',
+            'USER',
+            'Name',
+            'Registration Category',
+            'Written Qualified Track',
+            'General Grand Total',
+            'Technical Grand Total',
+            'Common Merit',
+            'General Merit',
+            'Technical Merit',
+            'all_merit_tech',
+            'Status',
+            'Version',
+        ], $rows);
 
         return response()->download($path, basename($path))->deleteFileAfterSend();
     }
@@ -345,16 +430,39 @@ final class MeritController extends Controller
             $q = DB::connection('exam')->table('merit_cadre_ranks as c')
                 ->join('merit_results as m', 'm.id', '=', 'c.merit_result_id')
                 ->leftJoin('registrations as r', 'r.id', '=', 'c.registration_id')
+                ->leftJoin('tabulation_results as t', 't.id', '=', 'm.tabulation_result_id')
                 ->where('c.processing_run_id', $run->id)
                 ->where('c.cadre_code', $cadreCode)
                 ->orderBy('c.cadre_merit_position')
-                ->select('c.*', 'm.reg', 'm.user_id', 'm.common_merit_position', 'm.general_merit_position', 'm.technical_merit_position', 'm.all_merit_tech', 'r.name');
+                ->select(
+                    'c.*',
+                    'm.reg',
+                    'm.user_id',
+                    'm.common_merit_position',
+                    'm.general_merit_position',
+                    'm.technical_merit_position',
+                    'm.all_merit_tech',
+                    'r.name',
+                    't.general_grand_total',
+                    't.technical_grand_total',
+                );
+
             foreach ($q->cursor() as $row) {
+                $allMeritTech = MeritResult::allMeritTechJson($row->all_merit_tech);
+
                 yield [
-                    $row->cadre_merit_position, $row->reg, $row->user_id, $row->name,
-                    $row->source_merit_position, $row->choice_position,
-                    $row->common_merit_position, $row->general_merit_position, $row->technical_merit_position,
-                    MeritResult::allMeritTechJson($row->all_merit_tech),
+                    $row->cadre_merit_position,
+                    $row->reg,
+                    $row->user_id,
+                    $row->name,
+                    $row->general_grand_total,
+                    $row->technical_grand_total,
+                    $row->source_merit_position,
+                    $row->choice_position,
+                    $row->common_merit_position,
+                    $row->general_merit_position,
+                    $row->technical_merit_position,
+                    $allMeritTech === '[]' ? '-' : $allMeritTech,
                 ];
             }
         })();
@@ -366,7 +474,20 @@ final class MeritController extends Controller
             'Candidates' => $count,
             'Processing Version' => $run->processing_version,
             'Dataset Hash' => $state->dataset_hash,
-        ], ['Cadre Merit', 'REG', 'USER', 'Name', 'Source Merit', 'Choice Position', 'Common Merit', 'General Merit', 'Technical Merit', 'all_merit_tech'], $rows);
+        ], [
+            'Cadre Merit',
+            'REG',
+            'USER',
+            'Name',
+            'General Grand Total',
+            'Technical Grand Total',
+            'Source Merit',
+            'Choice Position',
+            'Common Merit',
+            'General Merit',
+            'Technical Merit',
+            'all_merit_tech',
+        ], $rows);
 
         return response()->download($path, basename($path))->deleteFileAfterSend();
     }

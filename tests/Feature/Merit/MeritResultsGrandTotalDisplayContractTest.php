@@ -24,15 +24,18 @@ final class MeritResultsGrandTotalDisplayContractTest extends TestCase
             $controller
         );
 
-        $grandTotalHeader = strpos($view, '<th>Grand Total (G/T)</th>');
-        $commonHeader = strpos($view, '<th>Common</th>');
-        $generalHeader = strpos($view, '<th>General</th>');
-        $technicalHeader = strpos($view, '<th>Technical</th>');
+        // Locate by heading text rather than requiring a specific <th> class,
+        // because alignment/presentation classes are allowed to evolve.
+        $grandTotalHeader = strpos($view, 'Grand Total (G/T)</th>');
+        $commonHeader = strpos($view, 'Common</th>');
+        $generalHeader = strpos($view, 'General</th>');
+        $technicalHeader = strpos($view, 'Technical</th>');
 
         $this->assertNotFalse($grandTotalHeader);
         $this->assertNotFalse($commonHeader);
         $this->assertNotFalse($generalHeader);
         $this->assertNotFalse($technicalHeader);
+
         $this->assertLessThan($commonHeader, $grandTotalHeader);
         $this->assertLessThan($generalHeader, $grandTotalHeader);
         $this->assertLessThan($technicalHeader, $grandTotalHeader);
