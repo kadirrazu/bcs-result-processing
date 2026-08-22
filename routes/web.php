@@ -35,4 +35,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/merit.php';
 
+    require __DIR__.'/choice-optimization.php';
+
 });
