@@ -1,3 +1,44 @@
+## 2026-08-24 — Choice Optimization CO4C1.2 Historical Landing Polling
+- Added live per-BCS Historical Pull/Re-pull progress indicators and JSON polling on the Choice Optimization landing page.
+- Landing reloads once automatically after all observed running historical sources finish.
+
+## 2026-08-24 — Choice Optimization CO4C1.1 Pull Hotfix + Multi-select
+- Fixed grouped Eloquent Collection getKey failure in Historical Pull matching.
+- Added one-or-many BCS selection with Pull / Re-pull Selected; each selected BCS queues independently.
+
+## 2026-08-24 — Choice Optimization CO4C1 Historical Pull / Re-pull
+- Added examination-scoped Historical Previous BCS pull source and match snapshot tables.
+- Added queue-based Pull/Re-pull from central EFFECTIVE repository datasets.
+- Re-pull replaces the prior workspace match snapshot for that BCS instead of accumulating pull versions.
+- Matching uses Written-qualified candidates and exact SSC roll + SSC year + primary birth date, with supporting name/NID/HSC/secondary-DOB review signals.
+- Added update-available detection when the central effective repository version changes.
+
+## 2026-08-23 — Choice Optimization CO4B.3 Row Detail + Master Menu Group
+- Added per-row View action and read-only Previous BCS historical row detail page.
+- Kept the existing full dataset tabular view.
+- Historical Data is now a section inside Master Data below Registration Masters, not a top-level menu.
+
+## 2026-08-23 — Choice Optimization CO4B.2 Repository Polish
+- Added full read-only Previous BCS dataset detail view with warnings/errors/system status.
+- Corrected repository status badge colors, including green EFFECTIVE.
+- Moved Previous BCS Repository into a new Historical Data navigation group after Registration Masters.
+
+## 2026-08-23 — Choice Optimization CO4B.1 Cadre Warning + Repository Search
+- Changed unmatched historical cadre abbreviation from blocking error to warning-only while preserving the source abbreviation.
+- Added multi-field dataset search and filters for status/warning, cadre, SSC year and HSC year.
+
+## 2026-08-23 — Choice Optimization CO4B Previous BCS Repository Validation & Authority
+- Added queued global repository validation with duplicate identity checks, secondary-DOB warning and central cadre/sub-cadre abbreviation validation.
+- Added deterministic dataset hash and explicit EFFECTIVE approval gate.
+- Added one-current-effective-version authority per BCS; prior effective versions are preserved as superseded.
+- Added strict effective-dataset reader service for the upcoming current-workspace matching phase.
+
+## 2026-08-23 — Choice Optimization CO4A Global Previous BCS Repository
+- Added central BCS-wise Previous BCS Recommendation Repository with versioned dataset uploads.
+- Added queue-based XLSX/CSV staging, JSON polling, raw source preservation, strict header contract and DOB normalization.
+- `b_date` supports DDMMYY/DDMMYYYY; optional `dob` is stored as secondary DOB evidence.
+- CO4A does not approve/effect datasets and does not yet search current examination candidates; those remain CO4B/CO4C.
+
 # Documentation Changelog
 
 ## Unreleased

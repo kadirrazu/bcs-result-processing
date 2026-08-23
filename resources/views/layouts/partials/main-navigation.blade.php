@@ -11,7 +11,7 @@
         @endcan
 
         @can('viewAny', \App\Models\CadreMaster::class)
-            <li class="nav-item dropdown {{ request()->routeIs(['cadre-masters.*', 'cadre-sub-masters.*', 'bachelor-subjects.*', 'post-related-subjects.*', 'master-data.*', 'registration-masters.*']) ? 'active' : '' }}">
+            <li class="nav-item dropdown {{ request()->routeIs(['cadre-masters.*', 'cadre-sub-masters.*', 'bachelor-subjects.*', 'post-related-subjects.*', 'master-data.*', 'registration-masters.*', 'previous-bcs-repository.*']) ? 'active' : '' }}">
                 <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">
                     <span class="nav-link-title">Master Data</span>
                 </a>
@@ -29,8 +29,12 @@
                     <a class="dropdown-item {{ request()->routeIs('registration-masters.*') && request()->route('type') === 'divisions' ? 'active' : '' }}" href="{{ route('registration-masters.index', 'divisions') }}">Divisions</a>
                     <a class="dropdown-item {{ request()->routeIs('registration-masters.*') && request()->route('type') === 'districts' ? 'active' : '' }}" href="{{ route('registration-masters.index', 'districts') }}">Districts</a>
                     <a class="dropdown-item {{ request()->routeIs('registration-masters.*') && request()->route('type') === 'universities' ? 'active' : '' }}" href="{{ route('registration-masters.index', 'universities') }}">Universities</a>
+                    <div class="dropdown-divider"></div>
+                    <h6 class="dropdown-header">Historical Data</h6>
+                    <a class="dropdown-item {{ request()->routeIs('previous-bcs-repository.*') ? 'active' : '' }}" href="{{ route('previous-bcs-repository.index') }}">Previous BCS Repository</a>
                 </div>
             </li>
+            
         @endcan
 
         @can('viewAny', \App\Models\User::class)

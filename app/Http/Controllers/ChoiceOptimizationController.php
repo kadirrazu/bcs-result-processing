@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessChoiceOptimizationHistoricalPull;
 use App\Jobs\ProcessChoiceOptimizationOmrApproval;
 use App\Jobs\ProcessChoiceOptimizationOmrValidation;
 use App\Models\ChoiceOptimizationEffectiveChoice;
+use App\Models\ChoiceOptimizationHistoricalSource;
+use App\Models\ChoiceOptimizationProcessingAudit;
 use App\Models\ChoiceOptimizationOmrBatch;
 use App\Models\ChoiceOptimizationOmrStaging;
 use App\Models\ChoiceValidationResult;
+use App\Models\PreviousBcsRepository;
+use App\Models\WrittenProcessingState;
 use App\Models\User;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrDecisionResolutionService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrImportService;
@@ -32,6 +37,26 @@ final class ChoiceOptimizationController extends Controller
             ? ChoiceOptimizationOmrBatch::query()->latest('id')->first()
             : null;
 
+        $historicalRepositories = collect();
+        $historicalSourceMap = collect();
+
+        if ($setting->optimization_enabled) {
+            $historicalRepositories = PreviousBcsRepository::query()
+                ->with('currentEffectiveDataset')
+                ->whereNotNull('current_effective_dataset_id')
+                ->orderBy('bcs_number')
+                ->get()
+                ->filter(fn (PreviousBcsRepository $repository): bool =>
+                    $repository->currentEffectiveDataset?->status === 'effective'
+                    && filled($repository->currentEffectiveDataset?->dataset_hash)
+                )
+                ->values();
+
+            $historicalSourceMap = ChoiceOptimizationHistoricalSource::query()
+                ->get()
+                ->keyBy('previous_bcs_number');
+        }
+
         return view('choice-optimization.index', [
             'setting' => $setting,
             'state' => $settings->state(),
@@ -39,6 +64,8 @@ final class ChoiceOptimizationController extends Controller
             'omrBatches' => $setting->optimization_enabled
                 ? ChoiceOptimizationOmrBatch::query()->latest('id')->limit(10)->get()
                 : collect(),
+            'historicalRepositories' => $historicalRepositories,
+            'historicalSourceMap' => $historicalSourceMap,
         ]);
     }
 
@@ -363,6 +390,192 @@ final class ChoiceOptimizationController extends Controller
             ->with('success', 'OMR approval and effective-choice consolidation queued.');
     }
 
+
+    public function pullHistorical(
+        Request $request,
+        ChoiceOptimizationSettingsService $settings,
+        ExaminationContext $context,
+    ): RedirectResponse {
+        $this->assertOptimizationEnabled($settings);
+
+        $validated = $request->validate([
+            'bcs_numbers' => ['required', 'array', 'min:1'],
+            'bcs_numbers.*' => ['required', 'integer', 'min:1', 'max:999', 'distinct'],
+        ]);
+
+        $examId = $context->currentId();
+        abort_if($examId === null, 409, 'No examination is selected.');
+
+        $writtenState = WrittenProcessingState::query()->first();
+        abort_unless(
+            $writtenState?->result_finalized_at && ! (bool) $writtenState->is_stale,
+            409,
+            'Finalize a current, non-stale Written result before pulling Previous BCS data.'
+        );
+
+        $bcsNumbers = collect($validated['bcs_numbers'])
+            ->map(fn ($value): int => (int) $value)
+            ->unique()
+            ->values();
+
+        $repositories = PreviousBcsRepository::query()
+            ->with('currentEffectiveDataset')
+            ->whereIn('bcs_number', $bcsNumbers)
+            ->get()
+            ->keyBy('bcs_number');
+
+        abort_unless(
+            $repositories->count() === $bcsNumbers->count(),
+            422,
+            'One or more selected BCS repositories were not found.'
+        );
+
+        $queued = 0;
+        $skippedRunning = 0;
+        $repulls = 0;
+
+        foreach ($bcsNumbers as $bcsNumber) {
+            /** @var PreviousBcsRepository $repository */
+            $repository = $repositories->get($bcsNumber);
+            $dataset = $repository->currentEffectiveDataset;
+
+            abort_unless(
+                $dataset && $dataset->status === 'effective' && filled($dataset->dataset_hash),
+                409,
+                "BCS {$bcsNumber} has no effective Previous BCS repository dataset."
+            );
+
+            $existing = ChoiceOptimizationHistoricalSource::query()
+                ->where('previous_bcs_number', $bcsNumber)
+                ->first();
+
+            if ($existing && in_array($existing->status, ['pull_queued', 'pulling'], true)) {
+                $skippedRunning++;
+                continue;
+            }
+
+            $fromStatus = $existing?->status ?? 'not_pulled';
+
+            $source = ChoiceOptimizationHistoricalSource::query()->updateOrCreate(
+                ['previous_bcs_number' => $bcsNumber],
+                [
+                    'repository_dataset_id' => (int) $dataset->id,
+                    'repository_dataset_version' => (int) $dataset->version,
+                    'repository_dataset_hash' => (string) $dataset->dataset_hash,
+                    'status' => 'pull_queued',
+                    'candidate_count' => 0,
+                    'matched_count' => 0,
+                    'review_count' => 0,
+                    'no_match_count' => 0,
+                    'matching_algorithm' => 'co4c1-core-v1',
+                    'failure_message' => null,
+                ],
+            );
+
+            ChoiceOptimizationProcessingAudit::query()->create([
+                'event' => $existing ? 'HISTORICAL_REPULL_QUEUED' : 'HISTORICAL_PULL_QUEUED',
+                'actor_id' => (int) $request->user()->getAuthIdentifier(),
+                'from_status' => $fromStatus,
+                'to_status' => 'pull_queued',
+                'context' => [
+                    'previous_bcs_number' => $bcsNumber,
+                    'repository_dataset_id' => (int) $dataset->id,
+                    'repository_dataset_version' => (int) $dataset->version,
+                    'dataset_hash' => (string) $dataset->dataset_hash,
+                ],
+                'created_at' => now(),
+            ]);
+
+            ProcessChoiceOptimizationHistoricalPull::dispatch(
+                (int) $examId,
+                (int) $source->id,
+                (int) $request->user()->getAuthIdentifier(),
+            );
+
+            $queued++;
+            if ($existing) {
+                $repulls++;
+            }
+        }
+
+        $message = "{$queued} Historical BCS source(s) queued for Pull/Re-pull.";
+        if ($repulls > 0) {
+            $message .= " {$repulls} existing workspace snapshot(s) will be replaced.";
+        }
+        if ($skippedRunning > 0) {
+            $message .= " {$skippedRunning} already-running source(s) were skipped.";
+        }
+
+        return redirect()
+            ->route('choice-optimization.index')
+            ->with('success', $message);
+    }
+
+    public function showHistorical(
+        Request $request,
+        ChoiceOptimizationSettingsService $settings,
+        ChoiceOptimizationHistoricalSource $source,
+    ): View {
+        $this->assertOptimizationEnabled($settings);
+
+        $status = trim((string) $request->query('status', 'all'));
+        $search = trim((string) $request->query('search', ''));
+
+        $matches = $source->matches()
+            ->when($status !== 'all' && $status !== '', fn ($query) => $query->where('match_status', $status))
+            ->when($search !== '', function ($query) use ($search): void {
+                $like = '%'.$search.'%';
+                $query->where(function ($nested) use ($like): void {
+                    $nested->where('current_reg', 'like', $like)
+                        ->orWhere('previous_reg', 'like', $like)
+                        ->orWhere('previous_name', 'like', $like)
+                        ->orWhere('previous_fname', 'like', $like)
+                        ->orWhere('previous_mname', 'like', $like)
+                        ->orWhere('previous_cadre', 'like', $like);
+                });
+            })
+            ->orderByRaw("CASE match_status WHEN 'review' THEN 0 ELSE 1 END")
+            ->orderBy('current_reg')
+            ->paginate(100)
+            ->withQueryString();
+
+        $repository = PreviousBcsRepository::query()
+            ->with('currentEffectiveDataset')
+            ->where('bcs_number', (int) $source->previous_bcs_number)
+            ->first();
+
+        $updateAvailable = $repository?->currentEffectiveDataset
+            && (int) $repository->currentEffectiveDataset->id !== (int) $source->repository_dataset_id;
+
+        return view('choice-optimization.historical-show', compact(
+            'source',
+            'matches',
+            'status',
+            'search',
+            'repository',
+            'updateAvailable',
+        ));
+    }
+
+    public function historicalStatus(
+        ChoiceOptimizationSettingsService $settings,
+        ChoiceOptimizationHistoricalSource $source,
+    ): JsonResponse {
+        $this->assertOptimizationEnabled($settings);
+        $source->refresh();
+
+        $running = in_array($source->status, ['pull_queued', 'pulling'], true);
+
+        return response()->json([
+            'status' => $source->status,
+            'running' => $running,
+            'candidate_count' => (int) $source->candidate_count,
+            'matched_count' => (int) $source->matched_count,
+            'review_count' => (int) $source->review_count,
+            'no_match_count' => (int) $source->no_match_count,
+            'failure_message' => $source->failure_message,
+        ]);
+    }
 
     private function queueOmrValidation(
         Request $request,

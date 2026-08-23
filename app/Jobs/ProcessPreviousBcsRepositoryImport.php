@@ -1,0 +1,36 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Services\PreviousBcsRepository\PreviousBcsRepositoryImportService;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Throwable;
+
+final class ProcessPreviousBcsRepositoryImport implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public int $tries = 1;
+    public int $timeout = 0;
+
+    public function __construct(
+        public readonly int $datasetId,
+        public readonly int $actorId,
+    ) {
+        $this->onQueue('imports');
+    }
+
+    public function handle(PreviousBcsRepositoryImportService $service): void
+    {
+        $service->process($this->datasetId, $this->actorId);
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        report($exception);
+    }
+}
