@@ -53,7 +53,15 @@ final class ChoiceOptimizationOmrApprovalService
             $override = null;
 
             if ($omr && strtoupper((string) $omr->effective_change_choice) === 'YES') {
-                $override = array_values((array) $omr->validated_omr_choice_codes);
+                $override = array_values(array_filter(
+                    (array) $omr->validated_omr_choice_codes,
+                    static fn ($code): bool => trim((string) $code) !== '',
+                ));
+
+                if ((string) $omr->choice_validation_status !== 'valid' || $override === []) {
+                    throw new RuntimeException('An effective OMR YES override must have a clean, non-empty validated OMR choice sequence before approval.');
+                }
+
                 $effective = $override;
                 $source = 'viva_omr_override';
                 $reasonCode = 'OVERRIDDEN_BY_VIVA_OMR';

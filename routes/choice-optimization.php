@@ -17,6 +17,7 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/omr/{batch}', [ChoiceOptimizationController::class, 'showOmr'])->name('omr.show');
         Route::get('/omr/{batch}/status', [ChoiceOptimizationController::class, 'omrStatus'])->name('omr.status');
         Route::post('/omr/{batch}/validate', [ChoiceOptimizationController::class, 'validateOmr'])->name('omr.validate');
+        Route::post('/omr/{batch}/revalidate', [ChoiceOptimizationController::class, 'revalidateOmr'])->name('omr.revalidate');
         Route::post('/omr/{batch}/approve', [ChoiceOptimizationController::class, 'approveOmr'])->name('omr.approve');
         Route::post('/omr-row/{row}/resolve-registration', [ChoiceOptimizationController::class, 'resolveOmrRegistration'])->name('omr.resolve-registration');
         Route::post('/omr-row/{row}/resolve-decision', [ChoiceOptimizationController::class, 'resolveOmrDecision'])->name('omr.resolve-decision');

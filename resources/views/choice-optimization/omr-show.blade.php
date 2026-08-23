@@ -15,20 +15,33 @@
         gap: 0;
     }
     .co-context-cell {
-        min-height: 86px;
-        padding: 1rem 1.15rem;
+        min-width: 0;
+        padding: 0;
         border-right: 1px solid var(--tblr-border-color);
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
+        display: grid;
+        grid-template-rows: 44px minmax(72px, 1fr);
+        align-self: stretch;
     }
     .co-context-cell:last-child { border-right: 0; }
     .co-context-label {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        padding: .65rem 1rem;
+        border-bottom: 1px solid var(--tblr-border-color);
         color: var(--tblr-secondary-color);
-        font-size: .76rem;
-        margin-bottom: .3rem;
+        font-size: .74rem;
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: .02em;
+    }
+    .co-context-body {
+        min-height: 72px;
+        padding: .8rem 1rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: .25rem;
     }
     .co-context-value { font-weight: 600; }
 
@@ -175,6 +188,35 @@
         </div>
     </div>
 
+    <div class="card mb-3" id="co-validation-actions">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <div class="fw-semibold">OMR Choice Validation</div>
+                    <div class="text-secondary small">
+                        Re-run the full queued validation against the current finalized Circular, Registration eligibility and Written-qualified track.
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    @if(in_array((string) $batch->status, ['validated', 'needs_review', 'validation_failed'], true))
+                        <form method="POST" action="{{ route('choice-optimization.omr.revalidate', $batch) }}" class="mb-0">
+                            @csrf
+                            <button class="btn btn-outline-primary" type="submit">
+                                Re-validate OMR Choices
+                            </button>
+                        </form>
+                    @elseif(in_array((string) $batch->status, ['validation_queued', 'validating'], true))
+                        <button class="btn btn-outline-secondary" type="button" disabled>
+                            Re-validation in progress…
+                        </button>
+                    @else
+                        <span class="text-secondary small">Re-validation becomes available after the first validation run.</span>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="co-review-complete" class="alert alert-success" @if($remainingOperatorReviews > 0) style="display:none" @endif>
         <div class="d-flex flex-wrap align-items-center gap-2 justify-content-between">
             <div><strong>Operator review complete.</strong> All review-required OMR rows have been resolved.</div>
@@ -262,44 +304,51 @@
                 <div class="co-context-grid border-bottom">
                     <div class="co-context-cell">
                         <div class="co-context-label">Registration</div>
-                        <div class="co-context-value"><code>{{ $row->effective_reg ?: $row->raw_reg ?: '—' }}</code></div>
-                        @if($row->effective_reg && $row->raw_reg && $row->effective_reg !== $row->raw_reg)
-                            <div class="small text-secondary mt-1">Raw: <code>{{ $row->raw_reg }}</code></div>
-                        @endif
-                    </div>
-                    <div class="co-context-cell">
-                        <div class="co-context-label">Original Category</div>
-                        <div class="co-context-value">
-                            <span class="badge bg-blue-lt">{{ $candidateContext['category_code'] ?? '—' }}</span>
-                            @if(filled($candidateContext['category_label'] ?? null))
-                                <span class="ms-1">{{ $candidateContext['category_label'] }}</span>
+                        <div class="co-context-body">
+                            <div class="co-context-value"><code>{{ $row->effective_reg ?: $row->raw_reg ?: '—' }}</code></div>
+                            @if($row->effective_reg && $row->raw_reg && $row->effective_reg !== $row->raw_reg)
+                                <div class="small text-secondary">Raw: <code>{{ $row->raw_reg }}</code></div>
                             @endif
                         </div>
                     </div>
                     <div class="co-context-cell">
+                        <div class="co-context-label">Original Category</div>
+                        <div class="co-context-body">
+                            <div class="co-context-value"><span class="badge bg-blue-lt">{{ $candidateContext['category_code'] ?? '—' }}</span></div>
+                        </div>
+                    </div>
+                    <div class="co-context-cell">
                         <div class="co-context-label">Written Qualified Track</div>
-                        <div class="co-context-value"><span class="badge bg-azure-lt">{{ $row->written_qualified_track ?: '—' }}</span></div>
+                        <div class="co-context-body">
+                            <div class="co-context-value"><span class="badge bg-azure-lt">{{ $row->written_qualified_track ?: '—' }}</span></div>
+                        </div>
                     </div>
                     <div class="co-context-cell">
                         <div class="co-context-label">OMR Decision</div>
-                        <div class="co-context-value">
-                            <span class="badge {{ $row->change_choice === 'NO' ? 'bg-red-lt' : 'bg-green-lt' }}">{{ $row->change_choice ?: '—' }}</span>
+                        <div class="co-context-body">
+                            <div class="co-context-value">
+                                <span class="badge {{ $row->change_choice === 'NO' ? 'bg-red-lt' : 'bg-green-lt' }}">{{ $row->change_choice ?: '—' }}</span>
+                            </div>
+                            <div class="small text-secondary">{{ $row->raw_choice_count }} option(s) found</div>
                         </div>
-                        <div class="small text-secondary mt-1">{{ $row->raw_choice_count }} option(s) found</div>
                     </div>
                     <div class="co-context-cell">
                         <div class="co-context-label">Status / Reason</div>
-                        <div><span class="badge {{ $badge }}">{{ strtoupper(str_replace('_',' ', $row->validation_status)) }}</span></div>
-                        @if($row->choice_validation_status && $row->choice_validation_status !== 'not_started')
-                            <div class="small text-secondary mt-1">Choice: {{ strtoupper(str_replace('_',' ', $row->choice_validation_status)) }}</div>
-                        @endif
+                        <div class="co-context-body">
+                            <div><span class="badge {{ $badge }}">{{ strtoupper(str_replace('_',' ', $row->validation_status)) }}</span></div>
+                            @if($row->choice_validation_status && $row->choice_validation_status !== 'not_started')
+                                <div class="small text-secondary">Choice: {{ strtoupper(str_replace('_',' ', $row->choice_validation_status)) }}</div>
+                            @endif
+                        </div>
                     </div>
                     <div class="co-context-cell">
                         <div class="co-context-label">Effective Decision</div>
-                        <div class="co-context-value">{{ $row->effective_change_choice ?: '—' }}</div>
-                        @if($row->decision_resolution)
-                            <div class="small text-secondary mt-1">Resolved</div>
-                        @endif
+                        <div class="co-context-body">
+                            <div class="co-context-value">{{ $row->effective_change_choice ?: '—' }}</div>
+                            @if($row->decision_resolution)
+                                <div class="small text-secondary">Resolved</div>
+                            @endif
+                        </div>
                     </div>
                 </div>
 
@@ -367,6 +416,98 @@
                                 @endforeach
                             </tbody>
                         </table>
+                    </div>
+
+                    @php
+                        $validatedOmrChoices = collect((array) $row->validated_omr_choice_codes)->filter(fn($v) => filled($v))->values()->all();
+                        $omrChoiceStatus = strtolower((string) ($row->choice_validation_status ?: 'pending'));
+                        $omrChoiceDetails = (array) ($row->choice_validation_details ?? []);
+                    @endphp
+                    <div class="border rounded mb-4">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 px-3 py-2 border-bottom bg-light">
+                            <div>
+                                <div class="fw-semibold">OMR Choice Validation Result</div>
+                                <div class="text-secondary small">Derived validation output only; raw OMR remains unchanged.</div>
+                            </div>
+                            @if($omrChoiceStatus === 'valid' && count($validatedOmrChoices) > 0)
+                                <span class="badge bg-green-lt text-green">VALIDATED / DOWNSTREAM SAFE</span>
+                            @elseif($omrChoiceStatus === 'invalid')
+                                <span class="badge bg-red-lt text-red">INVALID / NOT DOWNSTREAM SAFE</span>
+                            @else
+                                <span class="badge bg-yellow-lt text-yellow">{{ strtoupper(str_replace('_', ' ', $omrChoiceStatus)) }}</span>
+                            @endif
+                        </div>
+                        <div class="p-3">
+                            <div class="row g-3">
+                                <div class="col-lg-6">
+                                    <div class="text-secondary small fw-semibold mb-2">Raw OMR Choice</div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @forelse($rawChoices as $index => $code)
+                                            <span class="badge bg-secondary-lt text-secondary">#{{ str_pad((string)($index + 1), 2, '0', STR_PAD_LEFT) }} {{ $code }}</span>
+                                        @empty
+                                            <span class="text-secondary small">No OMR options supplied.</span>
+                                        @endforelse
+                                    </div>
+                                </div>
+                                <div class="col-lg-6">
+                                    <div class="text-secondary small fw-semibold mb-2">Expanded / Validated OMR Choice</div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @forelse($validatedOmrChoices as $index => $code)
+                                            <span class="badge bg-green-lt text-green">#{{ str_pad((string)($index + 1), 2, '0', STR_PAD_LEFT) }} {{ $code }}</span>
+                                        @empty
+                                            <span class="text-secondary small">No clean validated OMR override is available.</span>
+                                        @endforelse
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-1">
+                                <div class="col-lg-4">
+                                    <div class="h-100 border rounded p-3">
+                                        <div class="fw-semibold mb-2">Validation Errors</div>
+                                        @forelse((array) $row->validation_errors as $error)
+                                            <div class="small text-danger mb-1">
+                                                <strong>{{ $error['code'] ?? 'ERROR' }}</strong>
+                                                @if(!empty($error['message'])) — {{ $error['message'] }} @endif
+                                            </div>
+                                        @empty
+                                            <div class="small text-success">No blocking validation error.</div>
+                                        @endforelse
+                                    </div>
+                                </div>
+                                <div class="col-lg-4">
+                                    <div class="h-100 border rounded p-3">
+                                        <div class="fw-semibold mb-2">Warnings / Review Notes</div>
+                                        @forelse((array) $row->validation_warnings as $warning)
+                                            <div class="small text-warning mb-1">
+                                                <strong>{{ $warning['code'] ?? 'WARNING' }}</strong>
+                                                @if(!empty($warning['message'])) — {{ $warning['message'] }} @endif
+                                            </div>
+                                        @empty
+                                            <div class="small text-secondary">No validation warning.</div>
+                                        @endforelse
+                                    </div>
+                                </div>
+                                <div class="col-lg-4">
+                                    <div class="h-100 border rounded p-3">
+                                        <div class="fw-semibold mb-2">Expansion / Removal Details</div>
+                                        @if($omrChoiceDetails !== [])
+                                            <pre class="small mb-0" style="white-space:pre-wrap">{{ json_encode($omrChoiceDetails, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) }}</pre>
+                                        @else
+                                            <div class="small text-secondary">No expansion/removal detail recorded.</div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="alert {{ $omrChoiceStatus === 'valid' && count($validatedOmrChoices) > 0 ? 'alert-success' : 'alert-warning' }} mt-3 mb-0">
+                                @if($omrChoiceStatus === 'valid' && count($validatedOmrChoices) > 0)
+                                    <strong>OMR Choice is fully validated and safe for downstream use.</strong>
+                                @else
+                                    <strong>OMR Choice is NOT eligible for override / Allocation until validation completes successfully.</strong>
+                                @endif
+                            </div>
+                        </div>
                     </div>
 
                     @if($row->validation_status === 'decision_review')

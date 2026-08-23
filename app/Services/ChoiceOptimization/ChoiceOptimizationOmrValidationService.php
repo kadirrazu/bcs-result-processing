@@ -9,6 +9,7 @@ use App\Models\ChoiceOptimizationOmrStaging;
 use App\Models\Registration;
 use App\Models\WrittenProcessingState;
 use App\Models\WrittenResult;
+use App\Services\ChoiceValidation\ChoiceRowRuleValidator;
 use App\Services\ChoiceValidation\ChoiceValidationEngine;
 use App\Services\Circular\CircularFinalizedDatasetService;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,7 @@ final class ChoiceOptimizationOmrValidationService
 {
     public function __construct(
         private readonly CircularFinalizedDatasetService $circular,
+        private readonly ChoiceRowRuleValidator $rowRules,
         private readonly ChoiceValidationEngine $engine,
     ) {}
 
@@ -113,17 +115,36 @@ final class ChoiceOptimizationOmrValidationService
 
                         if ($status !== 'conflict' && $errors === [] && $status !== 'decision_review' && $match && $registration) {
                             if ($effectiveDecision === 'YES') {
-                                $track = $this->track($this->enumValue($match->written_qualified_track) ?? '');
-                                $items = $this->choiceItems((array) $row->raw_choices);
-                                $output = $this->engine->validate($registration, $track, $items, $entries);
-                                $validatedCodes = $output['validated'];
-                                $choiceDetails = $output['details'];
-                                $choiceStatus = $output['status'] === 'valid' ? 'valid' : 'invalid';
-                                if ($choiceStatus !== 'valid') {
-                                    $errors[] = [
-                                        'code' => 'OMR_CHOICE_VALIDATION_FAILED',
-                                        'message' => 'No valid OMR override choice remains after applying the finalized Choice Validation rules.',
-                                    ];
+                                // Reuse the same two validation layers as Choice Validation:
+                                // 1) source-row/sequence rules, then 2) Circular/eligibility/expansion engine.
+                                $rowRule = $this->rowRules->validate(
+                                    (array) $row->raw_choices,
+                                    (int) $batch->configured_maximum_choices,
+                                );
+
+                                foreach ($rowRule['errors'] as $rowError) {
+                                    $errors[] = $this->structuredRuleMessage((string) $rowError, 'OMR_CHOICE_SOURCE_INVALID');
+                                }
+                                foreach ($rowRule['warnings'] as $rowWarning) {
+                                    $warnings[] = $this->structuredRuleMessage((string) $rowWarning, 'OMR_CHOICE_SOURCE_WARNING');
+                                }
+
+                                if ($rowRule['errors'] === []) {
+                                    $track = $this->track($this->enumValue($match->written_qualified_track) ?? '');
+                                    $items = $this->choiceItems($rowRule['choices']);
+                                    $output = $this->engine->validate($registration, $track, $items, $entries);
+                                    $validatedCodes = $output['validated'];
+                                    $choiceDetails = $output['details'];
+                                    $choiceStatus = $output['status'] === 'valid' ? 'valid' : 'invalid';
+
+                                    if ($choiceStatus !== 'valid') {
+                                        $errors[] = [
+                                            'code' => 'OMR_CHOICE_VALIDATION_FAILED',
+                                            'message' => 'No valid OMR override choice remains after applying the finalized Choice Validation rules.',
+                                        ];
+                                    }
+                                } else {
+                                    $choiceStatus = 'invalid';
                                 }
                             } elseif ($effectiveDecision === 'NO') {
                                 $choiceStatus = 'not_applicable';
@@ -214,22 +235,45 @@ final class ChoiceOptimizationOmrValidationService
         ];
     }
 
-    /** @return array<int,stdClass> */
+    /** @param list<array{position:int,column:string,raw:?string,code:?string}> $choices
+     *  @return array<int,stdClass>
+     */
     private function choiceItems(array $choices): array
     {
         $items = [];
-        $position = 0;
-        foreach ($choices as $column => $code) {
-            $code = trim((string) ($code ?? ''));
-            if ($code === '') continue;
-            $position++;
+        foreach ($choices as $choice) {
+            $code = trim((string) ($choice['code'] ?? ''));
+            if ($code === '') {
+                continue;
+            }
+
             $item = new stdClass();
-            $item->position = $position;
-            $item->source_column = (string) $column;
+            $item->position = (int) ($choice['position'] ?? 0);
+            $item->source_column = (string) ($choice['column'] ?? '');
             $item->choice_code = $code;
             $items[] = $item;
         }
+
         return $items;
+    }
+
+    /** @return array{code:string,message:string} */
+    private function structuredRuleMessage(string $message, string $fallbackCode): array
+    {
+        $message = trim($message);
+        $code = $fallbackCode;
+
+        if (str_contains($message, ':')) {
+            [$candidate] = explode(':', $message, 2);
+            $candidate = strtoupper(trim($candidate));
+            if ($candidate !== '' && preg_match('/^[A-Z0-9_]+$/', $candidate) === 1) {
+                $code = $candidate;
+            }
+        } elseif ($message !== '' && preg_match('/^[A-Z0-9_]+$/', strtoupper($message)) === 1) {
+            $code = strtoupper($message);
+        }
+
+        return ['code' => $code, 'message' => $message];
     }
 
     private function enumValue(mixed $value): ?string

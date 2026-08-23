@@ -176,19 +176,34 @@ final class ChoiceOptimizationController extends Controller
     ): RedirectResponse {
         $this->assertOptimizationEnabled($settings);
         abort_unless(in_array($batch->status, ['staged', 'needs_review', 'validation_failed'], true), 409, 'Only a staged/review OMR batch can be validated.');
-        $examId = $context->currentId();
-        abort_if($examId === null, 409, 'No examination is selected.');
 
-        $batch->update([
-            'status' => 'validation_queued', 'processed_rows' => 0, 'valid_rows' => 0,
-            'invalid_rows' => 0, 'conflict_rows' => 0, 'review_rows' => 0,
-            'progress_percent' => 0, 'failure_message' => null,
-        ]);
+        return $this->queueOmrValidation(
+            request: $request,
+            batch: $batch,
+            context: $context,
+            message: 'OMR identity, decision and override-choice validation queued.',
+        );
+    }
 
-        ProcessChoiceOptimizationOmrValidation::dispatch((int) $examId, (int) $batch->id, (int) $request->user()->id);
+    public function revalidateOmr(
+        Request $request,
+        ChoiceOptimizationSettingsService $settings,
+        ChoiceOptimizationOmrBatch $batch,
+        ExaminationContext $context,
+    ): RedirectResponse {
+        $this->assertOptimizationEnabled($settings);
+        abort_unless(
+            in_array((string) $batch->status, ['validated', 'needs_review', 'validation_failed'], true),
+            409,
+            'Only a completed OMR validation can be re-validated.'
+        );
 
-        return redirect()->route('choice-optimization.omr.show', $batch)
-            ->with('success', 'OMR identity, decision and override-choice validation queued.');
+        return $this->queueOmrValidation(
+            request: $request,
+            batch: $batch,
+            context: $context,
+            message: 'OMR re-validation queued. Previous derived validation output is no longer current.',
+        );
     }
 
     public function resolveOmrRegistration(
@@ -266,6 +281,51 @@ final class ChoiceOptimizationController extends Controller
         return redirect()->route('choice-optimization.omr.show', $batch)
             ->with('success', 'OMR approval and effective-choice consolidation queued.');
     }
+
+
+    private function queueOmrValidation(
+        Request $request,
+        ChoiceOptimizationOmrBatch $batch,
+        ExaminationContext $context,
+        string $message,
+    ): RedirectResponse {
+        $examId = $context->currentId();
+        abort_if($examId === null, 409, 'No examination is selected.');
+
+        // Preserve raw OMR evidence and operator resolutions. Invalidate only
+        // derived validation data so an older validation cannot be treated as current.
+        $batch->stagingRows()->update([
+            'choice_validation_status' => 'pending',
+            'validated_omr_choice_codes' => null,
+            'choice_validation_details' => null,
+            'validation_status' => 'pending',
+            'validation_errors' => null,
+            'validation_warnings' => null,
+        ]);
+
+        $batch->update([
+            'status' => 'validation_queued',
+            'processed_rows' => 0,
+            'valid_rows' => 0,
+            'invalid_rows' => 0,
+            'conflict_rows' => 0,
+            'review_rows' => 0,
+            'progress_percent' => 0,
+            'failure_message' => null,
+            'validated_at' => null,
+            'finished_at' => null,
+        ]);
+
+        ProcessChoiceOptimizationOmrValidation::dispatch(
+            (int) $examId,
+            (int) $batch->id,
+            (int) $request->user()->id
+        );
+
+        return redirect()->route('choice-optimization.omr.show', $batch)
+            ->with('success', $message);
+    }
+
 
 
     private function remainingOmrOperatorReviews(int $batchId): int
