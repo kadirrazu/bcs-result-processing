@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Jobs\ProcessChoiceOptimizationOmrApproval;
 use App\Jobs\ProcessChoiceOptimizationOmrValidation;
+use App\Models\ChoiceOptimizationEffectiveChoice;
 use App\Models\ChoiceOptimizationOmrBatch;
 use App\Models\ChoiceOptimizationOmrStaging;
 use App\Models\ChoiceValidationResult;
+use App\Models\User;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrDecisionResolutionService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrImportService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrResolutionService;
@@ -96,7 +98,22 @@ final class ChoiceOptimizationController extends Controller
         $search = trim((string) $request->query('search', ''));
 
         $rows = $batch->stagingRows()
-            ->when($status !== '' && $status !== 'all', fn ($q) => $q->where('validation_status', $status))
+            ->when($status !== '' && $status !== 'all', function ($q) use ($status): void {
+                if ($status === 'warning') {
+                    $q->whereRaw('JSON_LENGTH(COALESCE(validation_warnings, JSON_ARRAY())) > 0');
+                    return;
+                }
+
+                if ($status === 'operator_confirmed') {
+                    $q->where(function ($confirmed): void {
+                        $confirmed->whereNotNull('decision_resolved_at')
+                            ->orWhereNotNull('resolved_at');
+                    });
+                    return;
+                }
+
+                $q->where('validation_status', $status);
+            })
             ->when($search !== '', fn ($q) => $q->where(fn ($n) => $n
                 ->where('raw_reg', $search)
                 ->orWhere('effective_reg', $search)))
@@ -130,8 +147,8 @@ final class ChoiceOptimizationController extends Controller
 
                 $category = $result->registration?->cadre_category;
                 $candidateContextMap[$registrationId] = [
+                    'name' => (string) ($result->registration?->name ?? ''),
                     'category_code' => is_object($category) && method_exists($category, 'code') ? $category->code() : (string) ($category ?? ''),
-                    'category_label' => is_object($category) && method_exists($category, 'label') ? $category->label() : '',
                 ];
             }
         }
@@ -143,6 +160,70 @@ final class ChoiceOptimizationController extends Controller
             'remainingOperatorReviews'
         ));
     }
+
+
+    public function showOmrRow(
+        ChoiceOptimizationSettingsService $settings,
+        ChoiceOptimizationOmrBatch $batch,
+        ChoiceOptimizationOmrStaging $row,
+        ChoiceValidationFinalizedDatasetService $finalizedChoices,
+    ): View {
+        $this->assertOptimizationEnabled($settings);
+        abort_unless((int) $row->batch_id === (int) $batch->id, 404);
+
+        $state = $finalizedChoices->state();
+        $version = (int) ($state->finalized_validation_version ?? 0);
+
+        $choiceValidationResult = null;
+        $registrationChoices = [];
+        $validatedChoices = [];
+        $candidate = null;
+
+        if ($version > 0 && $row->registration_id) {
+            $choiceValidationResult = ChoiceValidationResult::query()
+                ->with(['registration', 'source.items'])
+                ->where('validation_version', $version)
+                ->where('registration_id', (int) $row->registration_id)
+                ->first();
+
+            if ($choiceValidationResult) {
+                $candidate = $choiceValidationResult->registration;
+                $validatedChoices = array_values((array) $choiceValidationResult->validated_choice_codes);
+                $registrationChoices = collect($choiceValidationResult->source?->items ?? [])
+                    ->sortBy('position')
+                    ->map(fn ($item): string => trim((string) ($item->raw_value ?: $item->choice_code)))
+                    ->filter(fn (string $value): bool => $value !== '')
+                    ->values()
+                    ->all();
+            }
+        }
+
+        $effectiveChoice = ChoiceOptimizationEffectiveChoice::query()
+            ->where('omr_staging_id', (int) $row->id)
+            ->first();
+
+        $actorIds = collect([$row->resolved_by, $row->decision_resolved_by])
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $actors = $actorIds->isEmpty()
+            ? collect()
+            : User::query()->whereIn('id', $actorIds)->get()->keyBy('id');
+
+        return view('choice-optimization.omr-row-detail', compact(
+            'batch',
+            'row',
+            'candidate',
+            'registrationChoices',
+            'validatedChoices',
+            'choiceValidationResult',
+            'effectiveChoice',
+            'actors',
+        ));
+    }
+
 
     public function omrStatus(ChoiceOptimizationSettingsService $settings, ChoiceOptimizationOmrBatch $batch): JsonResponse
     {

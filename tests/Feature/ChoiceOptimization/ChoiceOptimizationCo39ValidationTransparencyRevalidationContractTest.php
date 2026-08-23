@@ -6,22 +6,24 @@ use Tests\TestCase;
 
 class ChoiceOptimizationCo39ValidationTransparencyRevalidationContractTest extends TestCase
 {
-    public function test_omr_review_exposes_validation_transparency_and_revalidation(): void
+    public function test_batch_review_is_minimal_and_full_validation_trace_moves_to_individual_detail(): void
     {
-        $view = file_get_contents(resource_path('views/choice-optimization/omr-show.blade.php'));
+        $batchView = file_get_contents(resource_path('views/choice-optimization/omr-show.blade.php'));
+        $detailView = file_get_contents(resource_path('views/choice-optimization/omr-row-detail.blade.php'));
         $service = file_get_contents(app_path('Services/ChoiceOptimization/ChoiceOptimizationOmrValidationService.php'));
 
-        $this->assertStringContainsString('OMR Choice Validation Result', $view);
-        $this->assertStringContainsString('Raw OMR Choice', $view);
-        $this->assertStringContainsString('Expanded / Validated OMR Choice', $view);
-        $this->assertStringContainsString('Validation Errors', $view);
-        $this->assertStringContainsString('Warnings / Review Notes', $view);
-        $this->assertStringContainsString('Expansion / Removal Details', $view);
-        $this->assertStringContainsString('OMR Choice is fully validated and safe for downstream use.', $view);
-        $this->assertStringContainsString('OMR Choice is NOT eligible for override / Allocation', $view);
-        $this->assertStringContainsString('Re-validate OMR Choices', $view);
+        $this->assertStringContainsString('Validated OMR Choice:', $batchView);
+        $this->assertStringContainsString('View validation trace', $batchView);
+        $this->assertStringNotContainsString('JSON_PRETTY_PRINT', $batchView);
+        $this->assertStringNotContainsString('<pre', $batchView);
 
-        // Full validation continues to use the shared Choice Validation engine/rules.
+        $this->assertStringContainsString('Choice Lineage', $detailView);
+        $this->assertStringContainsString('Raw OMR Choice', $detailView);
+        $this->assertStringContainsString('Expanded / Validated OMR Choice', $detailView);
+        $this->assertStringContainsString('Expansion / Removal Details', $detailView);
+        $this->assertStringContainsString('Human-readable trace of what happened to each OMR choice and why.', $detailView);
+        $this->assertStringContainsString('Operator / Resolution Audit', $detailView);
+
         $this->assertStringContainsString('ChoiceValidationEngine', $service);
         $this->assertStringContainsString('validated_omr_choice_codes', $service);
         $this->assertStringContainsString('choice_validation_details', $service);

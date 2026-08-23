@@ -16,13 +16,13 @@ final class ChoiceOptimizationCo33InteractiveReviewPolishContractTest extends Te
         $this->assertStringContainsString("with(['registration', 'source.items'])", $controller);
         $this->assertStringContainsString('registrationChoiceMap', $controller);
         $this->assertStringContainsString('candidateContextMap', $controller);
-        $this->assertStringContainsString('Original Category', $view);
-        $this->assertStringContainsString('Written Qualified Track', $view);
+        $this->assertStringContainsString('Category:', $view);
+        $this->assertStringContainsString('Written Track:', $view);
         $this->assertStringContainsString('Registration Choice', $view);
-        $this->assertStringContainsString('Validated Choice', $view);
-        $this->assertStringContainsString('OMR Choice', $view);
-        $this->assertStringContainsString('Left to Right = Preference Order', $view);
-        $this->assertStringContainsString('range(1, $choiceSlotCount)', $view);
+        $this->assertStringContainsString('Finalized Validated Choice', $view);
+        $this->assertStringContainsString('OMR Options', $view);
+        $this->assertStringContainsString('flex-wrap:nowrap', $view);
+        $this->assertStringContainsString('#{{ str_pad((string)($i+1),2', $view);
     }
 
     #[Test]
@@ -35,7 +35,8 @@ final class ChoiceOptimizationCo33InteractiveReviewPolishContractTest extends Te
         $this->assertStringContainsString('remaining_review_rows', $controller);
         $this->assertStringContainsString('remainingOmrOperatorReviews', $controller);
         $this->assertStringContainsString('co-review-form', $view);
-        $this->assertStringContainsString("headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}", $view);
+        $this->assertStringContainsString("'Accept':'application/json'", $view);
+        $this->assertStringContainsString("'X-Requested-With':'XMLHttpRequest'", $view);
         $this->assertStringContainsString('co-resolved', $view);
         $this->assertStringContainsString('focusNextReview', $view);
         $this->assertStringContainsString('scrollIntoView', $view);

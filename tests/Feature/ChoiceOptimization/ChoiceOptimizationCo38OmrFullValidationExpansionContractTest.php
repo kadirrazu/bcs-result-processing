@@ -50,10 +50,12 @@ final class ChoiceOptimizationCo38OmrFullValidationExpansionContractTest extends
     {
         $view = file_get_contents(resource_path('views/choice-optimization/omr-show.blade.php'));
 
-        $this->assertStringContainsString('grid-template-rows: 44px minmax(72px, 1fr)', $view);
-        $this->assertStringContainsString('co-context-body', $view);
+        $this->assertStringContainsString('co-candidate-line', $view);
+        $this->assertStringContainsString('Category:', $view);
+        $this->assertStringContainsString('Written Track:', $view);
         $this->assertStringContainsString('$candidateContext[\'category_code\']', $view);
         $this->assertStringNotContainsString('$candidateContext[\'category_label\']', $view);
-        $this->assertStringContainsString('Left to Right = Preference Order', $view);
+        $this->assertStringContainsString('flex-wrap:nowrap', $view);
+        $this->assertStringContainsString('overflow-x:auto', $view);
     }
 }

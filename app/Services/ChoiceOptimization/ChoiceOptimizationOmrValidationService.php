@@ -56,7 +56,7 @@ final class ChoiceOptimizationOmrValidationService
             $chunkSize = max(100, (int) config('choice-optimization.import_chunk_size', 1000));
 
             foreach ($rows->chunk($chunkSize) as $chunk) {
-                DB::connection('exam')->transaction(function () use ($chunk, $written, $registrations, $duplicateCounts, $entries, &$valid, &$invalid, &$conflicts, &$reviews, &$processed): void {
+                DB::connection('exam')->transaction(function () use ($batch, $chunk, $written, $registrations, $duplicateCounts, $entries, &$valid, &$invalid, &$conflicts, &$reviews, &$processed): void {
                     foreach ($chunk as $row) {
                         $errors = [];
                         $warnings = [];
@@ -122,25 +122,84 @@ final class ChoiceOptimizationOmrValidationService
                                     (int) $batch->configured_maximum_choices,
                                 );
 
+                                $blockingRowRuleErrors = [];
                                 foreach ($rowRule['errors'] as $rowError) {
-                                    $errors[] = $this->structuredRuleMessage((string) $rowError, 'OMR_CHOICE_SOURCE_INVALID');
+                                    $structured = $this->structuredRuleMessage((string) $rowError, 'OMR_CHOICE_SOURCE_INVALID');
+
+                                    // An OMR sequence gap is repairable: preserve raw positions,
+                                    // compact the non-blank choices for downstream validation, and
+                                    // retain a visible warning/audit trail.
+                                    if ($structured['code'] === 'CHOICE_SEQUENCE_GAP') {
+                                        $warnings[] = [
+                                            'code' => 'CHOICE_SEQUENCE_GAP_AUTO_REPAIRED',
+                                            'message' => $structured['message'].' The non-blank OMR choices were automatically compacted into a contiguous sequence before validation.',
+                                        ];
+                                        continue;
+                                    }
+
+                                    $blockingRowRuleErrors[] = $structured;
                                 }
+
+                                foreach ($blockingRowRuleErrors as $rowError) {
+                                    $errors[] = $rowError;
+                                }
+
                                 foreach ($rowRule['warnings'] as $rowWarning) {
                                     $warnings[] = $this->structuredRuleMessage((string) $rowWarning, 'OMR_CHOICE_SOURCE_WARNING');
                                 }
 
-                                if ($rowRule['errors'] === []) {
+                                if ($blockingRowRuleErrors === []) {
                                     $track = $this->track($this->enumValue($match->written_qualified_track) ?? '');
+
+                                    // Keep original source position/column on each item. The Choice
+                                    // Validation engine emits contiguous output_position values, so
+                                    // source_position -> output_position gives the re-assembly trace.
                                     $items = $this->choiceItems($rowRule['choices']);
                                     $output = $this->engine->validate($registration, $track, $items, $entries);
-                                    $validatedCodes = $output['validated'];
-                                    $choiceDetails = $output['details'];
-                                    $choiceStatus = $output['status'] === 'valid' ? 'valid' : 'invalid';
+
+                                    $validatedCodes = array_values((array) ($output['validated'] ?? []));
+                                    $choiceDetails = array_values((array) ($output['details'] ?? []));
+                                    $choiceStatus = ($output['status'] ?? null) === 'valid' && $validatedCodes !== []
+                                        ? 'valid'
+                                        : 'invalid';
+
+                                    foreach ($choiceDetails as $detail) {
+                                        if (($detail['result'] ?? null) === 'removed') {
+                                            $reasonCode = (string) ($detail['reason_code'] ?? 'CHOICE_REMOVED');
+                                            $warnings[] = [
+                                                'code' => $reasonCode.'_AUTO_REMOVED',
+                                                'message' => sprintf(
+                                                    'Source #%02d choice %s was removed automatically: %s',
+                                                    (int) ($detail['source_position'] ?? 0),
+                                                    (string) ($detail['source_code'] ?? '—'),
+                                                    (string) ($detail['reason_message'] ?? $reasonCode),
+                                                ),
+                                            ];
+                                        }
+
+                                        if (
+                                            in_array(($detail['result'] ?? null), ['kept', 'expanded'], true)
+                                            && ! empty($detail['output_position'])
+                                            && (int) ($detail['source_position'] ?? 0) !== (int) $detail['output_position']
+                                        ) {
+                                            $warnings[] = [
+                                                'code' => 'CHOICE_REASSEMBLED',
+                                                'message' => sprintf(
+                                                    'Choice %s moved from source position #%02d to clean position #%02d during automatic re-assembly.',
+                                                    (string) ($detail['output_code'] ?? $detail['source_code'] ?? '—'),
+                                                    (int) ($detail['source_position'] ?? 0),
+                                                    (int) $detail['output_position'],
+                                                ),
+                                            ];
+                                        }
+                                    }
+
+                                    $warnings = $this->uniqueMessages($warnings);
 
                                     if ($choiceStatus !== 'valid') {
                                         $errors[] = [
                                             'code' => 'OMR_CHOICE_VALIDATION_FAILED',
-                                            'message' => 'No valid OMR override choice remains after applying the finalized Choice Validation rules.',
+                                            'message' => 'No valid OMR override choice remains after automatic sanitization and the finalized Choice Validation rules.',
                                         ];
                                     }
                                 } else {
@@ -274,6 +333,27 @@ final class ChoiceOptimizationOmrValidationService
         }
 
         return ['code' => $code, 'message' => $message];
+    }
+
+    /** @param list<array{code:string,message:string}> $messages
+     *  @return list<array{code:string,message:string}>
+     */
+    private function uniqueMessages(array $messages): array
+    {
+        $seen = [];
+        $unique = [];
+
+        foreach ($messages as $message) {
+            $key = (string) ($message['code'] ?? '').'|'.(string) ($message['message'] ?? '');
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $unique[] = $message;
+        }
+
+        return $unique;
     }
 
     private function enumValue(mixed $value): ?string

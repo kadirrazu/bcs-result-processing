@@ -65,9 +65,17 @@ final class ChoiceOptimizationOmrApprovalService
                 $effective = $override;
                 $source = 'viva_omr_override';
                 $reasonCode = 'OVERRIDDEN_BY_VIVA_OMR';
+                $warningCount = count((array) $omr->validation_warnings);
                 $reasonText = $omr->decision_resolution === 'consider_no_as_yes_keep_options'
                     ? 'Operator interpreted OMR NO-with-options as YES and retained the validated OMR options.'
                     : 'Candidate explicitly selected YES and supplied a valid OMR replacement choice list.';
+
+                if ($warningCount > 0) {
+                    $reasonText .= sprintf(
+                        ' The OMR choice required %d warning-level automatic sanitization/re-assembly action(s); full trace is retained on the OMR detail record.',
+                        $warningCount
+                    );
+                }
             } elseif ($omr && strtoupper((string) $omr->effective_change_choice) === 'NO') {
                 $source = 'validated_choice';
                 $reasonCode = $omr->decision_resolution === 'keep_no_discard_options'
