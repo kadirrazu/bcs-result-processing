@@ -1,3 +1,15 @@
+## 2026-08-24 — Choice Optimization CO4C2.1 Historical Visual Confirmation Polish
+- Added BCS-labelled symmetric current/previous comparison columns and pagination-aware serial numbering.
+- Added runtime District Master title resolution for current candidate district.
+- Added resolved operator user name to Historical Match confirmation/rejection audit display.
+
+## 2026-08-24 — Choice Optimization CO4C2 Historical Match Review
+- Added operator Confirm/Reject workflow for Historical REVIEW matches with mandatory administrative reason.
+- Added per-match resolution state, operator identity/time and Choice Optimization processing audit events.
+- Added competing-match closure when one historical record is confirmed for a current candidate.
+- Added individual current-vs-previous identity comparison page and AJAX Save & Continue review flow.
+- Added confirmed historical recommendation read service for the later choice-trimming phase.
+
 ## 2026-08-24 — Choice Optimization CO4C1.2 Historical Landing Polling
 - Added live per-BCS Historical Pull/Re-pull progress indicators and JSON polling on the Choice Optimization landing page.
 - Landing reloads once automatically after all observed running historical sources finish.

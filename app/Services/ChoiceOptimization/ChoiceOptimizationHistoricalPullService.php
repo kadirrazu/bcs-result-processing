@@ -394,6 +394,10 @@ final class ChoiceOptimizationHistoricalPullService
             'match_status' => $status,
             'match_method' => $method,
             'match_evidence' => json_encode($evidence, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'resolution_status' => $status === 'matched' ? 'auto_confirmed' : 'pending',
+            'resolution_reason' => null,
+            'resolved_by' => null,
+            'resolved_at' => null,
             'created_at' => $now,
             'updated_at' => $now,
         ];

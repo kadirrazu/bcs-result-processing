@@ -15,11 +15,17 @@ final class ChoiceOptimizationHistoricalMatch extends ExaminationModel
             'repository_dataset_id' => 'integer',
             'repository_row_id' => 'integer',
             'match_evidence' => 'array',
+            'resolved_at' => 'datetime',
         ];
     }
 
     public function source(): BelongsTo
     {
         return $this->belongsTo(ChoiceOptimizationHistoricalSource::class, 'historical_source_id');
+    }
+
+    public function registration(): BelongsTo
+    {
+        return $this->belongsTo(Registration::class, 'registration_id');
     }
 }

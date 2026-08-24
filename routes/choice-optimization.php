@@ -15,6 +15,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::post('/historical/pull', [ChoiceOptimizationController::class, 'pullHistorical'])->name('historical.pull');
         Route::get('/historical/{source}', [ChoiceOptimizationController::class, 'showHistorical'])->name('historical.show');
         Route::get('/historical/{source}/status', [ChoiceOptimizationController::class, 'historicalStatus'])->name('historical.status');
+        Route::get('/historical/{source}/matches/{match}', [ChoiceOptimizationController::class, 'showHistoricalMatch'])->name('historical.matches.show');
+        Route::post('/historical/{source}/matches/{match}/resolve', [ChoiceOptimizationController::class, 'resolveHistoricalMatch'])->name('historical.matches.resolve');
 
         Route::get('/omr/template', [ChoiceOptimizationController::class, 'omrTemplate'])->name('omr.template');
         Route::post('/omr/upload', [ChoiceOptimizationController::class, 'uploadOmr'])->name('omr.upload');

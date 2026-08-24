@@ -6,11 +6,13 @@ use App\Jobs\ProcessChoiceOptimizationHistoricalPull;
 use App\Jobs\ProcessChoiceOptimizationOmrApproval;
 use App\Jobs\ProcessChoiceOptimizationOmrValidation;
 use App\Models\ChoiceOptimizationEffectiveChoice;
+use App\Models\ChoiceOptimizationHistoricalMatch;
 use App\Models\ChoiceOptimizationHistoricalSource;
 use App\Models\ChoiceOptimizationProcessingAudit;
 use App\Models\ChoiceOptimizationOmrBatch;
 use App\Models\ChoiceOptimizationOmrStaging;
 use App\Models\ChoiceValidationResult;
+use App\Models\District;
 use App\Models\PreviousBcsRepository;
 use App\Models\WrittenProcessingState;
 use App\Models\User;
@@ -18,6 +20,7 @@ use App\Services\ChoiceOptimization\ChoiceOptimizationOmrDecisionResolutionServi
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrImportService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrResolutionService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrTemplateService;
+use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalReviewService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationSettingsService;
 use App\Services\ChoiceValidation\ChoiceValidationFinalizedDatasetService;
 use App\Support\Examinations\ExaminationContext;
@@ -514,6 +517,7 @@ final class ChoiceOptimizationController extends Controller
     public function showHistorical(
         Request $request,
         ChoiceOptimizationSettingsService $settings,
+        ExaminationContext $context,
         ChoiceOptimizationHistoricalSource $source,
     ): View {
         $this->assertOptimizationEnabled($settings);
@@ -522,7 +526,9 @@ final class ChoiceOptimizationController extends Controller
         $search = trim((string) $request->query('search', ''));
 
         $matches = $source->matches()
-            ->when($status !== 'all' && $status !== '', fn ($query) => $query->where('match_status', $status))
+            ->with('registration')
+            ->when($status === 'operator_confirmed', fn ($query) => $query->where('resolution_status', 'operator_confirmed'))
+            ->when($status !== 'all' && $status !== '' && $status !== 'operator_confirmed', fn ($query) => $query->where('match_status', $status))
             ->when($search !== '', function ($query) use ($search): void {
                 $like = '%'.$search.'%';
                 $query->where(function ($nested) use ($like): void {
@@ -547,6 +553,14 @@ final class ChoiceOptimizationController extends Controller
         $updateAvailable = $repository?->currentEffectiveDataset
             && (int) $repository->currentEffectiveDataset->id !== (int) $source->repository_dataset_id;
 
+        $firstReviewMatch = $source->matches()
+            ->where('match_status', 'review')
+            ->where('resolution_status', 'pending')
+            ->orderBy('current_reg')
+            ->first();
+
+        $currentBcsNumber = $context->current()?->bcs_number;
+
         return view('choice-optimization.historical-show', compact(
             'source',
             'matches',
@@ -554,7 +568,99 @@ final class ChoiceOptimizationController extends Controller
             'search',
             'repository',
             'updateAvailable',
+            'firstReviewMatch',
+            'currentBcsNumber',
         ));
+    }
+
+    public function showHistoricalMatch(
+        ChoiceOptimizationSettingsService $settings,
+        ExaminationContext $context,
+        ChoiceOptimizationHistoricalSource $source,
+        ChoiceOptimizationHistoricalMatch $match,
+    ): View {
+        $this->assertOptimizationEnabled($settings);
+        abort_unless((int) $match->historical_source_id === (int) $source->id, 404);
+
+        $match->load('registration');
+        $nextReviewMatch = $source->matches()
+            ->where('match_status', 'review')
+            ->where('resolution_status', 'pending')
+            ->whereKeyNot($match->id)
+            ->orderBy('current_reg')
+            ->first();
+
+        $currentBcsNumber = $context->current()?->bcs_number;
+
+        $currentDistrict = null;
+        if (filled($match->registration?->district_code)) {
+            $currentDistrict = District::query()
+                ->where('code', (string) $match->registration->district_code)
+                ->first(['code', 'name']);
+        }
+
+        $resolvedByUser = $match->resolved_by
+            ? User::query()->find((int) $match->resolved_by, ['id', 'name'])
+            : null;
+
+        return view('choice-optimization.historical-match-show', compact(
+            'source',
+            'match',
+            'nextReviewMatch',
+            'currentBcsNumber',
+            'currentDistrict',
+            'resolvedByUser',
+        ));
+    }
+
+    public function resolveHistoricalMatch(
+        Request $request,
+        ChoiceOptimizationSettingsService $settings,
+        ChoiceOptimizationHistoricalSource $source,
+        ChoiceOptimizationHistoricalMatch $match,
+        ChoiceOptimizationHistoricalReviewService $service,
+    ): RedirectResponse|JsonResponse {
+        $this->assertOptimizationEnabled($settings);
+        abort_unless((int) $match->historical_source_id === (int) $source->id, 404);
+
+        $validated = $request->validate([
+            'decision' => ['required', 'in:confirm,reject'],
+            'reason' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $service->resolve(
+            $source,
+            $match,
+            (string) $validated['decision'],
+            (string) $validated['reason'],
+            (int) $request->user()->getAuthIdentifier(),
+        );
+
+        $nextReview = $source->matches()
+            ->where('match_status', 'review')
+            ->where('resolution_status', 'pending')
+            ->orderBy('current_reg')
+            ->first();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'message' => $validated['decision'] === 'confirm'
+                    ? 'Historical match confirmed.'
+                    : 'Historical match rejected.',
+                'remaining_review_rows' => (int) $source->refresh()->review_count,
+                'next_review_url' => $nextReview
+                    ? route('choice-optimization.historical.matches.show', [$source, $nextReview])
+                    : null,
+                'source_url' => route('choice-optimization.historical.show', $source),
+            ]);
+        }
+
+        return $nextReview
+            ? redirect()->route('choice-optimization.historical.matches.show', [$source, $nextReview])
+                ->with('success', 'Historical match review saved. Continue with the next review.')
+            : redirect()->route('choice-optimization.historical.show', $source)
+                ->with('success', 'Historical match review saved. All review items are resolved.');
     }
 
     public function historicalStatus(

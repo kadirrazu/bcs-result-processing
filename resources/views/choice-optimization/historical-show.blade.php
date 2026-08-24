@@ -11,6 +11,11 @@
                 </div>
             </div>
             <div class="col-auto ms-auto d-flex gap-2">
+                @if($firstReviewMatch)
+                    <a class="btn btn-warning" href="{{ route('choice-optimization.historical.matches.show', [$source, $firstReviewMatch]) }}">
+                        Review Next
+                    </a>
+                @endif
                 @if($repository?->currentEffectiveDataset && !in_array($source->status, ['pull_queued','pulling'], true))
                     <form method="POST" action="{{ route('choice-optimization.historical.pull') }}" class="mb-0">
                         @csrf
@@ -101,7 +106,7 @@
                 <div class="col-md-3">
                     <label class="form-label">Match Status</label>
                     <select class="form-select" name="status">
-                        @foreach(['all'=>'All','review'=>'Needs Review','matched'=>'Matched'] as $key=>$label)
+                        @foreach(['all'=>'All','review'=>'Needs Review','matched'=>'Matched','operator_confirmed'=>'Operator Confirmed','rejected'=>'Rejected'] as $key=>$label)
                             <option value="{{ $key }}" @selected($status === $key)>{{ $label }}</option>
                         @endforeach
                     </select>
@@ -123,7 +128,7 @@
             <div>
                 <h3 class="card-title">Matched Historical Recommendations</h3>
                 <div class="card-subtitle">
-                    MATCHED rows have exact primary identity and no supporting conflict. REVIEW rows need operator confirmation in the next phase.
+                    MATCHED rows have exact primary identity and are usable historical recommendations. REVIEW rows require operator confirmation or rejection before downstream choice optimization.
                 </div>
             </div>
         </div>
@@ -131,12 +136,13 @@
             <table class="table table-vcenter card-table">
                 <thead>
                 <tr>
-                    <th>Current Candidate</th>
-                    <th>Previous BCS Record</th>
+                    <th class="text-center align-middle" style="width:64px">SL</th>
+                    <th>Current Candidate <strong>(BCS {{ $currentBcsNumber ?: '—' }})</strong></th>
+                    <th>Previous BCS Record <strong>(BCS {{ $source->previous_bcs_number }})</strong></th>
                     <th>Recommended Cadre</th>
-                    <th>Method</th>
-                    <th>Status</th>
+                    <th>Match / Status</th>
                     <th>Evidence</th>
+                    <th class="text-end">Action</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -145,20 +151,40 @@
                         $support = (array) data_get($match->match_evidence, 'supporting', []);
                     @endphp
                     <tr>
-                        <td>
-                            <div><strong>Reg:</strong> <code>{{ $match->current_reg }}</code></div>
+                        <td class="text-center align-middle fw-semibold">
+                            {{ ($matches->firstItem() ?? 1) + $loop->index }}
                         </td>
                         <td>
-                            <div><strong>{{ $match->previous_name ?: '—' }}</strong></div>
-                            <div class="small">Reg: <code>{{ $match->previous_reg ?: '—' }}</code></div>
+                            <div><strong>Reg:</strong> <code>{{ $match->current_reg }}</code></div>
+                            <div class="small fw-semibold">{{ $match->registration?->name ?: '—' }}</div>
+                            <div class="small text-secondary">Father: {{ $match->registration?->father_name ?: '—' }}</div>
+                        </td>
+                        <td>
+                            <div><strong>Reg:</strong> <code>{{ $match->previous_reg ?: '—' }}</code></div>
+                            <div class="small fw-semibold">{{ $match->previous_name ?: '—' }}</div>
                             <div class="small text-secondary">Father: {{ $match->previous_fname ?: '—' }}</div>
                         </td>
                         <td><code>{{ $match->previous_cadre ?: '—' }}</code></td>
-                        <td><code>{{ $match->match_method }}</code></td>
                         <td>
-                            <span class="badge {{ $match->match_status === 'matched' ? 'bg-green-lt' : 'bg-yellow-lt' }}">
-                                {{ strtoupper($match->match_status) }}
-                            </span>
+                            @php
+                                $matchBadge = match($match->match_status) {
+                                    'matched' => 'bg-green-lt',
+                                    'review' => 'bg-yellow-lt',
+                                    'rejected' => 'bg-red-lt',
+                                    default => 'bg-secondary-lt',
+                                };
+                            @endphp
+                            <div><code>{{ $match->match_method }}</code></div>
+                            <div class="mt-1">
+                                <span class="badge {{ $matchBadge }}">{{ strtoupper($match->match_status) }}</span>
+                                @if($match->resolution_status === 'operator_confirmed')
+                                    <span class="badge bg-blue-lt ms-1">OPERATOR CONFIRMED</span>
+                                @elseif($match->resolution_status === 'operator_rejected')
+                                    <span class="badge bg-red-lt ms-1">OPERATOR REJECTED</span>
+                                @elseif($match->resolution_status === 'competing_rejected')
+                                    <span class="badge bg-secondary-lt ms-1">COMPETING RECORD</span>
+                                @endif
+                            </div>
                         </td>
                         <td>
                             <details class="small">
@@ -172,9 +198,15 @@
                                 </div>
                             </details>
                         </td>
+                        <td class="text-end">
+                            <a class="btn btn-sm {{ $match->match_status === 'review' ? 'btn-warning' : 'btn-outline-primary' }}"
+                               href="{{ route('choice-optimization.historical.matches.show', [$source, $match]) }}">
+                                {{ $match->match_status === 'review' ? 'Review' : 'View' }}
+                            </a>
+                        </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="text-center text-secondary py-5">No matched/review records found.</td></tr>
+                    <tr><td colspan="7" class="text-center text-secondary py-5">No matched/review records found.</td></tr>
                 @endforelse
                 </tbody>
             </table>
