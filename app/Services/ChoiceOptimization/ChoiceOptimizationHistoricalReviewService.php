@@ -10,6 +10,9 @@ use RuntimeException;
 
 final class ChoiceOptimizationHistoricalReviewService
 {
+    public function __construct(
+        private readonly ChoiceOptimizationHistoricalStalenessService $staleness,
+    ) {}
     public function resolve(
         ChoiceOptimizationHistoricalSource $source,
         ChoiceOptimizationHistoricalMatch $match,
@@ -111,6 +114,16 @@ final class ChoiceOptimizationHistoricalReviewService
                 'created_at' => now(),
             ]);
         });
+
+        $this->staleness->markIfProduced(
+            'Confirmed Historical Recommendation set changed after operator review.',
+            $actorId,
+            [
+                'historical_source_id' => (int) $source->id,
+                'historical_match_id' => (int) $match->id,
+                'decision' => $decision,
+            ],
+        );
 
         return $match->refresh();
     }

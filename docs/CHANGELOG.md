@@ -1,3 +1,20 @@
+## 2026-08-24 — Choice Optimization CO4C3.2 Stacked Candidate/Choice UI
+- Replaced wide Historical Choice Optimization result table with full-width stacked candidate records.
+- Added explicit `BCS XX - CADRE` historical match context and red no-historical-data status.
+- Changed choice chips to wrapped vertical sequence/code/abbreviation display to avoid horizontal scroll.
+- Added matching Optimization Reason treatment to individual detail.
+
+## 2026-08-24 — Choice Optimization CO4C3.1 Choice Lane Visual Polish
+- Added compact stacked Input/Allocation-ready choice lineage on Historical Choice Optimization listing.
+- Added serial + code + current cadre/sub-cadre abbreviation chips in one horizontal lane.
+- Applied the same lane to individual detail and added Registration candidate name for visual confirmation.
+
+## 2026-08-24 — Choice Optimization CO4C3 Historical Recommendation Choice Optimization
+- Added examination-scoped Allocation-ready Choice snapshot derived from current effective choices and confirmed Previous BCS recommendations.
+- Added highest-current-preference historical cutoff trimming, locked warning/blocking edge-case handling, and empty-choice valid outcome.
+- Added queue-based processing, result/detail lineage UI, source/output hashing, explicit finalization, and stale-on-Historical-change safeguards.
+- Pending Historical REVIEW blocks CO4C3 processing.
+
 ## 2026-08-24 — Choice Optimization CO4C2.1 Historical Visual Confirmation Polish
 - Added BCS-labelled symmetric current/previous comparison columns and pagination-aware serial numbering.
 - Added runtime District Master title resolution for current candidate district.

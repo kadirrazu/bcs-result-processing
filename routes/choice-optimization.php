@@ -12,6 +12,12 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/', [ChoiceOptimizationController::class, 'index'])->name('index');
         Route::post('/setting', [ChoiceOptimizationController::class, 'updateSetting'])->name('setting.update');
 
+        Route::post('/historical-choices/process', [ChoiceOptimizationController::class, 'queueHistoricalChoiceOptimization'])->name('historical-choices.process');
+        Route::get('/historical-choices', [ChoiceOptimizationController::class, 'historicalChoices'])->name('historical-choices.index');
+        Route::get('/historical-choices/status', [ChoiceOptimizationController::class, 'historicalChoiceStatus'])->name('historical-choices.status');
+        Route::get('/historical-choices/{choice}', [ChoiceOptimizationController::class, 'historicalChoiceShow'])->name('historical-choices.show');
+        Route::post('/historical-choices/finalize', [ChoiceOptimizationController::class, 'finalizeHistoricalChoices'])->name('historical-choices.finalize');
+
         Route::post('/historical/pull', [ChoiceOptimizationController::class, 'pullHistorical'])->name('historical.pull');
         Route::get('/historical/{source}', [ChoiceOptimizationController::class, 'showHistorical'])->name('historical.show');
         Route::get('/historical/{source}/status', [ChoiceOptimizationController::class, 'historicalStatus'])->name('historical.status');

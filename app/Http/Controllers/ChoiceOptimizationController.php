@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\FinalizeChoiceOptimizationHistoricalChoice;
+use App\Jobs\ProcessChoiceOptimizationHistoricalChoice;
 use App\Jobs\ProcessChoiceOptimizationHistoricalPull;
 use App\Jobs\ProcessChoiceOptimizationOmrApproval;
 use App\Jobs\ProcessChoiceOptimizationOmrValidation;
 use App\Models\ChoiceOptimizationEffectiveChoice;
+use App\Models\ChoiceOptimizationHistoricalChoice;
 use App\Models\ChoiceOptimizationHistoricalMatch;
 use App\Models\ChoiceOptimizationHistoricalSource;
 use App\Models\ChoiceOptimizationProcessingAudit;
@@ -21,6 +24,8 @@ use App\Services\ChoiceOptimization\ChoiceOptimizationOmrImportService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrResolutionService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrTemplateService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalReviewService;
+use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalStalenessService;
+use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalChoiceFinalizationService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationSettingsService;
 use App\Services\ChoiceValidation\ChoiceValidationFinalizedDatasetService;
 use App\Support\Examinations\ExaminationContext;
@@ -43,6 +48,9 @@ final class ChoiceOptimizationController extends Controller
         $historicalRepositories = collect();
         $historicalSourceMap = collect();
 
+        $historicalPendingReviewCount = 0;
+        $historicalOptimizationRows = 0;
+
         if ($setting->optimization_enabled) {
             $historicalRepositories = PreviousBcsRepository::query()
                 ->with('currentEffectiveDataset')
@@ -58,6 +66,13 @@ final class ChoiceOptimizationController extends Controller
             $historicalSourceMap = ChoiceOptimizationHistoricalSource::query()
                 ->get()
                 ->keyBy('previous_bcs_number');
+
+            $historicalPendingReviewCount = ChoiceOptimizationHistoricalMatch::query()
+                ->where('match_status', 'review')
+                ->where('resolution_status', 'pending')
+                ->count();
+
+            $historicalOptimizationRows = ChoiceOptimizationHistoricalChoice::query()->count();
         }
 
         return view('choice-optimization.index', [
@@ -69,6 +84,8 @@ final class ChoiceOptimizationController extends Controller
                 : collect(),
             'historicalRepositories' => $historicalRepositories,
             'historicalSourceMap' => $historicalSourceMap,
+            'historicalPendingReviewCount' => $historicalPendingReviewCount,
+            'historicalOptimizationRows' => $historicalOptimizationRows,
         ]);
     }
 
@@ -398,6 +415,7 @@ final class ChoiceOptimizationController extends Controller
         Request $request,
         ChoiceOptimizationSettingsService $settings,
         ExaminationContext $context,
+        ChoiceOptimizationHistoricalStalenessService $staleness,
     ): RedirectResponse {
         $this->assertOptimizationEnabled($settings);
 
@@ -431,6 +449,12 @@ final class ChoiceOptimizationController extends Controller
             $repositories->count() === $bcsNumbers->count(),
             422,
             'One or more selected BCS repositories were not found.'
+        );
+
+        $staleness->markIfProduced(
+            'Historical source Pull/Re-pull changed the Historical Recommendation snapshot.',
+            (int) $request->user()->getAuthIdentifier(),
+            ['bcs_numbers' => $bcsNumbers->all()],
         );
 
         $queued = 0;
@@ -681,6 +705,230 @@ final class ChoiceOptimizationController extends Controller
             'no_match_count' => (int) $source->no_match_count,
             'failure_message' => $source->failure_message,
         ]);
+    }
+
+    public function queueHistoricalChoiceOptimization(
+        Request $request,
+        ChoiceOptimizationSettingsService $settings,
+        ExaminationContext $context,
+    ): RedirectResponse {
+        $this->assertOptimizationEnabled($settings);
+
+        $examId = $context->currentId();
+        abort_if($examId === null, 409, 'No examination is selected.');
+
+        $pendingReview = ChoiceOptimizationHistoricalMatch::query()
+            ->where('match_status', 'review')
+            ->where('resolution_status', 'pending')
+            ->count();
+
+        abort_if(
+            $pendingReview > 0,
+            409,
+            "Resolve all {$pendingReview} pending Historical Match REVIEW item(s) before Historical Choice Optimization."
+        );
+
+        $sourcesNotReady = ChoiceOptimizationHistoricalSource::query()
+            ->where('status', '<>', 'pulled')
+            ->count();
+
+        abort_if(
+            $sourcesNotReady > 0,
+            409,
+            'Every Historical source already added to this workspace must be fully PULLED before Historical Choice Optimization.'
+        );
+
+        $state = $settings->state();
+        abort_if(
+            in_array((string) $state->status, ['historical_optimization_queued', 'historical_optimizing'], true),
+            409,
+            'Historical Choice Optimization is already running.'
+        );
+
+        $from = (string) $state->status;
+        $state->update([
+            'status' => 'historical_optimization_queued',
+            'is_stale' => true,
+            'stale_reason' => 'Historical Choice Optimization is queued.',
+            'finalized_by' => null,
+            'finalized_at' => null,
+        ]);
+
+        ChoiceOptimizationProcessingAudit::query()->create([
+            'event' => 'HISTORICAL_CHOICE_OPTIMIZATION_QUEUED',
+            'actor_id' => (int) $request->user()->getAuthIdentifier(),
+            'from_status' => $from,
+            'to_status' => 'historical_optimization_queued',
+            'context' => [
+                'pending_historical_reviews' => $pendingReview,
+            ],
+            'created_at' => now(),
+        ]);
+
+        ProcessChoiceOptimizationHistoricalChoice::dispatch(
+            (int) $examId,
+            (int) $request->user()->getAuthIdentifier(),
+        );
+
+        return redirect()
+            ->route('choice-optimization.historical-choices.index')
+            ->with('success', 'Historical Choice Optimization queued.');
+    }
+
+    public function historicalChoices(
+        Request $request,
+        ChoiceOptimizationSettingsService $settings,
+    ): View {
+        $this->assertOptimizationEnabled($settings);
+
+        $status = trim((string) $request->query('status', 'all'));
+        $search = trim((string) $request->query('search', ''));
+
+        $rows = ChoiceOptimizationHistoricalChoice::query()
+            ->with('registration')
+            ->when($status === 'warning', fn ($query) => $query->whereNotNull('warnings'))
+            ->when($status === 'blocking', fn ($query) => $query->whereNotNull('blocking_issues'))
+            ->when(
+                ! in_array($status, ['all', '', 'warning', 'blocking'], true),
+                fn ($query) => $query->where('optimization_status', $status)
+            )
+            ->when($search !== '', fn ($query) => $query->where('reg', 'like', '%'.$search.'%'))
+            ->orderBy('reg')
+            ->paginate(100)
+            ->withQueryString();
+
+        $state = $settings->state();
+        $summary = (array) data_get($state->summary, 'historical_choice_optimization', []);
+        $choiceCodeAbbrMap = $this->choiceCodeAbbrMap();
+
+        return view('choice-optimization.historical-choices-index', compact(
+            'rows',
+            'state',
+            'status',
+            'search',
+            'summary',
+            'choiceCodeAbbrMap',
+        ));
+    }
+
+    public function historicalChoiceStatus(
+        ChoiceOptimizationSettingsService $settings,
+    ): JsonResponse {
+        $this->assertOptimizationEnabled($settings);
+        $state = $settings->state()->refresh();
+
+        $running = in_array(
+            (string) $state->status,
+            ['historical_optimization_queued', 'historical_optimizing', 'finalization_queued', 'finalizing'],
+            true,
+        );
+
+        return response()->json([
+            'status' => (string) $state->status,
+            'running' => $running,
+            'is_stale' => (bool) $state->is_stale,
+            'stale_reason' => $state->stale_reason,
+            'summary' => (array) data_get($state->summary, 'historical_choice_optimization', []),
+        ]);
+    }
+
+    public function historicalChoiceShow(
+        ChoiceOptimizationSettingsService $settings,
+        ChoiceOptimizationHistoricalChoice $choice,
+    ): View {
+        $this->assertOptimizationEnabled($settings);
+
+        $choice->load('registration');
+
+        $matches = ChoiceOptimizationHistoricalMatch::query()
+            ->where('registration_id', (int) $choice->registration_id)
+            ->where('match_status', 'matched')
+            ->orderBy('previous_bcs_number')
+            ->get();
+
+        $choiceCodeAbbrMap = $this->choiceCodeAbbrMap();
+
+        return view('choice-optimization.historical-choice-show', compact(
+            'choice',
+            'matches',
+            'choiceCodeAbbrMap',
+        ));
+    }
+
+    public function finalizeHistoricalChoices(
+        Request $request,
+        ChoiceOptimizationSettingsService $settings,
+        ExaminationContext $context,
+    ): RedirectResponse {
+        $this->assertOptimizationEnabled($settings);
+
+        $examId = $context->currentId();
+        abort_if($examId === null, 409, 'No examination is selected.');
+
+        $state = $settings->state()->refresh();
+
+        abort_unless(
+            (string) $state->status === 'historical_optimized' && ! (bool) $state->is_stale,
+            409,
+            'Historical Choice Optimization must be current, complete, and free of blocking issues before finalization.'
+        );
+
+        $from = (string) $state->status;
+        $state->update([
+            'status' => 'finalization_queued',
+            'finalized_by' => null,
+            'finalized_at' => null,
+        ]);
+
+        ChoiceOptimizationProcessingAudit::query()->create([
+            'event' => 'CHOICE_OPTIMIZATION_FINALIZATION_QUEUED',
+            'actor_id' => (int) $request->user()->getAuthIdentifier(),
+            'from_status' => $from,
+            'to_status' => 'finalization_queued',
+            'context' => [
+                'dataset_hash' => $state->dataset_hash,
+            ],
+            'created_at' => now(),
+        ]);
+
+        FinalizeChoiceOptimizationHistoricalChoice::dispatch(
+            (int) $examId,
+            (int) $request->user()->getAuthIdentifier(),
+        );
+
+        return redirect()
+            ->route('choice-optimization.historical-choices.index')
+            ->with('success', 'Finalize Allocation-ready Choice queued.');
+    }
+
+    private function choiceCodeAbbrMap(): array
+    {
+        $map = [];
+
+        foreach (\App\Models\CadreMaster::query()->get(['cadre_code', 'cadre_abbr']) as $cadre) {
+            $code = (int) $cadre->cadre_code;
+            $abbr = trim((string) $cadre->cadre_abbr);
+
+            if ($code > 0 && $abbr !== '') {
+                $map[$code][] = $abbr;
+            }
+        }
+
+        foreach (\App\Models\CadreSubMaster::query()->get(['sub_cadre_code', 'sub_cadre_abbr']) as $subCadre) {
+            $code = (int) $subCadre->sub_cadre_code;
+            $abbr = trim((string) $subCadre->sub_cadre_abbr);
+
+            if ($code > 0 && $abbr !== '') {
+                $map[$code][] = $abbr;
+            }
+        }
+
+        return collect($map)
+            ->map(fn (array $abbrs): string => collect($abbrs)
+                ->filter()
+                ->unique()
+                ->implode(' / '))
+            ->all();
     }
 
     private function queueOmrValidation(

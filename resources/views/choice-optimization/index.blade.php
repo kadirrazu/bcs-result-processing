@@ -213,6 +213,70 @@
             </form>
         </div>
 
+        <div class="card mt-3">
+            <div class="card-header">
+                <div>
+                    <h3 class="card-title">Historical Choice Optimization</h3>
+                    <div class="card-subtitle">
+                        Confirmed historical recommendations trim the current effective choices into the Allocation-ready sequence.
+                    </div>
+                </div>
+                <div class="ms-auto d-flex gap-2">
+                    @if($historicalOptimizationRows > 0)
+                        <a class="btn btn-outline-primary" href="{{ route('choice-optimization.historical-choices.index') }}">View Results</a>
+                    @endif
+                    <form method="POST" action="{{ route('choice-optimization.historical-choices.process') }}" class="mb-0">
+                        @csrf
+                        <button
+                            class="btn btn-primary"
+                            type="submit"
+                            @disabled($historicalPendingReviewCount > 0 || in_array((string)$state->status, ['historical_optimization_queued','historical_optimizing'], true))
+                        >
+                            {{ $historicalOptimizationRows > 0 ? 'Re-process Optimization' : 'Process Optimization' }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="text-secondary small">Pending Historical Review</div>
+                        <div class="h3 mb-0 {{ $historicalPendingReviewCount > 0 ? 'text-danger' : 'text-success' }}">
+                            {{ number_format($historicalPendingReviewCount) }}
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-secondary small">Optimization Status</div>
+                        <div class="fw-semibold">{{ strtoupper(str_replace('_',' ',(string)$state->status)) }}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-secondary small">Current Output Rows</div>
+                        <div class="h3 mb-0">{{ number_format($historicalOptimizationRows) }}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-secondary small">Authority</div>
+                        @if((string)$state->status === 'finalized' && !$state->is_stale)
+                            <span class="badge bg-green-lt">FINALIZED / ALLOCATION READY</span>
+                        @elseif($state->is_stale)
+                            <span class="badge bg-yellow-lt">STALE / RE-PROCESS REQUIRED</span>
+                        @else
+                            <span class="badge bg-secondary-lt">NOT FINALIZED</span>
+                        @endif
+                    </div>
+                </div>
+
+                @if($historicalPendingReviewCount > 0)
+                    <div class="alert alert-warning mt-3 mb-0">
+                        Resolve all Historical Match REVIEW items before starting Historical Choice Optimization.
+                    </div>
+                @elseif($state->is_stale && $state->stale_reason)
+                    <div class="alert alert-warning mt-3 mb-0">
+                        <strong>Re-processing required:</strong> {{ $state->stale_reason }}
+                    </div>
+                @endif
+            </div>
+        </div>
+
         <script>
         (() => {
             const all = document.getElementById('historical-select-all');

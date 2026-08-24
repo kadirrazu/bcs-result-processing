@@ -146,6 +146,7 @@ return [
         'choice_optimization' => [
             'label' => 'Choice Optimization',
             'tables' => [
+                'choice_optimization_historical_choices',
                 'choice_optimization_historical_matches',
                 'choice_optimization_historical_sources',
                 'choice_optimization_effective_choices',
