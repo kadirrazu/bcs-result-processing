@@ -42,7 +42,7 @@
                         <div class="row g-3">
                             <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Current state</div><div class="fw-semibold">{{ strtoupper(str_replace('_', ' ', $state->status)) }}</div></div></div>
                             <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Allocation choice source</div><div class="fw-semibold">{{ $setting->optimization_enabled ? 'Finalized Optimized Choice' : 'Finalized Validated Choice' }}</div></div></div>
-                            <div class="col-12"><div class="alert alert-info mb-0">Viva OMR optimization and Historical Previous BCS matching are separate sources. Historical matching uses only central EFFECTIVE repository versions.</div></div>
+                            <div class="col-12"><div class="alert alert-info mb-0">Viva OMR establishes the effective choice. Confirmed Previous BCS Repository recommendations and accepted Google Form recommendations are consolidated first, then Choice Optimization runs once.</div></div>
                         </div>
                     </div>
                 </div>
@@ -50,6 +50,43 @@
         </div>
 
         @if($setting->optimization_enabled)
+        <div class="card mb-3">
+            <div class="card-header"><div><h3 class="card-title">Google Form Historical Recommendation</h3><div class="card-subtitle">Optional YES/NO step. reg = current BCS registration; bcs + cadre = previous BCS recommendation.</div></div></div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-lg-4">
+                        <div class="text-secondary small mb-2">Decision</div>
+                        @if($setting->google_form_enabled === null)
+                            <span class="badge bg-yellow-lt mb-3">NOT DECIDED</span>
+                        @elseif($setting->google_form_enabled)
+                            <span class="badge bg-green-lt mb-3">YES — ENABLED</span>
+                        @else
+                            <span class="badge bg-secondary-lt mb-3">NO — BYPASSED / COMPLETE</span>
+                        @endif
+                        <form method="POST" action="{{ route('choice-optimization.google-form.decision') }}" class="d-flex gap-2">@csrf
+                            <button class="btn {{ $setting->google_form_enabled === true ? 'btn-primary' : 'btn-outline-primary' }}" name="google_form_enabled" value="1">YES</button>
+                            <button class="btn {{ $setting->google_form_enabled === false ? 'btn-secondary' : 'btn-outline-secondary' }}" name="google_form_enabled" value="0">NO</button>
+                        </form>
+                    </div>
+                    <div class="col-lg-5">
+                        @if($setting->google_form_enabled === true)
+                            <div class="text-secondary small mb-2">Upload manually verified file — columns: <code>reg</code>, <code>bcs</code>, <code>cadre</code></div>
+                            <form method="POST" action="{{ route('choice-optimization.google-form.upload') }}" enctype="multipart/form-data">@csrf
+                                <div class="input-group"><input class="form-control" type="file" name="file" accept=".xlsx,.csv" required><button class="btn btn-primary">Upload & Stage</button></div>
+                            </form>
+                        @else
+                            <div class="text-secondary">{{ $setting->google_form_enabled === false ? 'No Google Form data is required. This step does not gate downstream processing.' : 'Choose YES or NO first.' }}</div>
+                        @endif
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="text-secondary small">Accepted Recommendations</div><div class="h3 mb-1">{{ number_format($googleFormAcceptedCount) }}</div>
+                        @if($latestGoogleFormBatch)<a class="btn btn-sm btn-outline-primary" href="{{ route('choice-optimization.google-form.show',$latestGoogleFormBatch) }}">Latest Batch #{{ $latestGoogleFormBatch->id }}</a>@endif
+                    </div>
+                </div>
+                @if($setting->google_form_enabled === true)<div class="alert alert-info mt-3 mb-0">Invalid/unmatched reg rows do not block valid-row merge. Download invalid rows, correct them, and upload the corrected subset later as a new batch.</div>@endif
+            </div>
+        </div>
+
         <div class="row row-cards">
             <div class="col-lg-5">
                 <div class="card h-100">
@@ -216,9 +253,9 @@
         <div class="card mt-3">
             <div class="card-header">
                 <div>
-                    <h3 class="card-title">Historical Choice Optimization</h3>
+                    <h3 class="card-title">Consolidated Historical Choice Optimization</h3>
                     <div class="card-subtitle">
-                        Confirmed historical recommendations trim the current effective choices into the Allocation-ready sequence.
+                        Confirmed Previous BCS recommendations + accepted Google Form recommendations are consolidated, then the current effective choice is trimmed once into the Allocation-ready sequence.
                     </div>
                 </div>
                 <div class="ms-auto d-flex gap-2">
@@ -230,7 +267,7 @@
                         <button
                             class="btn btn-primary"
                             type="submit"
-                            @disabled($historicalPendingReviewCount > 0 || in_array((string)$state->status, ['historical_optimization_queued','historical_optimizing'], true))
+                            @disabled($setting->google_form_enabled === null || $historicalPendingReviewCount > 0 || in_array((string)$state->status, ['historical_optimization_queued','historical_optimizing'], true))
                         >
                             {{ $historicalOptimizationRows > 0 ? 'Re-process Optimization' : 'Process Optimization' }}
                         </button>
@@ -265,9 +302,17 @@
                     </div>
                 </div>
 
-                @if($historicalPendingReviewCount > 0)
+                <div class="alert alert-info mt-3 mb-0">
+                    <strong>Consolidated snapshot:</strong> {{ number_format($consolidatedHistoricalCount) }} candidate + previous BCS key(s).
+                    Multiple cadre values from different sources are retained and evaluated independently; any matching cadre may define the cutoff.
+                    @if($setting->google_form_enabled === false) Google Form = NO, so only confirmed Previous BCS Repository recommendations participate. @endif
+                </div>
+
+                @if($setting->google_form_enabled === null)
+                    <div class="alert alert-warning mt-3 mb-0">Decide Google Form YES or NO before starting Consolidated Historical Choice Optimization.</div>
+                @elseif($historicalPendingReviewCount > 0)
                     <div class="alert alert-warning mt-3 mb-0">
-                        Resolve all Historical Match REVIEW items before starting Historical Choice Optimization.
+                        Resolve all Historical Match REVIEW items before starting Consolidated Historical Choice Optimization.
                     </div>
                 @elseif($state->is_stale && $state->stale_reason)
                     <div class="alert alert-warning mt-3 mb-0">

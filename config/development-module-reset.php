@@ -146,6 +146,10 @@ return [
         'choice_optimization' => [
             'label' => 'Choice Optimization',
             'tables' => [
+                'choice_optimization_consolidated_historical_recommendations',
+                'choice_optimization_google_form_recommendations',
+                'choice_optimization_google_form_rows',
+                'choice_optimization_google_form_batches',
                 'choice_optimization_historical_choices',
                 'choice_optimization_historical_matches',
                 'choice_optimization_historical_sources',

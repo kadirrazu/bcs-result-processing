@@ -11,7 +11,7 @@
     <div class="container-xl">
         <div class="row align-items-center g-2">
             <div class="col">
-                <h2 class="page-title">Historical Choice Optimization</h2>
+                <h2 class="page-title">Consolidated Historical Choice Optimization</h2>
                 <div class="text-secondary mt-1">Confirmed Previous BCS recommendations → Allocation-ready Choice</div>
             </div>
             <div class="col-auto ms-auto d-flex gap-2">
@@ -50,7 +50,7 @@
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <strong>{{ $finalizing ? 'Finalizing Allocation-ready Choice' : 'Historical Choice Optimization is running' }}</strong>
+                    <strong>{{ $finalizing ? 'Finalizing Allocation-ready Choice' : 'Consolidated Historical Choice Optimization is running' }}</strong>
                     <div class="small text-secondary">
                         Queue-based processing · this page updates automatically when finished.
                     </div>
@@ -137,15 +137,19 @@
                         </div>
 
                         <div class="col-md-4">
-                            <div class="text-secondary small">Previous BCS Match</div>
+                            <div class="text-secondary small">Historical Recommendation (Previous BCS Match / Google Form)</div>
                             @forelse($recommendations as $rec)
                                 <div class="mb-1">
                                     <span class="badge bg-blue-lt">
                                         BCS {{ $rec['bcs_number'] ?? '—' }} - {{ $rec['cadre'] ?? '—' }}
                                     </span>
                                     @if(!empty($rec['previous_reg']))
-                                        <span class="small text-secondary ms-1">Reg: {{ $rec['previous_reg'] }}</span>
+                                        <span class="small text-secondary ms-1">Prev Reg: {{ $rec['previous_reg'] }}</span>
                                     @endif
+                                    @php $srcs = collect((array)($rec['sources'] ?? []))->pluck('source')->unique()->values(); @endphp
+                                    @foreach($srcs as $src)
+                                        <span class="badge bg-secondary-lt ms-1">{{ $src === 'google_form' ? 'GOOGLE FORM' : 'PREVIOUS BCS REPOSITORY' }}</span>
+                                    @endforeach
                                 </div>
                             @empty
                                 <span class="badge bg-red-lt">NO PREVIOUS BCS MATCH</span>
@@ -218,7 +222,7 @@
         @empty
             <div class="card">
                 <div class="card-body text-center text-secondary py-5">
-                    No Historical Choice Optimization output yet.
+                    No Consolidated Historical Choice Optimization output yet.
                 </div>
             </div>
         @endforelse

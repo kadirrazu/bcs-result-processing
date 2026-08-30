@@ -8,6 +8,9 @@ use App\Jobs\ProcessChoiceOptimizationHistoricalPull;
 use App\Jobs\ProcessChoiceOptimizationOmrApproval;
 use App\Jobs\ProcessChoiceOptimizationOmrValidation;
 use App\Models\ChoiceOptimizationEffectiveChoice;
+use App\Models\ChoiceOptimizationGoogleFormBatch;
+use App\Models\ChoiceOptimizationGoogleFormRecommendation;
+use App\Models\ChoiceOptimizationConsolidatedHistoricalRecommendation;
 use App\Models\ChoiceOptimizationHistoricalChoice;
 use App\Models\ChoiceOptimizationHistoricalMatch;
 use App\Models\ChoiceOptimizationHistoricalSource;
@@ -50,8 +53,15 @@ final class ChoiceOptimizationController extends Controller
 
         $historicalPendingReviewCount = 0;
         $historicalOptimizationRows = 0;
+        $latestGoogleFormBatch = null;
+        $googleFormAcceptedCount = 0;
+        $consolidatedHistoricalCount = 0;
 
         if ($setting->optimization_enabled) {
+            if ($setting->google_form_enabled === true) {
+                $latestGoogleFormBatch = ChoiceOptimizationGoogleFormBatch::query()->latest('id')->first();
+                $googleFormAcceptedCount = ChoiceOptimizationGoogleFormRecommendation::query()->count();
+            }
             $historicalRepositories = PreviousBcsRepository::query()
                 ->with('currentEffectiveDataset')
                 ->whereNotNull('current_effective_dataset_id')
@@ -73,6 +83,7 @@ final class ChoiceOptimizationController extends Controller
                 ->count();
 
             $historicalOptimizationRows = ChoiceOptimizationHistoricalChoice::query()->count();
+            $consolidatedHistoricalCount = ChoiceOptimizationConsolidatedHistoricalRecommendation::query()->count();
         }
 
         return view('choice-optimization.index', [
@@ -86,6 +97,9 @@ final class ChoiceOptimizationController extends Controller
             'historicalSourceMap' => $historicalSourceMap,
             'historicalPendingReviewCount' => $historicalPendingReviewCount,
             'historicalOptimizationRows' => $historicalOptimizationRows,
+            'latestGoogleFormBatch' => $latestGoogleFormBatch,
+            'googleFormAcceptedCount' => $googleFormAcceptedCount,
+            'consolidatedHistoricalCount' => $consolidatedHistoricalCount,
         ]);
     }
 
@@ -714,6 +728,24 @@ final class ChoiceOptimizationController extends Controller
     ): RedirectResponse {
         $this->assertOptimizationEnabled($settings);
 
+        $googleFormSetting = $settings->setting();
+        abort_if(
+            $googleFormSetting->google_form_enabled === null,
+            409,
+            'Decide Google Form YES or NO before Consolidated Historical Choice Optimization.'
+        );
+
+        if ($googleFormSetting->google_form_enabled) {
+            $googleFormRunning = ChoiceOptimizationGoogleFormBatch::query()
+                ->whereIn('status', ['queued', 'processing', 'validation_queued', 'validating', 'merge_queued', 'merging'])
+                ->exists();
+            abort_if(
+                $googleFormRunning,
+                409,
+                'A Google Form batch is still processing. Complete it before Consolidated Historical Choice Optimization.'
+            );
+        }
+
         $examId = $context->currentId();
         abort_if($examId === null, 409, 'No examination is selected.');
 
@@ -840,17 +872,13 @@ final class ChoiceOptimizationController extends Controller
 
         $choice->load('registration');
 
-        $matches = ChoiceOptimizationHistoricalMatch::query()
-            ->where('registration_id', (int) $choice->registration_id)
-            ->where('match_status', 'matched')
-            ->orderBy('previous_bcs_number')
-            ->get();
+        $recommendations = collect((array) $choice->historical_recommendations);
 
         $choiceCodeAbbrMap = $this->choiceCodeAbbrMap();
 
         return view('choice-optimization.historical-choice-show', compact(
             'choice',
-            'matches',
+            'recommendations',
             'choiceCodeAbbrMap',
         ));
     }

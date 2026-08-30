@@ -15,6 +15,7 @@ final class ChoiceOptimizationHistoricalChoiceFinalizationService
         private readonly ChoiceOptimizationHistoricalInputService $input,
         private readonly ChoiceOptimizationHistoricalChoiceService $historical,
         private readonly CircularFinalizedDatasetService $circular,
+        private readonly ChoiceOptimizationConsolidatedHistoricalRecommendationService $consolidated,
     ) {}
 
     public function finalize(int $actorId): ChoiceOptimizationProcessingState
@@ -65,6 +66,8 @@ final class ChoiceOptimizationHistoricalChoiceFinalizationService
             $input = $this->input->snapshot();
             $circular = $this->circular->verifiedSummary();
             $historicalHash = $this->historical->historicalSnapshotHash();
+            $googleFormHash = $this->consolidated->googleFormSnapshotHash();
+            $consolidatedHash = $this->consolidated->snapshotHash();
             $outputHash = $this->historical->outputHashFromDatabase();
             $actualOutputHash = $outputHash;
 
@@ -73,6 +76,8 @@ final class ChoiceOptimizationHistoricalChoiceFinalizationService
                 'choice_validation_hash' => (string) $input['choice_validation_hash'],
                 'circular_hash' => (string) ($circular['dataset_hash'] ?? ''),
                 'historical_snapshot_hash' => $historicalHash,
+                'google_form_snapshot_hash' => $googleFormHash,
+                'consolidated_historical_hash' => $consolidatedHash,
             ];
 
             foreach ($checks as $key => $actual) {

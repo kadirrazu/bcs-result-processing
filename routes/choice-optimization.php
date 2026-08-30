@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ChoiceOptimizationController;
+use App\Http\Controllers\ChoiceOptimizationGoogleFormController;
 use App\Http\Middleware\ConfigureExaminationConnection;
 use App\Http\Middleware\EnsureExaminationSelected;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +12,14 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     ->group(function (): void {
         Route::get('/', [ChoiceOptimizationController::class, 'index'])->name('index');
         Route::post('/setting', [ChoiceOptimizationController::class, 'updateSetting'])->name('setting.update');
+
+        Route::post('/google-form/decision', [ChoiceOptimizationGoogleFormController::class, 'decision'])->name('google-form.decision');
+        Route::post('/google-form/upload', [ChoiceOptimizationGoogleFormController::class, 'upload'])->name('google-form.upload');
+        Route::get('/google-form/{batch}', [ChoiceOptimizationGoogleFormController::class, 'show'])->name('google-form.show');
+        Route::get('/google-form/{batch}/status', [ChoiceOptimizationGoogleFormController::class, 'status'])->name('google-form.status');
+        Route::post('/google-form/{batch}/validate', [ChoiceOptimizationGoogleFormController::class, 'validateBatch'])->name('google-form.validate');
+        Route::post('/google-form/{batch}/merge-valid', [ChoiceOptimizationGoogleFormController::class, 'mergeValid'])->name('google-form.merge-valid');
+        Route::get('/google-form/{batch}/invalid-rows', [ChoiceOptimizationGoogleFormController::class, 'invalidRows'])->name('google-form.invalid-rows');
 
         Route::post('/historical-choices/process', [ChoiceOptimizationController::class, 'queueHistoricalChoiceOptimization'])->name('historical-choices.process');
         Route::get('/historical-choices', [ChoiceOptimizationController::class, 'historicalChoices'])->name('historical-choices.index');

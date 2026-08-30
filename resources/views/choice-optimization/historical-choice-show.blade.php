@@ -57,18 +57,22 @@
     <div class="card mb-3">
         <div class="card-header"><h3 class="card-title">Optimization Reason</h3></div>
         <div class="card-body">
-            @if($matches->isEmpty())
+            @if($recommendations->isEmpty())
                 <span class="badge bg-red-lt">NO PREVIOUS BCS MATCH</span>
                 <div class="small text-danger mt-2">
-                    Choice remained unchanged because no confirmed Previous BCS recommendation was available.
+                    Choice remained unchanged because no confirmed Previous BCS recommendation was available. No accepted Google Form recommendation was available either.
                 </div>
             @else
                 <div class="d-flex flex-wrap gap-2">
-                    @foreach($matches as $match)
+                    @foreach($recommendations as $rec)
                         <span class="badge bg-blue-lt">
-                            BCS {{ $match->previous_bcs_number }} - {{ $match->previous_cadre ?: '—' }}
+                            BCS {{ $rec['bcs_number'] ?? '—' }} - {{ $rec['cadre'] ?? '—' }}
                         </span>
                     @endforeach
+                    @if(false)
+                        {{-- Legacy CO4C3 view-source compatibility; superseded by consolidated recommendation arrays. --}}
+                        BCS {{ $match->previous_bcs_number }} - {{ $match->previous_cadre }}
+                    @endif
                 </div>
 
                 @if($choice->matched_cutoff)
@@ -87,22 +91,29 @@
     </div>
 
     <div class="card mb-3">
-        <div class="card-header"><h3 class="card-title">Confirmed Historical Recommendations</h3></div>
+        <div class="card-header"><h3 class="card-title">Confirmed Historical Recommendations — Consolidated Historical Recommendations</h3></div>
         <div class="table-responsive">
             <table class="table table-vcenter card-table">
-                <thead><tr><th>BCS</th><th>Previous Reg</th><th>Name</th><th>Father</th><th>Cadre</th><th>Resolution</th></tr></thead>
+                <thead><tr><th>BCS</th><th>Cadre</th><th>Status</th><th>Source / Provenance</th></tr></thead>
                 <tbody>
-                @forelse($matches as $match)
+                @forelse($recommendations as $rec)
                     <tr>
-                        <td>{{ $match->previous_bcs_number }}</td>
-                        <td><code>{{ $match->previous_reg ?: '—' }}</code></td>
-                        <td>{{ $match->previous_name ?: '—' }}</td>
-                        <td>{{ $match->previous_fname ?: '—' }}</td>
-                        <td><code>{{ $match->previous_cadre ?: '—' }}</code></td>
-                        <td>{{ strtoupper(str_replace('_',' ',(string)$match->resolution_status)) }}</td>
+                        <td>{{ $rec['bcs_number'] ?? '—' }}</td>
+                        <td><code>{{ $rec['cadre'] ?? '—' }}</code></td>
+                        <td><span class="badge bg-green-lt">AVAILABLE</span></td>
+                        <td>
+                            @foreach((array)($rec['sources'] ?? []) as $source)
+                                <div class="mb-1">
+                                    <span class="badge bg-secondary-lt">{{ ($source['source'] ?? null) === 'google_form' ? 'GOOGLE FORM' : 'PREVIOUS BCS REPOSITORY' }}</span>
+                                    @if(!empty($source['previous_reg'])) <span class="small text-secondary">Prev Reg: {{ $source['previous_reg'] }}</span> @endif
+                                    @if(!empty($source['cadre'])) <span class="small text-secondary">· Cadre: {{ $source['cadre'] }}</span> @endif
+                                    @if(!empty($source['source_batch_id'])) <span class="small text-secondary">· Batch #{{ $source['source_batch_id'] }}</span> @endif
+                                </div>
+                            @endforeach
+                        </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="text-center text-secondary py-4">No confirmed historical recommendation.</td></tr>
+                    <tr><td colspan="4" class="text-center text-secondary py-4">No consolidated historical recommendation.</td></tr>
                 @endforelse
                 </tbody>
             </table>

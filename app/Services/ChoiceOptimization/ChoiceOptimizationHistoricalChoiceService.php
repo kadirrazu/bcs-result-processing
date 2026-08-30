@@ -4,6 +4,7 @@ namespace App\Services\ChoiceOptimization;
 
 use App\Models\CadreMaster;
 use App\Models\CadreSubMaster;
+use App\Models\ChoiceOptimizationConsolidatedHistoricalRecommendation;
 use App\Models\ChoiceOptimizationHistoricalChoice;
 use App\Models\ChoiceOptimizationHistoricalMatch;
 use App\Models\ChoiceOptimizationHistoricalSource;
@@ -21,6 +22,7 @@ final class ChoiceOptimizationHistoricalChoiceService
     public function __construct(
         private readonly ChoiceOptimizationHistoricalInputService $input,
         private readonly CircularFinalizedDatasetService $circular,
+        private readonly ChoiceOptimizationConsolidatedHistoricalRecommendationService $consolidated,
     ) {}
 
     public function process(int $actorId): ChoiceOptimizationProcessingState
@@ -38,6 +40,7 @@ final class ChoiceOptimizationHistoricalChoiceService
             );
         }
 
+        $consolidationSummary = $this->consolidated->rebuild();
         $inputSnapshot = $this->input->snapshot();
         $circularSummary = $this->circular->verifiedSummary();
         $circularEntries = $this->circular->entries()
@@ -51,8 +54,8 @@ final class ChoiceOptimizationHistoricalChoiceService
             ->unique()
             ->flip();
 
-        $historicalMatches = ChoiceOptimizationHistoricalMatch::query()
-            ->where('match_status', 'matched')
+        $historicalMatches = ChoiceOptimizationConsolidatedHistoricalRecommendation::query()
+            ->orderBy('registration_id')
             ->orderBy('previous_bcs_number')
             ->orderBy('id')
             ->get()
@@ -127,6 +130,8 @@ final class ChoiceOptimizationHistoricalChoiceService
             }
 
             $historicalHash = $this->historicalSnapshotHash();
+            $googleFormHash = $this->consolidated->googleFormSnapshotHash();
+            $consolidatedHash = $this->consolidated->snapshotHash();
             $outputHash = $this->hashOutputRows($rows);
             $sourceSnapshot = [
                 'input_choice_source' => $inputSnapshot['source'],
@@ -136,6 +141,8 @@ final class ChoiceOptimizationHistoricalChoiceService
                 'circular_version' => (int) ($circularSummary['version'] ?? 0),
                 'circular_hash' => (string) ($circularSummary['dataset_hash'] ?? ''),
                 'historical_snapshot_hash' => $historicalHash,
+                'google_form_snapshot_hash' => $googleFormHash,
+                'consolidated_historical_hash' => $consolidatedHash,
             ];
 
             DB::connection('exam')->transaction(function () use (
@@ -148,6 +155,7 @@ final class ChoiceOptimizationHistoricalChoiceService
                 $emptyCount,
                 $blockingCount,
                 $warningCount,
+                $consolidationSummary,
                 $sourceSnapshot,
                 $outputHash,
                 $now,
@@ -178,6 +186,11 @@ final class ChoiceOptimizationHistoricalChoiceService
                             'no_higher_choice_candidates' => $emptyCount,
                             'blocking_candidates' => $blockingCount,
                             'warning_candidates' => $warningCount,
+                            'consolidated_recommendations' => (int) $consolidationSummary['total'],
+                            'consolidated_multi_cadre_keys' => (int) ($consolidationSummary['multi_cadre_keys'] ?? 0),
+                            'previous_bcs_source_rows' => (int) $consolidationSummary['previous_bcs_source_rows'],
+                            'google_form_source_rows' => (int) $consolidationSummary['google_form_source_rows'],
+                            'google_form_enabled' => (bool) $consolidationSummary['google_form_enabled'],
                             'processed_at' => $now->toIso8601String(),
                         ],
                     ]),
@@ -197,6 +210,8 @@ final class ChoiceOptimizationHistoricalChoiceService
                         'no_higher_choice_candidates' => $emptyCount,
                         'blocking_candidates' => $blockingCount,
                         'warning_candidates' => $warningCount,
+                        'consolidated_recommendations' => (int) $consolidationSummary['total'],
+                        'consolidated_multi_cadre_keys' => (int) ($consolidationSummary['multi_cadre_keys'] ?? 0),
                         'dataset_hash' => $outputHash,
                         'source_snapshot' => $sourceSnapshot,
                     ],
@@ -227,7 +242,7 @@ final class ChoiceOptimizationHistoricalChoiceService
 
     /**
      * @param array<int,string> $inputCodes
-     * @param Collection<int,ChoiceOptimizationHistoricalMatch> $matches
+     * @param Collection<int,ChoiceOptimizationConsolidatedHistoricalRecommendation> $matches
      * @param array<string,array<int,array{type:string,code:int}>> $masterMap
      * @param Collection<int,int> $circularCodes
      * @return array<string,mixed>
@@ -244,18 +259,40 @@ final class ChoiceOptimizationHistoricalChoiceService
         $cutoffCandidates = [];
 
         foreach ($matches as $match) {
-            $abbr = trim((string) ($match->previous_cadre ?? ''));
-            $normalizedAbbr = mb_strtoupper($abbr);
+            $sources = array_values((array) $match->sources);
 
-            $recommendations[] = [
-                'bcs_number' => (int) $match->previous_bcs_number,
-                'previous_reg' => $match->previous_reg,
-                'cadre' => $abbr,
-                'resolution_status' => $match->resolution_status,
-                'repository_row_id' => (int) $match->repository_row_id,
-            ];
+            // Source disagreement is intentionally non-blocking. Each unique cadre supplied by
+            // Previous BCS Repository and/or Google Form is evaluated independently, and the
+            // earliest matching current-choice position wins the single optimization pass.
+            $cadres = collect($sources)
+                ->map(fn (array $source): string => trim((string) ($source['cadre'] ?? '')))
+                ->filter(fn (string $cadre): bool => $cadre !== '')
+                ->unique(fn (string $cadre): string => mb_strtoupper($cadre))
+                ->values();
 
-            $mappings = $normalizedAbbr !== '' ? ($masterMap[$normalizedAbbr] ?? []) : [];
+            if ($cadres->isEmpty() && filled($match->cadre)) {
+                $cadres = collect([trim((string) $match->cadre)]);
+            }
+
+            foreach ($cadres as $abbr) {
+                $normalizedAbbr = mb_strtoupper(trim((string) $abbr));
+                $cadreSources = collect($sources)
+                    ->filter(fn (array $source): bool => mb_strtoupper(trim((string) ($source['cadre'] ?? ''))) === $normalizedAbbr)
+                    ->values()
+                    ->all();
+                $repositorySource = collect($cadreSources)
+                    ->first(fn (array $source): bool => ($source['source'] ?? null) === 'previous_bcs_repository');
+                $previousReg = is_array($repositorySource) ? ($repositorySource['previous_reg'] ?? null) : null;
+
+                $recommendations[] = [
+                    'bcs_number' => (int) $match->previous_bcs_number,
+                    'previous_reg' => $previousReg,
+                    'cadre' => (string) $abbr,
+                    'consolidation_status' => 'resolved',
+                    'sources' => $cadreSources,
+                ];
+
+                $mappings = $normalizedAbbr !== '' ? ($masterMap[$normalizedAbbr] ?? []) : [];
 
             if ($mappings === []) {
                 $warnings[] = [
@@ -304,14 +341,15 @@ final class ChoiceOptimizationHistoricalChoiceService
                 continue;
             }
 
-            $cutoffCandidates[] = [
-                'choice_index' => $index,
-                'choice_position' => $index + 1,
-                'choice_code' => (string) $inputCodes[$index],
-                'historical_cadre' => $abbr,
-                'historical_bcs_number' => (int) $match->previous_bcs_number,
-                'previous_reg' => $match->previous_reg,
-            ];
+                $cutoffCandidates[] = [
+                    'choice_index' => $index,
+                    'choice_position' => $index + 1,
+                    'choice_code' => (string) $inputCodes[$index],
+                    'historical_cadre' => (string) $abbr,
+                    'historical_bcs_number' => (int) $match->previous_bcs_number,
+                    'previous_reg' => $previousReg,
+                ];
+            }
         }
 
         if ($blocking !== []) {
