@@ -90,8 +90,11 @@ final class DevelopmentModuleResetRegistryTest extends TestCase
         foreach (glob($directory.DIRECTORY_SEPARATOR.'*.php') ?: [] as $file) {
             $contents = (string) file_get_contents($file);
 
+            // Match any Schema Builder variable (for example $schema, $s)
+            // and direct Schema::connection(...)->create(...) calls. Restricting
+            // discovery to one variable name can silently omit module-owned tables.
             preg_match_all(
-                '/(?:Schema::connection\([^)]+\)|\$schema)->create\s*\(\s*[\'"]([^\'"]+)[\'"]/s',
+                '/(?:Schema::connection\([^)]+\)|\$[A-Za-z_][A-Za-z0-9_]*\s*)->create\s*\(\s*[\'"]([^\'"]+)[\'"]/s',
                 $contents,
                 $matches,
             );

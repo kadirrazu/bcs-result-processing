@@ -174,13 +174,18 @@
                     </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    @if(in_array((string)$batch->status, ['validated','needs_review','validation_failed'], true))
+                    @if($batch->status === 'staged')
+                        <form method="POST" action="{{ route('choice-optimization.omr.validate',$batch) }}" class="mb-0">
+                            @csrf
+                            <button class="btn btn-primary" type="submit">Validate OMR Choices</button>
+                        </form>
+                    @elseif(in_array((string)$batch->status, ['needs_review','validation_failed'], true))
                         <form method="POST" action="{{ route('choice-optimization.omr.revalidate',$batch) }}" class="mb-0">
                             @csrf
                             <button class="btn btn-outline-primary" type="submit">Re-validate OMR Choices</button>
                         </form>
                     @elseif(in_array((string)$batch->status, ['validation_queued','validating'], true))
-                        <button class="btn btn-outline-secondary" disabled>Re-validation in progress…</button>
+                        <button class="btn btn-outline-secondary" disabled>Validation in progress…</button>
                     @endif
 
                     @if($batch->status === 'validated' && $remainingOperatorReviews === 0)
@@ -194,17 +199,17 @@
         </div>
     </div>
 
-    <div id="co-review-complete" class="alert alert-success" @if($remainingOperatorReviews > 0) style="display:none" @endif>
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <div><strong>Operator review complete.</strong> Queue OMR Re-validation before approval.</div>
-            @if(in_array((string)$batch->status, ['needs_review','validation_failed','validated'], true))
+    @if(in_array((string)$batch->status, ['needs_review','validation_failed'], true))
+        <div id="co-review-complete" class="alert alert-success" @if($remainingOperatorReviews > 0) style="display:none" @endif>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div><strong>Operator review complete.</strong> Queue OMR Re-validation before approval.</div>
                 <form method="POST" action="{{ route('choice-optimization.omr.revalidate',$batch) }}" class="mb-0">
                     @csrf
                     <button class="btn btn-success" type="submit">Queue OMR Re-validation</button>
                 </form>
-            @endif
+            </div>
         </div>
-    </div>
+    @endif
 
     <div class="card mb-3">
         <div class="card-body py-3">

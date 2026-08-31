@@ -86,31 +86,37 @@ return [
 
         'circular' => [
             'label' => 'Circular',
-            // Keep this list in exact sync with examination migrations owned by the
-            // Circular module. Shared/foundation tables are intentionally not
-            // duplicated here unless the migration-registry contract owns them.
+            // Child/dependent tables are intentionally listed before their parents
+            // so reset progress reflects actual row deletes instead of hidden FK cascades.
             'tables' => [
-                'circular_authority_previews',
                 'circular_confirmations',
-                'circular_import_batches',
+                'circular_authority_previews',
                 'circular_import_staging',
+                'circular_import_batches',
+                'circular_processing_audits',
+                'circular_entry_prs',
+                'circular_entry_bachelor_subjects',
+                'circular_entries',
+                'circular_processing_states',
             ],
         ],
 
         'choice_validation' => [
             'label' => 'Choice Validation',
+            // Delete FK children before parents. This avoids cascade-deleting rows
+            // behind the progress bar and keeps the row-based reset count accurate.
             'tables' => [
-                'choice_validation_import_batches',
-                'choice_validation_import_staging',
-                'choice_validation_sources',
+                'choice_validation_finalization_runs',
+                'choice_validation_items',
+                'choice_validation_results',
+                'choice_validation_manual_corrections',
                 'choice_validation_source_items',
-                'choice_validation_processing_states',
+                'choice_validation_sources',
+                'choice_validation_import_staging',
+                'choice_validation_import_batches',
                 'choice_validation_processing_audits',
                 'choice_validation_runs',
-                'choice_validation_results',
-                'choice_validation_items',
-                'choice_validation_manual_corrections',
-                'choice_validation_finalization_runs',
+                'choice_validation_processing_states',
             ],
             'scoped_deletes' => [
                 ['table' => 'import_correction_entries', 'column' => 'module', 'values' => ['choice_validation']],
