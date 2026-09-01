@@ -170,6 +170,20 @@ return [
         ],
 
 
+        'allocation' => [
+            'label' => 'Allocation',
+            'tables' => [
+                'allocation_processing_audits',
+                'allocation_seat_breakup_rows',
+                'allocation_seat_breakup_versions',
+                'allocation_processing_states',
+                'allocation_settings',
+            ],
+            'downstream' => ['Reports and future Non-Cadre Allocation'],
+        ],
+
+
+
 
 
     ],

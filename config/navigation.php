@@ -17,7 +17,7 @@ return [
             ['label' => 'Tabulation', 'route' => 'tabulation.index', 'patterns' => ['tabulation.*']],
             ['label' => 'Merit', 'route' => 'merit.index', 'patterns' => ['merit.*']],
             ['label' => 'Choice Optimization', 'route' => 'choice-optimization.index', 'patterns' => ['choice-optimization.*']],
-            ['label' => 'Allocation', 'route' => null, 'patterns' => ['allocation.*']],
+            ['label' => 'Allocation', 'route' => 'allocation.index', 'patterns' => ['allocation.*']],
             ['label' => 'Reports', 'route' => null, 'patterns' => ['examination-reports.*']],
         ],
     ],

@@ -39,4 +39,6 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/choice-optimization.php';
 
+    require __DIR__.'/allocation.php';
+
 });
