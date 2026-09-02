@@ -8,6 +8,9 @@
                 <h2 class="page-title">Previous BCS Recommendation Repository</h2>
                 <div class="text-secondary mt-1">Central reusable repository shared by all BCS examination workspaces.</div>
             </div>
+            <div class="col-auto ms-auto">
+                <a class="btn btn-outline-primary" href="{{ route('previous-bcs-repository.search') }}">Consolidated Candidate Search</a>
+            </div>
         </div>
     </div>
 </div>

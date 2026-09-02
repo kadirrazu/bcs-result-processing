@@ -55,7 +55,10 @@
         <a class="fw-semibold" href="{{ route('registrations.show', $record) }}">{{ $record->reg }}</a>
         <div class="text-secondary small">{{ $record->user_id }}</div>
     </td>
-    <td>{{ $record->name }}</td>
+    <td>
+        <div class="fw-semibold">{{ $record->name }}</div>
+        <div class="text-secondary" style="font-size:.72rem;">Father: {{ $record->father_name ?: '—' }}</div>
+    </td>
     <td>
         <span class="badge bg-azure-lt">{{ $record->cadre_category->code() }}</span>
         <div class="text-secondary small mt-1">{{ $record->cadre_category->label() }}</div>

@@ -7,6 +7,7 @@ Route::prefix('previous-bcs-repository')
     ->name('previous-bcs-repository.')
     ->group(function (): void {
         Route::get('/', [PreviousBcsRepositoryController::class, 'index'])->name('index');
+        Route::get('/search', [PreviousBcsRepositoryController::class, 'search'])->name('search');
         Route::post('/datasets', [PreviousBcsRepositoryController::class, 'store'])->name('datasets.store');
         Route::get('/datasets/{dataset}', [PreviousBcsRepositoryController::class, 'show'])->name('datasets.show');
         Route::get('/datasets/{dataset}/detail', [PreviousBcsRepositoryController::class, 'detail'])->name('datasets.detail');

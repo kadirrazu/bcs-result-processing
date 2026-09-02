@@ -6,6 +6,7 @@ use App\Http\Requests\StorePreviousBcsRepositoryDatasetRequest;
 use App\Models\PreviousBcsRepository;
 use App\Jobs\ProcessPreviousBcsRepositoryValidation;
 use App\Models\PreviousBcsRepositoryDataset;
+use App\Models\PreviousBcsRepositoryRow;
 use App\Services\PreviousBcsRepository\PreviousBcsRepositoryAuthorityService;
 use App\Services\PreviousBcsRepository\PreviousBcsRepositoryAuditService;
 use App\Services\PreviousBcsRepository\PreviousBcsRepositoryImportService;
@@ -31,6 +32,50 @@ final class PreviousBcsRepositoryController extends Controller
             ->withQueryString();
 
         return view('previous-bcs-repository.index', compact('repositories', 'search'));
+    }
+
+
+    public function search(Request $request): View
+    {
+        $filters = [
+            'name' => trim((string) $request->query('name')),
+            'reg' => trim((string) $request->query('reg')),
+            'bcs_number' => trim((string) $request->query('bcs_number')),
+            'cadre' => trim((string) $request->query('cadre')),
+            'district' => trim((string) $request->query('district')),
+        ];
+
+        $hasFilter = collect($filters)->contains(fn ($value) => $value !== '');
+
+        $rows = PreviousBcsRepositoryRow::query()
+            ->select([
+                'previous_bcs_repository_rows.*',
+                'repo.bcs_number as repository_bcs_number',
+                'ds.version as repository_dataset_version',
+            ])
+            ->join('previous_bcs_repository_datasets as ds', 'ds.id', '=', 'previous_bcs_repository_rows.dataset_id')
+            ->join('previous_bcs_repositories as repo', function ($join): void {
+                $join->on('repo.id', '=', 'ds.repository_id')
+                    ->on('repo.current_effective_dataset_id', '=', 'ds.id');
+            })
+            ->when(! $hasFilter, fn ($query) => $query->whereRaw('1 = 0'))
+            ->when($filters['name'] !== '', fn ($query) => $query->where('previous_bcs_repository_rows.name', 'like', '%'.$filters['name'].'%'))
+            ->when($filters['reg'] !== '', fn ($query) => $query->where('previous_bcs_repository_rows.reg', 'like', '%'.$filters['reg'].'%'))
+            ->when($filters['bcs_number'] !== '', fn ($query) => $query->where('repo.bcs_number', (int) $filters['bcs_number']))
+            ->when($filters['cadre'] !== '', fn ($query) => $query->where('previous_bcs_repository_rows.cadre', 'like', '%'.$filters['cadre'].'%'))
+            ->when($filters['district'] !== '', fn ($query) => $query->where('previous_bcs_repository_rows.dist_name', 'like', '%'.$filters['district'].'%'))
+            ->orderByDesc('repo.bcs_number')
+            ->orderBy('previous_bcs_repository_rows.name')
+            ->orderBy('previous_bcs_repository_rows.reg')
+            ->paginate(50)
+            ->withQueryString();
+
+        $bcsNumbers = PreviousBcsRepository::query()
+            ->whereNotNull('current_effective_dataset_id')
+            ->orderByDesc('bcs_number')
+            ->pluck('bcs_number');
+
+        return view('previous-bcs-repository.search', compact('rows', 'filters', 'hasFilter', 'bcsNumbers'));
     }
 
     public function store(

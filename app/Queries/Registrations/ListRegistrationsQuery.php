@@ -13,7 +13,7 @@ final class ListRegistrationsQuery
     {
         return Registration::query()
             ->select([
-                'id', 'reg', 'user_id', 'name', 'cadre_category', 'sex_code',
+                'id', 'reg', 'user_id', 'name', 'father_name', 'cadre_category', 'sex_code',
                 'district_code', 'division_code', 'bachelor_subject_code',
                 'has_quota', 'status', 'validation_status',
             ])
