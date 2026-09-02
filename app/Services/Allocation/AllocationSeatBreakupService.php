@@ -277,7 +277,7 @@ final class AllocationSeatBreakupService
             'total_rows' => (clone $q)->count(), 'total_posts' => (int)(clone $q)->sum('total_post'),
             'mq_posts' => (int)(clone $q)->sum('mq'), 'cff_posts' => (int)(clone $q)->sum('cff'),
             'em_posts' => (int)(clone $q)->sum('em'), 'phc_posts' => (int)(clone $q)->sum('phc'),
-            'validation_summary' => ['validated' => true, 'small_cadre_threshold' => 10],
+            'validation_summary' => ['validated' => true, 'quota_breakup_minimum_total_posts' => 10],
         ];
     }
 }

@@ -43,19 +43,23 @@ final class AllocationSeatBreakupPdfReport
 
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
-            'format' => 'A4-L',
-            'margin_left' => 7,
-            'margin_right' => 7,
-            'margin_top' => 10,
-            'margin_bottom' => 12,
-            'margin_header' => 4,
-            'margin_footer' => 5,
+            'format' => 'A4',
+            'orientation' => 'P',
+            'margin_left' => 8,
+            'margin_right' => 8,
+            'margin_top' => 28,
+            'margin_bottom' => 15,
+            'margin_header' => 6,
+            'margin_footer' => 6,
             'tempDir' => $this->tempDirectory(),
             'fontDir' => array_values(array_unique($fontDirs)),
             'fontdata' => array_replace($fontDefaults['fontdata'], [$font['family'] => $fontData]),
             'default_font' => $font['family'],
             'autoScriptToLang' => true,
-            'autoLangToFont' => true,
+            // Keep Bengali text on the explicitly registered report font.
+            // This matches the proven Circular PDF behavior and avoids mPDF
+            // switching Bengali runs to an unsuitable fallback font.
+            'autoLangToFont' => false,
         ]);
 
         $exam = $this->examinationContext->current();
@@ -70,11 +74,8 @@ final class AllocationSeatBreakupPdfReport
 
         $mpdf->SetTitle($reportName.' - v'.$version->version);
         $mpdf->SetAuthor((string) config('app.name'));
-        $mpdf->SetHTMLFooter(
-            '<div style="border-top:0.2mm solid #cfd6df;padding-top:1.5mm;font-size:7.5pt;color:#667085">'
-            .'<table width="100%"><tr><td>Seat Breakup v'.e((string) $version->version).' - '.e(strtoupper((string) $version->status)).'</td>'
-            .'<td style="text-align:right">Page {PAGENO} of {nbpg}</td></tr></table></div>'
-        );
+        $mpdf->SetHTMLHeader($this->headerHtml($examTitle, $reportName, $generatedAt));
+        $mpdf->SetHTMLFooter($this->footerHtml());
 
         $html = view('reports.pdf.allocation-seat-breakup', [
             'version' => $version,
@@ -91,6 +92,31 @@ final class AllocationSeatBreakupPdfReport
             'content' => $mpdf->Output('', Destination::STRING_RETURN),
             'filename' => 'allocation-seat-breakup-v'.$version->version.'-'.$status.'-'.$generatedAt->format('Ymd-His').'.pdf',
         ];
+    }
+
+
+    private function headerHtml(string $examTitle, string $reportName, $generatedAt): string
+    {
+        $exam = e($examTitle);
+        $report = e(strtoupper($reportName));
+        $timestamp = e($generatedAt->format('d M Y, h:i:s A'));
+
+        return <<<HTML
+        <div style="text-align:center; font-family:DejaVu Sans, sans-serif; color:#101828; line-height:1.35;">
+            <div style="font-size:11pt;"><strong>EXAM TITLE:</strong> {$exam}</div>
+            <div style="margin-top:1mm; font-size:11pt;"><strong>REPORT TITLE:</strong> {$report}</div>
+            <div style="margin-top:1mm; font-size:9pt; color:#667085;"><strong>REPORT GENERATED ON:</strong> {$timestamp}</div>
+        </div>
+        HTML;
+    }
+
+    private function footerHtml(): string
+    {
+        return <<<HTML
+        <div style="text-align:right; font-family:DejaVu Sans, sans-serif; font-size:8pt; color:#667085;">
+            Page {PAGENO} of {nbpg}
+        </div>
+        HTML;
     }
 
     private function orderedRows(AllocationSeatBreakupVersion $version)

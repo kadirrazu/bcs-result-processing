@@ -90,12 +90,12 @@ return new class extends Migration
 
         DB::connection('exam')->table('allocation_settings')->insert([
             'id' => 1,
-            'quota_priority' => json_encode(config('allocation.default_quota_priority', ['CFF', 'EM', 'PHC'])),
-            'small_cadre_quota_threshold' => (int) config('allocation.small_cadre_quota_threshold', 10),
-            'mq_percent' => (int) config('allocation.default_breakup_percentages.mq', 93),
-            'cff_percent' => (int) config('allocation.default_breakup_percentages.cff', 5),
-            'em_percent' => (int) config('allocation.default_breakup_percentages.em', 1),
-            'phc_percent' => (int) config('allocation.default_breakup_percentages.phc', 1),
+            'quota_priority' => json_encode(config('allocation.quota_priority', ['CFF', 'EM', 'PHC'])),
+            'small_cadre_quota_threshold' => (int) config('allocation.quota_breakup_minimum_total_posts', 10),
+            'mq_percent' => (int) config('allocation.provisional_breakup_percentages.mq', 93),
+            'cff_percent' => (int) config('allocation.provisional_breakup_percentages.cff', 5),
+            'em_percent' => (int) config('allocation.provisional_breakup_percentages.em', 1),
+            'phc_percent' => (int) config('allocation.provisional_breakup_percentages.phc', 1),
             'status' => 'draft',
             'created_at' => now(),
             'updated_at' => now(),

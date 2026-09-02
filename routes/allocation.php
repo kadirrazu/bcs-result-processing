@@ -7,6 +7,13 @@ use Illuminate\Support\Facades\Route;
 Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnection::class])->prefix('allocation')->name('allocation.')->group(function(){
     Route::get('/',[AllocationController::class,'index'])->name('index');
     Route::post('/settings/finalize',[AllocationController::class,'finalizeSettings'])->name('settings.finalize');
+    Route::post('/input-freeze/freeze',[AllocationController::class,'freezeInputs'])->name('input-freeze.freeze');
+    Route::get('/input-freeze/status',[AllocationController::class,'inputFreezeStatus'])->name('input-freeze.status');
+    Route::get('/input-freeze/{freeze}',[AllocationController::class,'showInputFreeze'])->name('input-freeze.show');
+    Route::get('/input-freeze/{freeze}/cadre/{circularEntry}/queue',[AllocationController::class,'showCadreQueue'])->name('input-freeze.cadre-queue');
+    Route::post('/phase-one/start',[AllocationController::class,'startPhaseOne'])->name('phase-one.start');
+    Route::get('/phase-one/status',[AllocationController::class,'phaseOneStatus'])->name('phase-one.status');
+    Route::get('/runs/{run}',[AllocationController::class,'showRun'])->name('runs.show');
     Route::get('/seat-breakup/template',[AllocationController::class,'seatTemplate'])->name('seat-breakup.template');
     Route::post('/seat-breakup/upload',[AllocationController::class,'uploadSeatBreakup'])->name('seat-breakup.upload');
     Route::get('/seat-breakup/{version}',[AllocationController::class,'showSeatBreakup'])->name('seat-breakup.show');

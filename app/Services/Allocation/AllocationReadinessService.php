@@ -32,6 +32,7 @@ final class AllocationReadinessService
         private readonly ChoiceOptimizationHistoricalChoiceService $optimized,
         private readonly AllocationSettingsService $settings,
         private readonly AllocationSeatBreakupService $seatBreakup,
+        private readonly AllocationInputFreezeService $inputFreeze,
     ) {}
 
     /**
@@ -108,31 +109,21 @@ final class AllocationReadinessService
             ];
         }
 
-        $this->stored($checks, 'allocation_settings', 'Allocation Settings', function (): array {
-            $s = $this->settings->setting();
-            if ((string) $s->status !== 'finalized' || ! $s->settings_hash) {
-                throw new \RuntimeException('Allocation Settings are not finalized/frozen.');
-            }
-
-            return [
-                'dataset_hash' => (string) $s->settings_hash,
-                'version' => 1,
-            ];
-        });
+        $this->stored(
+            $checks,
+            'allocation_settings',
+            'Allocation Settings',
+            fn () => $this->settings->storedFinalizedSummary()
+        );
 
         $this->stored($checks, 'seat_breakup', 'Seat Breakup', fn () => $this->storedSeatBreakupSummary());
 
-        $checks['input_freeze'] = [
-            'ready' => false,
-            'label' => 'Allocation Input Freeze',
-            'status' => 'PENDING',
-            'hash_verified' => false,
-            'stored_hash_present' => false,
-            'detail' => 'Frozen direct-input fingerprint is not installed yet (A2). Allocation cannot start.',
-        ];
+        $upstreamReady = collect($checks)->every(fn ($c) => (bool) $c['ready']);
+        $this->stored($checks, 'input_freeze', 'Allocation Input Freeze', fn () => $this->inputFreeze->storedCurrentSummary());
 
         return [
             'ready' => collect($checks)->every(fn ($c) => (bool) $c['ready']),
+            'upstream_ready' => $upstreamReady,
             'checks' => $checks,
             'checked_at' => now(),
             'verification_mode' => 'stored_metadata',
@@ -174,13 +165,17 @@ final class AllocationReadinessService
         $this->verified($checks, 'allocation_settings', 'Allocation Settings', function(){ $s=$this->settings->verified(); return ['dataset_hash'=>$s->settings_hash]; });
         $this->verified($checks, 'seat_breakup', 'Seat Breakup', function(){ $s=$this->seatBreakup->verifiedFinalized(); return ['dataset_hash'=>$s->dataset_hash,'version'=>$s->version]; });
 
-        $checks['input_freeze'] = [
-            'ready' => false, 'label' => 'Allocation Input Freeze', 'status' => 'PENDING',
-            'hash_verified' => false,
-            'detail' => 'Frozen direct-input fingerprint is not installed yet (A2). Allocation cannot start.',
-        ];
+        $upstreamReady = collect($checks)->every(fn($c)=>(bool)$c['ready']);
+        $this->verified($checks, 'input_freeze', 'Allocation Input Freeze', function () {
+            $freeze = $this->inputFreeze->verifiedCurrent();
+            return [
+                'dataset_hash' => (string) $freeze->input_fingerprint,
+                'queue_hash' => (string) $freeze->queue_hash,
+                'version' => (int) $freeze->version,
+            ];
+        });
 
-        return ['ready'=>collect($checks)->every(fn($c)=>(bool)$c['ready']), 'checks'=>$checks, 'checked_at'=>now(), 'verification_mode'=>'strict'];
+        return ['ready'=>collect($checks)->every(fn($c)=>(bool)$c['ready']), 'upstream_ready'=>$upstreamReady, 'checks'=>$checks, 'checked_at'=>now(), 'verification_mode'=>'strict'];
     }
 
     private function storedMeritSummary(): array

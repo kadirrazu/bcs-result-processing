@@ -174,6 +174,13 @@ return [
             'label' => 'Allocation',
             'tables' => [
                 'allocation_processing_audits',
+                'allocation_decision_events',
+                'allocation_seat_ledgers',
+                'allocation_results',
+                'allocation_runs',
+                'allocation_input_queue_entries',
+                'allocation_input_candidates',
+                'allocation_input_freezes',
                 'allocation_seat_breakup_rows',
                 'allocation_seat_breakup_versions',
                 'allocation_processing_states',

@@ -4,51 +4,125 @@
 <meta charset="utf-8">
 <style>
     * { box-sizing:border-box; }
-    body { margin:0; font-family:'{{ $banglaFontFamily }}', DejaVu Sans, sans-serif; font-size:7.6pt; color:#101828; line-height:1.25; }
-    .title { text-align:center; font-size:13pt; font-weight:bold; margin-bottom:2mm; }
-    .header { width:100%; border-collapse:collapse; margin-bottom:3mm; }
-    .header td { border:0; padding:0.6mm 1mm; }
-    .header .label { width:18%; font-weight:bold; color:#475467; }
-    .meta { width:100%; border-collapse:collapse; margin-bottom:3mm; }
-    .meta th,.meta td { border:0.25mm solid #c7d0db; padding:1.2mm; text-align:center; }
-    .meta th { background:#eef2f6; }
-    table.rows { width:100%; border-collapse:collapse; table-layout:fixed; }
+    body {
+        margin:0;
+        font-family:'{{ $banglaFontFamily }}', DejaVu Sans, sans-serif;
+        font-size:7.2pt;
+        color:#101828;
+        line-height:1.18;
+    }
+    table.meta {
+        width:100%;
+        border-collapse:collapse;
+        margin:0 0 3mm 0;
+    }
+    table.meta th, table.meta td {
+        border:0.22mm solid #c7d0db;
+        padding:1.1mm .8mm;
+        text-align:center;
+        vertical-align:middle;
+    }
+    table.meta th { background:#eef2f6; font-weight:bold; }
+
+    table.rows {
+        width:100%;
+        border-collapse:collapse;
+        table-layout:fixed;
+        margin:0 auto;
+    }
     table.rows thead { display:table-header-group; }
     table.rows tr { page-break-inside:avoid; }
-    table.rows th, table.rows td { border:0.25mm solid #98a2b3; padding:1.15mm; vertical-align:middle; overflow-wrap:break-word; }
-    table.rows th { background:#eef2f6; text-align:center; font-weight:bold; }
+    table.rows th, table.rows td {
+        border:0.22mm solid #98a2b3;
+        padding:1.55mm .80mm;
+        vertical-align:middle;
+        overflow-wrap:break-word;
+    }
+    table.rows th {
+        background:#eef2f6;
+        text-align:center;
+        font-weight:bold;
+        font-size:6.8pt;
+    }
     .c { text-align:center; }
-    .bn { font-family:'{{ $banglaFontFamily }}', DejaVu Sans, sans-serif; }
-    .small { font-size:6.7pt; color:#475467; }
+    .bn {
+        font-family:'{{ $banglaFontFamily }}', DejaVu Sans, sans-serif;
+        font-size:7.4pt;
+        line-height:1.28;
+    }
+    .bn-title {
+        font-family:'{{ $banglaFontFamily }}', DejaVu Sans, sans-serif;
+        font-size:7.9pt;
+        font-weight:normal;
+        line-height:1.32;
+    }
+    .en { font-size:6.3pt; color:#475467; line-height:1.15; }
     .total td { font-weight:bold; background:#f8fafc; }
+
+    .w-sl      { width:8mm; }
+    .w-title   { width:55mm; }
+    .w-code    { width:17mm; }
+    .w-subcode { width:18mm; }
+    .w-post    { width:16mm; }
+    .w-quota   { width:14mm; }
+    .w-remarks { width:23mm; }
 </style>
 </head>
 <body>
-<div class="title">{{ strtoupper($reportName) }}</div>
-<table class="header">
-    <tr><td class="label">Exam Title</td><td>{{ $examTitle }}</td></tr>
-    <tr><td class="label">Report Name</td><td>{{ $reportName }}</td></tr>
-    <tr><td class="label">Generation Date &amp; Time</td><td>{{ $generatedAt->format('d M Y, h:i:s A') }}</td></tr>
-</table>
 <table class="meta">
-    <thead><tr><th>Seat Breakup Version</th><th>Status</th><th>Total Rows</th><th>Total Posts</th><th>MQ</th><th>CFF</th><th>EM</th><th>PHC</th></tr></thead>
-    <tbody><tr>
-        <td>v{{ $version->version }}</td><td>{{ strtoupper($version->status) }}</td><td>{{ number_format($version->total_rows) }}</td><td>{{ number_format($version->total_posts) }}</td><td>{{ number_format($version->mq_posts) }}</td><td>{{ number_format($version->cff_posts) }}</td><td>{{ number_format($version->em_posts) }}</td><td>{{ number_format($version->phc_posts) }}</td>
-    </tr></tbody>
+    <thead>
+    <tr>
+        <th>Seat Breakup Version</th>
+        <th>Status</th>
+        <th>Total Rows</th>
+        <th>Total Posts</th>
+        <th>MQ</th>
+        <th>CFF</th>
+        <th>EM</th>
+        <th>PHC</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td>v{{ $version->version }}</td>
+        <td>{{ strtoupper($version->status) }}</td>
+        <td>{{ number_format($version->total_rows) }}</td>
+        <td>{{ number_format($version->total_posts) }}</td>
+        <td>{{ number_format($version->mq_posts) }}</td>
+        <td>{{ number_format($version->cff_posts) }}</td>
+        <td>{{ number_format($version->em_posts) }}</td>
+        <td>{{ number_format($version->phc_posts) }}</td>
+    </tr>
+    </tbody>
 </table>
+
 <table class="rows">
-    <thead><tr>
-        <th style="width:5%">sl</th>
-        <th style="width:25%">cadre_title / sub_cadre_title</th>
-        <th style="width:7%">cadre_code</th>
-        <th style="width:8%">sub_cadre_code</th>
-        <th style="width:8%">total_post</th>
-        <th style="width:7%">mq_post</th>
-        <th style="width:7%">cff_post</th>
-        <th style="width:7%">em_post</th>
-        <th style="width:7%">phc_post</th>
-        <th style="width:19%">remarks</th>
-    </tr></thead>
+    <colgroup>
+        <col class="w-sl">
+        <col class="w-title">
+        <col class="w-code">
+        <col class="w-subcode">
+        <col class="w-post">
+        <col class="w-quota">
+        <col class="w-quota">
+        <col class="w-quota">
+        <col class="w-quota">
+        <col class="w-remarks">
+    </colgroup>
+    <thead>
+    <tr>
+        <th>SL</th>
+        <th>CADRE TITLE / SUB CADRE TITLE</th>
+        <th>CADRE CODE</th>
+        <th>SUB CADRE CODE</th>
+        <th>TOTAL POST</th>
+        <th>MQ POST</th>
+        <th>CFF POST</th>
+        <th>EM POST</th>
+        <th>PHC POST</th>
+        <th>REMARKS</th>
+    </tr>
+    </thead>
     <tbody>
     @foreach($rows as $row)
         @php($entry = $row->circularEntry)
@@ -56,17 +130,22 @@
             <td class="c">{{ $row->sl }}</td>
             <td>
                 @if($entry?->cadre_name_bn_snapshot)
-                    <div class="bn"><strong>{{ $entry->cadre_name_bn_snapshot }}</strong></div>
-                    @if($entry?->cadre_name_snapshot)<div class="small">{{ $entry->cadre_name_snapshot }}</div>@endif
-                @else
-                    <strong>{{ $entry?->cadre_name_snapshot ?: '—' }}</strong>
+                    <div class="bn-title">{{ $entry->cadre_name_bn_snapshot }}</div>
                 @endif
+                @if($entry?->cadre_name_snapshot)
+                    <div class="en">{{ $entry->cadre_name_snapshot }}</div>
+                @elseif(!$entry?->cadre_name_bn_snapshot)
+                    —
+                @endif
+
                 @if($entry?->sub_cadre_code)
                     @if($entry?->post_name_bn_snapshot)
-                        <div class="bn">{{ $entry->post_name_bn_snapshot }}</div>
-                        @if($entry?->post_name_snapshot)<div class="small">{{ $entry->post_name_snapshot }}</div>@endif
-                    @else
-                        <div>{{ $entry?->post_name_snapshot ?: '—' }}</div>
+                        <div class="bn" style="margin-top:.6mm;">{{ $entry->post_name_bn_snapshot }}</div>
+                    @endif
+                    @if($entry?->post_name_snapshot)
+                        <div class="en">{{ $entry->post_name_snapshot }}</div>
+                    @elseif(!$entry?->post_name_bn_snapshot)
+                        <div>—</div>
                     @endif
                 @endif
             </td>
@@ -80,15 +159,15 @@
             <td></td>
         </tr>
     @endforeach
-        <tr class="total">
-            <td colspan="4" class="c">TOTAL</td>
-            <td class="c">{{ number_format($version->total_posts) }}</td>
-            <td class="c">{{ number_format($version->mq_posts) }}</td>
-            <td class="c">{{ number_format($version->cff_posts) }}</td>
-            <td class="c">{{ number_format($version->em_posts) }}</td>
-            <td class="c">{{ number_format($version->phc_posts) }}</td>
-            <td></td>
-        </tr>
+    <tr class="total">
+        <td colspan="4" class="c">TOTAL</td>
+        <td class="c">{{ number_format($version->total_posts) }}</td>
+        <td class="c">{{ number_format($version->mq_posts) }}</td>
+        <td class="c">{{ number_format($version->cff_posts) }}</td>
+        <td class="c">{{ number_format($version->em_posts) }}</td>
+        <td class="c">{{ number_format($version->phc_posts) }}</td>
+        <td></td>
+    </tr>
     </tbody>
 </table>
 </body>
