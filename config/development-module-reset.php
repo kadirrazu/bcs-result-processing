@@ -173,6 +173,10 @@ return [
         'allocation' => [
             'label' => 'Allocation',
             'tables' => [
+                'allocation_a4_movement_events',
+                'allocation_a4_seat_ledgers',
+                'allocation_a4_results',
+                'allocation_a4_runs',
                 'allocation_processing_audits',
                 'allocation_decision_events',
                 'allocation_seat_ledgers',

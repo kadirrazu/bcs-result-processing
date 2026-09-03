@@ -13,8 +13,24 @@
     .a3-bucket-line { white-space: nowrap; line-height: 1.35; }
 </style>
 
-<div class="page-header"><div class="container-xl"><div class="d-flex justify-content-between align-items-center gap-3"><div><h2 class="page-title">Allocation Phase-1 — Run v{{ $run->version }}</h2><div class="text-secondary">Frozen MQ + quota output only. NM conversion and shifting have not yet run.</div></div><a class="btn btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a></div></div></div>
+<div class="page-header"><div class="container-xl"><div class="d-flex justify-content-between align-items-center gap-3">
+    <div><h2 class="page-title">Allocation Phase-1 — Run v{{ $run->version }}</h2><div class="text-secondary">Frozen MQ + quota output only. NM conversion and shifting have not yet run.</div></div>
+    <div class="d-flex gap-2">
+        @if($latestA4Run && $latestA4Run->status === 'a4_complete')
+            <a class="btn btn-success" href="{{ route('allocation.a4.show', $latestA4Run) }}">View A4 Result</a>
+        @elseif($latestA4Run && in_array($latestA4Run->status, ['queued','running'], true))
+            <a class="btn btn-warning" href="{{ route('allocation.a4.processing', $latestA4Run) }}">View A4 Processing</a>
+        @elseif($run->status === 'phase1_complete')
+            <form method="POST" action="{{ route('allocation.a4.start', $run) }}">@csrf
+                <button class="btn btn-primary" type="submit">Start A4 NM + Shifting</button>
+            </form>
+        @endif
+        <a class="btn btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a>
+    </div>
+</div></div></div>
 <div class="page-body"><div class="container-xl">
+
+<div class="alert alert-info mb-3">A4 processing is isolated on its own operational page. This page remains the immutable A3 Phase-1 review.</div>
 
 <div class="row row-cards mb-3">
     <div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="text-secondary">Allocated</div><div class="h2 mb-0">{{ number_format($run->allocated_count) }}</div><div class="small text-secondary">Unallocated {{ number_format($run->unallocated_count) }}</div></div></div></div>
@@ -124,3 +140,4 @@
 <div class="mt-3 small text-secondary text-break">Phase-1 output hash: <code>{{ $run->phase1_output_hash ?: '—' }}</code><br>Seat ledger hash: <code>{{ $run->seat_ledger_hash ?: '—' }}</code></div>
 </div></div>
 @endsection
+

@@ -14,6 +14,10 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     Route::post('/phase-one/start',[AllocationController::class,'startPhaseOne'])->name('phase-one.start');
     Route::get('/phase-one/status',[AllocationController::class,'phaseOneStatus'])->name('phase-one.status');
     Route::get('/runs/{run}',[AllocationController::class,'showRun'])->name('runs.show');
+    Route::post('/runs/{run}/a4/start',[AllocationController::class,'startA4'])->name('a4.start');
+    Route::get('/a4/runs/{a4Run}/status',[AllocationController::class,'a4Status'])->name('a4.status');
+    Route::get('/a4/runs/{a4Run}/processing',[AllocationController::class,'showA4Processing'])->name('a4.processing');
+    Route::get('/a4/runs/{a4Run}',[AllocationController::class,'showA4'])->name('a4.show');
     Route::get('/seat-breakup/template',[AllocationController::class,'seatTemplate'])->name('seat-breakup.template');
     Route::post('/seat-breakup/upload',[AllocationController::class,'uploadSeatBreakup'])->name('seat-breakup.upload');
     Route::get('/seat-breakup/{version}',[AllocationController::class,'showSeatBreakup'])->name('seat-breakup.show');

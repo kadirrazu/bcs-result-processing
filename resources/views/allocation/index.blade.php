@@ -137,6 +137,82 @@
     </div>
     @endif
 </div>
+@php
+    $latestCompletedA3 = $allocationRuns->first(fn($r) => $r->status === 'phase1_complete');
+    $latestA4 = $a4Runs->first();
+    $a4Busy = $latestA4 && in_array((string)$latestA4->status, ['queued','running'], true);
+@endphp
+<div class="card mb-3" id="allocation-a4-card">
+    <div class="card-header">
+        <div>
+            <h3 class="card-title">A4 — NM + Shifting</h3>
+            <div class="card-subtitle">Consumes an immutable completed A3 run. Vacant/released quota capacity becomes pure merit/NM capacity; A3 evidence remains unchanged.</div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-8">
+                @if($latestCompletedA3)
+                    <div>Source Phase-1: <strong>v{{ $latestCompletedA3->version }}</strong> · Allocated {{ number_format($latestCompletedA3->allocated_count) }} · Temporary {{ number_format($latestCompletedA3->temporary_count) }}</div>
+                    <div class="small text-secondary mt-1">A4 can only improve TEMPORARY allocations or allocate previously unallocated candidates; FINAL A3 candidates stay locked.</div>
+                @else
+                    <div class="text-secondary">Complete A3 Phase-1 before starting A4.</div>
+                @endif
+            </div>
+            <div class="col-md-4 text-md-end">
+                @if($latestA4 && $latestA4->status === 'a4_complete')
+                    <a class="btn btn-success" href="{{ route('allocation.a4.show', $latestA4) }}">View A4 Result</a>
+                @elseif($a4Busy)
+                    <a class="btn btn-warning" href="{{ route('allocation.a4.processing', $latestA4) }}">View A4 Processing</a>
+                @elseif($latestCompletedA3)
+                    <form method="POST" action="{{ route('allocation.a4.start', $latestCompletedA3) }}">@csrf
+                        <button class="btn btn-primary" type="submit">{{ $latestA4 ? 'Re-run A4 NM + Shifting' : 'Start A4 NM + Shifting' }}</button>
+                    </form>
+                @endif
+            </div>
+        </div>
+    </div>
+    @if($latestA4)
+    <div id="a4-landing-progress-wrap" class="card-body border-top {{ $a4Busy || $latestA4->status === 'failed' ? '' : 'd-none' }}" data-status-url="{{ route('allocation.a4.status', $latestA4) }}">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div><strong id="a4-landing-phase">{{ strtoupper(str_replace('_',' ', $latestA4->phase ?: $latestA4->status)) }}</strong><div class="small text-secondary" id="a4-landing-message">{{ $latestA4->progress_message }}</div></div>
+            <span id="a4-landing-percent">{{ (int)$latestA4->progress_percent }}</span>%
+        </div>
+        <div class="progress"><div id="a4-landing-progress-bar" class="progress-bar" style="width: {{ (int)$latestA4->progress_percent }}%"></div></div>
+        <div id="a4-landing-counter" class="small text-secondary mt-2 {{ (int)$latestA4->progress_total > 0 ? '' : 'd-none' }}">Processed {{ number_format($latestA4->progress_current) }} / {{ number_format($latestA4->progress_total) }}</div>
+        <div id="a4-landing-error" class="alert alert-danger mt-3 mb-0 {{ $latestA4->status === 'failed' ? '' : 'd-none' }}">{{ $latestA4->failure_message }}</div>
+    </div>
+    @endif
+    @if($a4Runs->isNotEmpty())
+    <div class="table-responsive">
+        <table class="table table-vcenter mb-0">
+            <thead><tr><th>Run</th><th>A3 Source</th><th>Status</th><th>Allocated</th><th>Unallocated</th><th>NM</th><th>SHIFTED</th><th>Quota→Merit</th><th>Iterations</th><th></th></tr></thead>
+            <tbody>
+            @foreach($a4Runs as $a4)
+                <tr>
+                    <td>v{{ $a4->version }}</td>
+                    <td>A3 v{{ $a4->phase1Run?->version ?? '—' }}</td>
+                    <td><span class="badge bg-{{ $a4->status === 'a4_complete' ? 'success' : ($a4->status === 'failed' ? 'danger' : 'azure') }}-lt">{{ strtoupper(str_replace('_',' ', $a4->status)) }}</span></td>
+                    <td>{{ number_format($a4->allocated_count) }}</td>
+                    <td>{{ number_format($a4->unallocated_count) }}</td>
+                    <td>{{ number_format($a4->nm_count) }}</td>
+                    <td>{{ number_format($a4->shifted_count) }}</td>
+                    <td>{{ number_format($a4->quota_to_merit_count) }}</td>
+                    <td>{{ number_format($a4->iteration_count) }}</td>
+                    <td class="text-end">
+                        @if($a4->status === 'a4_complete')
+                            <a class="btn btn-sm btn-outline-primary" href="{{ route('allocation.a4.show', $a4) }}">View A4</a>
+                        @else
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.a4.processing', $a4) }}">View A4 Run</a>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+    @endif
+</div>
 <div class="row row-cards mb-3"><div class="col-md-5"><div class="card h-100">
 <div class="card-header"><div><h3 class="card-title">Allocation Settings</h3><div class="card-subtitle">Read-only here. Configure in <code>{{ $settingsInfo['config_file'] }}</code>.</div></div></div>
 <div class="card-body">
@@ -261,4 +337,53 @@
     window.setTimeout(pollPhaseOne, 500);
 })();
 </script>
+
+<script>
+(function () {
+    const busyStatuses = ['queued', 'running'];
+    const initialBusy = @json($a4Busy);
+    if (!initialBusy) return;
+
+    const wrap = document.getElementById('a4-landing-progress-wrap');
+    if (!wrap) return;
+    const url = wrap.dataset.statusUrl;
+    const bar = document.getElementById('a4-landing-progress-bar');
+    const pct = document.getElementById('a4-landing-percent');
+    const phase = document.getElementById('a4-landing-phase');
+    const message = document.getElementById('a4-landing-message');
+    const counter = document.getElementById('a4-landing-counter');
+    const error = document.getElementById('a4-landing-error');
+
+    async function pollA4() {
+        try {
+            const response = await fetch(url, {headers: {'Accept':'application/json','X-Requested-With':'XMLHttpRequest'}});
+            if (!response.ok) throw new Error('Unable to read Allocation A4 status.');
+            const data = await response.json();
+            const percent = Number(data.progress_percent || 0);
+            wrap.classList.remove('d-none');
+            bar.style.width = percent + '%';
+            pct.textContent = percent;
+            phase.textContent = String(data.phase || data.status || '').replaceAll('_',' ').toUpperCase();
+            message.textContent = data.message || '';
+            if (Number(data.progress_total || 0) > 0) {
+                counter.textContent = 'Processed ' + Number(data.progress_current || 0).toLocaleString() + ' / ' + Number(data.progress_total || 0).toLocaleString();
+                counter.classList.remove('d-none');
+            } else counter.classList.add('d-none');
+
+            if (data.status === 'failed') {
+                error.textContent = data.error || 'Allocation A4 failed. No A4 result was committed.';
+                error.classList.remove('d-none');
+                return;
+            }
+            if (!busyStatuses.includes(data.status)) { window.location.reload(); return; }
+            window.setTimeout(pollA4, 1200);
+        } catch (e) {
+            message.textContent = e.message + ' Retrying…';
+            window.setTimeout(pollA4, 2500);
+        }
+    }
+    window.setTimeout(pollA4, 500);
+})();
+</script>
+
 @endsection

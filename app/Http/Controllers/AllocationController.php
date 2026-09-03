@@ -10,8 +10,13 @@ use App\Models\AllocationSeatBreakupVersion;
 use App\Models\AllocationRun;
 use App\Models\AllocationResult;
 use App\Models\AllocationSeatLedger;
+use App\Models\AllocationA4Run;
+use App\Models\AllocationA4Result;
+use App\Models\AllocationA4SeatLedger;
+use App\Models\AllocationA4MovementEvent;
 use App\Jobs\ProcessAllocationInputFreeze;
 use App\Jobs\ProcessAllocationPhaseOne;
+use App\Jobs\ProcessAllocationA4;
 use App\Support\Examinations\ExaminationContext;
 use App\Services\Allocation\AllocationReadinessService;
 use App\Services\Allocation\AllocationSeatBreakupService;
@@ -41,6 +46,9 @@ final class AllocationController extends Controller
             'audits' => AllocationProcessingAudit::query()->latest('id')->limit(10)->get(),
             'inputFreezes' => AllocationInputFreeze::query()->latest('version')->limit(5)->get(),
             'allocationRuns' => AllocationRun::query()->latest('version')->limit(5)->get(),
+            // A4 is persisted separately from A3. Landing-page history makes the next phase
+            // visible without mutating or hiding the exact Phase-1 evidence.
+            'a4Runs' => AllocationA4Run::query()->with('phase1Run')->latest('version')->limit(5)->get(),
         ]);
     }
 
@@ -431,10 +439,140 @@ final class AllocationController extends Controller
 
         $abbreviationByCode = $cadreAbbreviations->union($subAbbreviations);
 
+        // A4 is stored separately; exposing its latest child run here does not
+        // alter any A3 result/ledger row and lets operators move forward while
+        // preserving this exact Phase-1 page as immutable evidence.
+        $latestA4Run = AllocationA4Run::query()->where('phase1_run_id', $run->id)->latest('version')->first();
+
         return view('allocation.run-show', compact(
             'run', 'results', 'ledgers', 'reg', 'cadreCode', 'basis', 'decisionStatus',
-            'cadreOptions', 'abbreviationByCode'
+            'cadreOptions', 'abbreviationByCode', 'latestA4Run'
         ));
+    }
+
+    /** Queue corrected monotonic A4 against this exact completed A3 run. */
+    public function startA4(Request $request, AllocationRun $run, ExaminationContext $context): RedirectResponse
+    {
+        $examId = $context->currentId();
+        abort_if($examId === null, 409, 'No examination selected.');
+        $actorId = $request->user()?->id;
+
+        $a4Run = DB::connection('exam')->transaction(function () use ($run, $actorId): AllocationA4Run {
+            $lockedA3 = AllocationRun::query()->whereKey($run->id)->lockForUpdate()->firstOrFail();
+            if ((string) $lockedA3->status !== 'phase1_complete') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'allocation' => 'A4 may start only from the current completed A3 Phase-1 run.',
+                ]);
+            }
+            if (! $lockedA3->phase1_output_hash || ! $lockedA3->seat_ledger_hash) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'allocation' => 'A3 output/seat-ledger hashes are missing. A4 start blocked.',
+                ]);
+            }
+            if (AllocationA4Run::query()->whereIn('status', ['queued', 'running'])->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'allocation' => 'Another A4 run is already queued or running.',
+                ]);
+            }
+
+            $nextVersion = ((int) AllocationA4Run::query()->max('version')) + 1;
+            $a4 = AllocationA4Run::query()->create([
+                'version' => $nextVersion,
+                'phase1_run_id' => (int) $lockedA3->id,
+                'input_freeze_id' => (int) $lockedA3->input_freeze_id,
+                'status' => 'queued', 'phase' => 'QUEUED',
+                'input_fingerprint' => (string) $lockedA3->input_fingerprint,
+                'queue_hash' => (string) $lockedA3->queue_hash,
+                'phase1_output_hash' => (string) $lockedA3->phase1_output_hash,
+                'phase1_seat_ledger_hash' => (string) $lockedA3->seat_ledger_hash,
+                'progress_message' => 'A4 monotonic NM/Shifting queued.',
+                'started_by' => $actorId, 'started_at' => now(),
+            ]);
+
+            AllocationProcessingState::query()->whereKey(1)->update([
+                'status' => 'a4_queued', 'phase' => 'QUEUED', 'progress_percent' => 0,
+                'progress_current' => 0, 'progress_total' => 0,
+                'progress_message' => 'A4 monotonic NM/Shifting queued.', 'last_error' => null,
+            ]);
+            AllocationProcessingAudit::query()->create([
+                'event' => 'ALLOCATION_A4_QUEUED', 'actor_id' => $actorId,
+                'from_status' => 'phase1_complete', 'to_status' => 'a4_queued',
+                'context' => [
+                    'allocation_a4_run_id' => (int) $a4->id,
+                    'phase1_run_id' => (int) $lockedA3->id,
+                    'phase1_output_hash' => (string) $lockedA3->phase1_output_hash,
+                    'phase1_seat_ledger_hash' => (string) $lockedA3->seat_ledger_hash,
+                ],
+                'created_at' => now(),
+            ]);
+            return $a4;
+        });
+
+        ProcessAllocationA4::dispatch((int) $examId, (int) $a4Run->id, $actorId ? (int) $actorId : null);
+        return redirect()->route('allocation.a4.processing', $a4Run)
+            ->with('success', "Allocation A4 run v{$a4Run->version} queued. A3 remains unchanged.");
+    }
+
+    /** JSON polling endpoint for A4 progress. */
+    public function a4Status(AllocationA4Run $a4Run): JsonResponse
+    {
+        return response()->json([
+            'status' => (string) $a4Run->status,
+            'phase' => (string) $a4Run->phase,
+            'progress_percent' => (int) $a4Run->progress_percent,
+            'progress_current' => (int) $a4Run->progress_current,
+            'progress_total' => (int) $a4Run->progress_total,
+            'message' => (string) ($a4Run->progress_message ?: ''),
+            'error' => (string) ($a4Run->failure_message ?: ''),
+            'view_url' => (string) $a4Run->status === 'a4_complete' ? route('allocation.a4.show', $a4Run) : null,
+            'processing_url' => route('allocation.a4.processing', $a4Run),
+        ]);
+    }
+
+    /** Dedicated A4 operational screen; A3 review stays an immutable evidence page. */
+    public function showA4Processing(AllocationA4Run $a4Run): View|RedirectResponse
+    {
+        if ((string) $a4Run->status === 'a4_complete') {
+            return redirect()->route('allocation.a4.show', $a4Run);
+        }
+
+        return view('allocation.a4-processing', [
+            'a4Run' => $a4Run->load('phase1Run'),
+        ]);
+    }
+
+    /** A4 review mirrors A3 while adding NM/SHIFTED and movement-audit visibility. */
+    public function showA4(Request $request, AllocationA4Run $a4Run): View
+    {
+        $reg = trim((string) $request->query('reg', ''));
+        $cadreCode = trim((string) $request->query('cadre_code', ''));
+        $basis = strtoupper(trim((string) $request->query('basis', '')));
+        $movement = strtoupper(trim((string) $request->query('movement', '')));
+        if (! in_array($basis, ['', 'MQ','CFF','EM','PHC'], true)) $basis = '';
+        if (! in_array($movement, ['', 'DIRECT','NM','SHIFTED'], true)) $movement = '';
+
+        $query = $a4Run->results()->with('circularEntry');
+        if ($reg !== '') $query->where('reg', 'like', '%'.$reg.'%');
+        if ($cadreCode !== '' && ctype_digit($cadreCode)) $query->where('cadre_code', (int) $cadreCode);
+        if ($basis !== '') $query->where('allocation_basis', $basis);
+        if ($movement !== '') $query->where('movement_type', $movement);
+        $results = $query->orderBy('cadre_code')->orderBy('merit_position')->orderBy('registration_id')->paginate(100)->withQueryString();
+
+        $ledgers = $a4Run->seatLedgers()->with('circularEntry')->get()->sort(function ($left, $right): int {
+            $a=$left->circularEntry; $b=$right->circularEntry;
+            $sa=(int)($a?->cadre_serial??PHP_INT_MAX); $sb=(int)($b?->cadre_serial??PHP_INT_MAX);
+            if($sa!==$sb)return $sa<=>$sb; $subA=$a?->sub_serial; $subB=$b?->sub_serial;
+            if($subA===null&&$subB!==null)return -1; if($subA!==null&&$subB===null)return 1;
+            if((int)$subA!==(int)$subB)return (int)$subA<=>(int)$subB; return (int)$left->id<=>(int)$right->id;
+        })->values();
+        $cadreOptions = $ledgers->map(fn($l)=>['code'=>(int)$l->cadre_code,'title'=>(string)($l->circularEntry?->post_name_snapshot ?: $l->circularEntry?->cadre_name_snapshot ?: '')])->unique('code')->sortBy('code')->values();
+        $codes=$ledgers->pluck('cadre_code')->map(fn($v)=>(int)$v)->unique()->values();
+        $ca=\App\Models\CadreMaster::query()->whereIn('cadre_code',$codes)->pluck('cadre_abbr','cadre_code')->mapWithKeys(fn($a,$c)=>[(int)$c=>(string)$a]);
+        $sa=\App\Models\CadreSubMaster::query()->whereIn('sub_cadre_code',$codes)->pluck('sub_cadre_abbr','sub_cadre_code')->mapWithKeys(fn($a,$c)=>[(int)$c=>(string)$a]);
+        $abbreviationByCode=$ca->union($sa);
+
+        $movements = $a4Run->movements()->whereNotNull('registration_id')->latest('sequence_no')->limit(100)->get();
+        return view('allocation.a4-show', compact('a4Run','results','ledgers','reg','cadreCode','basis','movement','cadreOptions','abbreviationByCode','movements'));
     }
 
     public function finalizeSettings(Request $request, AllocationSettingsService $service): RedirectResponse
