@@ -60,7 +60,13 @@ final class ChoiceOptimizationController extends Controller
         if ($setting->optimization_enabled) {
             if ($setting->google_form_enabled === true) {
                 $latestGoogleFormBatch = ChoiceOptimizationGoogleFormBatch::query()->latest('id')->first();
-                $googleFormAcceptedCount = ChoiceOptimizationGoogleFormRecommendation::query()->count();
+                // Google Form is a replacement snapshot, not an accumulating repository.
+                // Therefore the landing count must describe ONLY the latest uploaded batch.
+                $googleFormAcceptedCount = $latestGoogleFormBatch
+                    ? ChoiceOptimizationGoogleFormRecommendation::query()
+                        ->where('source_batch_id', (int) $latestGoogleFormBatch->id)
+                        ->count()
+                    : 0;
             }
             $historicalRepositories = PreviousBcsRepository::query()
                 ->with('currentEffectiveDataset')
@@ -78,6 +84,7 @@ final class ChoiceOptimizationController extends Controller
                 ->keyBy('previous_bcs_number');
 
             $historicalPendingReviewCount = ChoiceOptimizationHistoricalMatch::query()
+                ->whereHas('source', fn ($q) => $q->where('included_in_optimization', true))
                 ->where('match_status', 'review')
                 ->where('resolution_status', 'pending')
                 ->count();
@@ -701,6 +708,125 @@ final class ChoiceOptimizationController extends Controller
                 ->with('success', 'Historical match review saved. All review items are resolved.');
     }
 
+    /**
+     * Change which already-pulled Previous BCS sources participate in optimization.
+     *
+     * The Historical source rows are evidence-bearing snapshots, so this operation NEVER
+     * deletes pulled data or match decisions. It only changes the optimization-use flag.
+     * `only` is an operator convenience: selected sources become INCLUDED and every other
+     * Historical source becomes EXCLUDED in one audited action.
+     */
+    public function updateHistoricalSourceUsage(
+        Request $request,
+        ChoiceOptimizationSettingsService $settings,
+        ChoiceOptimizationHistoricalStalenessService $staleness,
+    ): RedirectResponse {
+        $this->assertOptimizationEnabled($settings);
+
+        $state = $settings->state();
+        abort_if(
+            in_array((string) $state->status, ['historical_optimization_queued', 'historical_optimizing'], true),
+            409,
+            'Historical Choice Optimization is running. Wait for it to finish before changing source inclusion.'
+        );
+
+        $validated = $request->validate([
+            'source_ids' => ['required', 'array', 'min:1'],
+            'source_ids.*' => ['required', 'integer', 'distinct'],
+            'action' => ['required', 'in:include,exclude,only'],
+        ]);
+
+        $sourceIds = collect($validated['source_ids'])->map(fn ($id): int => (int) $id)->unique()->values();
+        $selectedSources = ChoiceOptimizationHistoricalSource::query()->whereIn('id', $sourceIds)->get();
+        abort_unless($selectedSources->count() === $sourceIds->count(), 422, 'One or more selected Historical sources were not found.');
+
+        // Never change source usage while one of the affected snapshots is being mutated.
+        $affectedSources = $validated['action'] === 'only'
+            ? ChoiceOptimizationHistoricalSource::query()->get()
+            : $selectedSources;
+
+        foreach ($affectedSources as $source) {
+            abort_if(
+                in_array((string) $source->status, ['pull_queued', 'pulling'], true),
+                409,
+                "BCS {$source->previous_bcs_number} is currently Pulling/Re-pulling. Wait for it to finish before changing optimization usage."
+            );
+        }
+
+        $changes = collect();
+
+        if ($validated['action'] === 'only') {
+            // Explicit replacement semantics: the operator's current selection becomes the
+            // complete Previous-BCS optimization source set. Unselected sources are preserved
+            // in storage/audit but excluded from subsequent consolidation.
+            foreach ($affectedSources as $source) {
+                $next = $sourceIds->contains((int) $source->id);
+                if ((bool) $source->included_in_optimization !== $next) {
+                    $changes->push(['source' => $source, 'included' => $next]);
+                }
+            }
+        } else {
+            $next = $validated['action'] === 'include';
+            foreach ($selectedSources as $source) {
+                if ((bool) $source->included_in_optimization !== $next) {
+                    $changes->push(['source' => $source, 'included' => $next]);
+                }
+            }
+        }
+
+        if ($changes->isEmpty()) {
+            return redirect()->route('choice-optimization.index')->with('success', 'No Historical source usage changed.');
+        }
+
+        // Update row-by-row because `only` can contain both INCLUDE and EXCLUDE transitions.
+        foreach ($changes as $change) {
+            ChoiceOptimizationHistoricalSource::query()
+                ->whereKey($change['source']->id)
+                ->update(['included_in_optimization' => $change['included'], 'updated_at' => now()]);
+        }
+
+        $actorId = (int) $request->user()->getAuthIdentifier();
+        $includedBcs = $changes->filter(fn ($c) => $c['included'])
+            ->map(fn ($c): int => (int) $c['source']->previous_bcs_number)->values()->all();
+        $excludedBcs = $changes->reject(fn ($c) => $c['included'])
+            ->map(fn ($c): int => (int) $c['source']->previous_bcs_number)->values()->all();
+
+        ChoiceOptimizationProcessingAudit::query()->create([
+            'event' => $validated['action'] === 'only'
+                ? 'HISTORICAL_SOURCE_SELECTION_REPLACED'
+                : ($validated['action'] === 'include' ? 'HISTORICAL_SOURCES_INCLUDED' : 'HISTORICAL_SOURCES_EXCLUDED'),
+            'actor_id' => $actorId,
+            'from_status' => (string) $state->status,
+            'to_status' => (string) $state->status,
+            'context' => [
+                'action' => $validated['action'],
+                'included_previous_bcs_numbers' => $includedBcs,
+                'excluded_previous_bcs_numbers' => $excludedBcs,
+                'selected_source_ids' => $sourceIds->all(),
+            ],
+            'created_at' => now(),
+        ]);
+
+        $staleness->markIfProduced(
+            'Historical Previous BCS source selection changed. Re-process Historical Choice Optimization.',
+            $actorId,
+            [
+                'action' => $validated['action'],
+                'included_previous_bcs_numbers' => $includedBcs,
+                'excluded_previous_bcs_numbers' => $excludedBcs,
+            ],
+        );
+
+        $message = $validated['action'] === 'only'
+            ? 'Optimization source set replaced: '.count($sourceIds).' selected Historical BCS source(s) are now INCLUDED; all other Historical sources are EXCLUDED.'
+            : count($changes).' Historical BCS source(s) '.($validated['action'] === 'include' ? 'included in' : 'excluded from').' optimization.';
+
+        return redirect()->route('choice-optimization.index')->with(
+            'success',
+            $message.' Pulled data and match evidence were preserved.'
+        );
+    }
+
     public function historicalStatus(
         ChoiceOptimizationSettingsService $settings,
         ChoiceOptimizationHistoricalSource $source,
@@ -744,12 +870,23 @@ final class ChoiceOptimizationController extends Controller
                 409,
                 'A Google Form batch is still processing. Complete it before Consolidated Historical Choice Optimization.'
             );
+
+            // Once a Google Form batch exists, the latest batch is the sole authority.
+            // Do not silently fall back to an older approved batch while the latest one is incomplete/failed.
+            $latestGoogleFormBatch = ChoiceOptimizationGoogleFormBatch::query()->latest('id')->first();
+            abort_if(
+                $latestGoogleFormBatch
+                    && ! in_array((string) $latestGoogleFormBatch->status, ['merged', 'partially_merged'], true),
+                409,
+                'The latest Google Form batch must be merged/approved before Historical Choice Optimization. Older batches are history only.'
+            );
         }
 
         $examId = $context->currentId();
         abort_if($examId === null, 409, 'No examination is selected.');
 
         $pendingReview = ChoiceOptimizationHistoricalMatch::query()
+            ->whereHas('source', fn ($q) => $q->where('included_in_optimization', true))
             ->where('match_status', 'review')
             ->where('resolution_status', 'pending')
             ->count();
@@ -761,13 +898,14 @@ final class ChoiceOptimizationController extends Controller
         );
 
         $sourcesNotReady = ChoiceOptimizationHistoricalSource::query()
+            ->where('included_in_optimization', true)
             ->where('status', '<>', 'pulled')
             ->count();
 
         abort_if(
             $sourcesNotReady > 0,
             409,
-            'Every Historical source already added to this workspace must be fully PULLED before Historical Choice Optimization.'
+            'Every Historical source INCLUDED in optimization must be fully PULLED before Historical Choice Optimization.'
         );
 
         $state = $settings->state();

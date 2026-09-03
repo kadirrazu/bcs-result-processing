@@ -14,6 +14,7 @@ use App\Models\AllocationA4Run;
 use App\Models\AllocationA4Result;
 use App\Models\AllocationA4SeatLedger;
 use App\Models\AllocationA4MovementEvent;
+use App\Models\CircularEntry;
 use App\Jobs\ProcessAllocationInputFreeze;
 use App\Jobs\ProcessAllocationPhaseOne;
 use App\Jobs\ProcessAllocationA4;
@@ -351,12 +352,17 @@ final class AllocationController extends Controller
     }
 
     /** Review committed A3 output. A4 will later consume this exact run. */
-    public function showRun(Request $request, AllocationRun $run): View
+    public function showRun(Request $request, AllocationRun $run, AllocationReadinessService $readiness): View
     {
         $reg = trim((string) $request->query('reg', ''));
         $cadreCode = trim((string) $request->query('cadre_code', ''));
         $basis = strtoupper(trim((string) $request->query('basis', '')));
         $decisionStatus = strtoupper(trim((string) $request->query('decision_status', '')));
+
+        // Seat-ledger review has its own search/filter controls so candidate-result
+        // filters do not unexpectedly hide ledger rows (and vice versa).
+        $ledgerSearch = strtoupper(trim((string) $request->query('ledger_search', '')));
+        $ledgerCadreCode = trim((string) $request->query('ledger_cadre_code', ''));
 
         if (! in_array($basis, ['', 'MQ', 'CFF', 'EM', 'PHC'], true)) {
             $basis = '';
@@ -387,19 +393,25 @@ final class AllocationController extends Controller
             ->withQueryString();
 
         /*
-         * Seat Ledger must follow the authoritative Circular serial order, not
-         * cadre-code order. This keeps the operational review visually aligned
-         * with the published vacancy/post-breakup sequence.
+         * Seat Ledger follows the published Circular group first, then serial/sub-serial
+         * inside that group. General and Technical sections can both start from serial 1;
+         * therefore serial-only sorting would incorrectly interleave the two sections.
          */
-        $ledgers = $run->seatLedgers()->with('circularEntry')->get()->sort(function ($left, $right): int {
+        $allLedgers = $run->seatLedgers()->with('circularEntry')->get()->sort(function ($left, $right): int {
             $a = $left->circularEntry;
             $b = $right->circularEntry;
+            $typeA = (string) ($a?->cadre_type?->value ?? $a?->cadre_type ?? '');
+            $typeB = (string) ($b?->cadre_type?->value ?? $b?->cadre_type ?? '');
+            $rank = static fn (string $type): int => match ($type) {
+                'GG' => 0,
+                'TT' => 1,
+                default => 2,
+            };
+            if ($rank($typeA) !== $rank($typeB)) return $rank($typeA) <=> $rank($typeB);
 
             $serialA = (int) ($a?->cadre_serial ?? PHP_INT_MAX);
             $serialB = (int) ($b?->cadre_serial ?? PHP_INT_MAX);
-            if ($serialA !== $serialB) {
-                return $serialA <=> $serialB;
-            }
+            if ($serialA !== $serialB) return $serialA <=> $serialB;
 
             $subA = $a?->sub_serial;
             $subB = $b?->sub_serial;
@@ -410,51 +422,170 @@ final class AllocationController extends Controller
             return (int) $left->id <=> (int) $right->id;
         })->values();
 
-        /*
-         * Cadre filter options are derived from the frozen run's own seat ledger.
-         * This avoids exposing unrelated master codes that cannot occur in this run.
-         */
-        $cadreOptions = $ledgers->map(function ($ledger): array {
-            $entry = $ledger->circularEntry;
-            return [
-                'code' => (int) $ledger->cadre_code,
-                'title' => (string) ($entry?->post_name_snapshot ?: $entry?->cadre_name_snapshot ?: ''),
-            ];
-        })->unique('code')->sortBy('code')->values();
-
-        /*
-         * Abbreviations are presentation metadata only. Allocation decisions continue
-         * to rely on the frozen effective cadre code/circular-entry identity.
-         */
-        $codes = $ledgers->pluck('cadre_code')->map(fn ($v) => (int) $v)->unique()->values();
+        /* Abbreviations are display/filter metadata only; allocation identity remains frozen. */
+        $codes = $allLedgers->pluck('cadre_code')->map(fn ($v) => (int) $v)->unique()->values();
         $cadreAbbreviations = \App\Models\CadreMaster::query()
             ->whereIn('cadre_code', $codes)
             ->pluck('cadre_abbr', 'cadre_code')
             ->mapWithKeys(fn ($abbr, $code) => [(int) $code => (string) $abbr]);
-
         $subAbbreviations = \App\Models\CadreSubMaster::query()
             ->whereIn('sub_cadre_code', $codes)
             ->pluck('sub_cadre_abbr', 'sub_cadre_code')
             ->mapWithKeys(fn ($abbr, $code) => [(int) $code => (string) $abbr]);
-
         $abbreviationByCode = $cadreAbbreviations->union($subAbbreviations);
 
-        // A4 is stored separately; exposing its latest child run here does not
-        // alter any A3 result/ledger row and lets operators move forward while
-        // preserving this exact Phase-1 page as immutable evidence.
+        // Both A3 and A4 expose the same operator contract: one free-text Code/Abbr
+        // search plus one exact Code - Abbreviation dropdown.
+        $ledgerCadreOptions = $allLedgers->map(fn ($ledger) => [
+            'code' => (int) $ledger->cadre_code,
+            'abbr' => (string) $abbreviationByCode->get((int) $ledger->cadre_code, ''),
+        ])->unique('code')->values();
+
+        $ledgers = $allLedgers;
+        if ($ledgerSearch !== '') {
+            $ledgers = $ledgers->filter(function ($ledger) use ($ledgerSearch, $abbreviationByCode): bool {
+                $code = (string) $ledger->cadre_code;
+                $abbr = strtoupper((string) $abbreviationByCode->get((int) $ledger->cadre_code, ''));
+                return str_contains(strtoupper($code), $ledgerSearch) || str_contains($abbr, $ledgerSearch);
+            })->values();
+        }
+        if ($ledgerCadreCode !== '' && ctype_digit($ledgerCadreCode)) {
+            $ledgers = $ledgers->filter(fn ($ledger) => (int) $ledger->cadre_code === (int) $ledgerCadreCode)->values();
+        }
+
+        /* Candidate-result cadre filter remains based only on cadres present in this run. */
+        $cadreOptions = $allLedgers->map(function ($ledger) use ($abbreviationByCode): array {
+            $entry = $ledger->circularEntry;
+            return [
+                'code' => (int) $ledger->cadre_code,
+                'abbr' => (string) $abbreviationByCode->get((int) $ledger->cadre_code, ''),
+                'title' => (string) ($entry?->post_name_snapshot ?: $entry?->cadre_name_snapshot ?: ''),
+            ];
+        })->unique('code')->values();
+
+        // A4 is stored separately; exposing its latest child run here does not alter A3.
         $latestA4Run = AllocationA4Run::query()->where('phase1_run_id', $run->id)->latest('version')->first();
+        $a4GateReady = (bool) ($readiness->inspectDashboard()['ready'] ?? false);
 
         return view('allocation.run-show', compact(
             'run', 'results', 'ledgers', 'reg', 'cadreCode', 'basis', 'decisionStatus',
-            'cadreOptions', 'abbreviationByCode', 'latestA4Run'
+            'cadreOptions', 'abbreviationByCode', 'latestA4Run', 'a4GateReady',
+            'ledgerSearch', 'ledgerCadreCode', 'ledgerCadreOptions'
+        ));
+    }
+
+    /**
+     * Dedicated A3 candidate-result review.
+     *
+     * A3 Seat Ledger and candidate decisions are intentionally separated so the
+     * ledger review stays compact and mirrors the A4 review contract. This method
+     * is read-only: it never mutates Phase-1 evidence.
+     */
+    public function showRunCandidates(Request $request, AllocationRun $run): View
+    {
+        $reg = trim((string) $request->query('reg', ''));
+        $cadreCode = trim((string) $request->query('cadre_code', ''));
+        $basis = strtoupper(trim((string) $request->query('basis', '')));
+        $decisionStatus = strtoupper(trim((string) $request->query('decision_status', '')));
+
+        if (! in_array($basis, ['', 'MQ', 'CFF', 'EM', 'PHC'], true)) $basis = '';
+        if (! in_array($decisionStatus, ['', 'FINAL', 'TEMPORARY'], true)) $decisionStatus = '';
+
+        $query = $run->results()->with('circularEntry');
+        if ($reg !== '') $query->where('reg', 'like', '%'.$reg.'%');
+        if ($cadreCode !== '' && ctype_digit($cadreCode)) $query->where('cadre_code', (int) $cadreCode);
+        if ($basis !== '') $query->where('allocation_basis', $basis);
+        if ($decisionStatus !== '') $query->where('decision_status', $decisionStatus);
+
+        $results = $query
+            ->orderBy('cadre_code')
+            ->orderBy('merit_position')
+            ->orderBy('registration_id')
+            ->paginate(100)
+            ->withQueryString();
+
+        $codes = $run->seatLedgers()->pluck('cadre_code')->map(fn ($v) => (int) $v)->unique()->values();
+        $cadreAbbreviations = \App\Models\CadreMaster::query()
+            ->whereIn('cadre_code', $codes)->pluck('cadre_abbr', 'cadre_code')
+            ->mapWithKeys(fn ($abbr, $code) => [(int) $code => (string) $abbr]);
+        $subAbbreviations = \App\Models\CadreSubMaster::query()
+            ->whereIn('sub_cadre_code', $codes)->pluck('sub_cadre_abbr', 'sub_cadre_code')
+            ->mapWithKeys(fn ($abbr, $code) => [(int) $code => (string) $abbr]);
+        $abbreviationByCode = $cadreAbbreviations->union($subAbbreviations);
+
+        $cadreOptions = $run->seatLedgers()->get()->map(fn ($ledger) => [
+            'code' => (int) $ledger->cadre_code,
+            'abbr' => (string) $abbreviationByCode->get((int) $ledger->cadre_code, ''),
+        ])->unique('code')->sortBy('code')->values();
+
+        return view('allocation.run-candidates', compact(
+            'run', 'results', 'reg', 'cadreCode', 'basis', 'decisionStatus',
+            'cadreOptions', 'abbreviationByCode'
+        ));
+    }
+
+    /**
+     * Read-only A3 cadre drill-down reached from the Phase-1 Seat Ledger.
+     * The Circular entry must exist in this exact A3 ledger, so a crafted URL
+     * cannot cross into an unrelated cadre/post.
+     */
+    public function showRunCadreResults(Request $request, AllocationRun $run, CircularEntry $circularEntry): View
+    {
+        $ledger = $run->seatLedgers()
+            ->with('circularEntry')
+            ->where('circular_entry_id', (int) $circularEntry->id)
+            ->firstOrFail();
+
+        $reg = trim((string) $request->query('reg', ''));
+        $basis = strtoupper(trim((string) $request->query('basis', '')));
+        $decisionStatus = strtoupper(trim((string) $request->query('decision_status', '')));
+        if (! in_array($basis, ['', 'MQ', 'CFF', 'EM', 'PHC'], true)) $basis = '';
+        if (! in_array($decisionStatus, ['', 'FINAL', 'TEMPORARY'], true)) $decisionStatus = '';
+
+        $query = $run->results()
+            ->where('circular_entry_id', (int) $circularEntry->id)
+            ->with('circularEntry');
+        if ($reg !== '') $query->where('reg', 'like', '%'.$reg.'%');
+        if ($basis !== '') $query->where('allocation_basis', $basis);
+        if ($decisionStatus !== '') $query->where('decision_status', $decisionStatus);
+
+        $results = $query->orderBy('merit_position')->orderBy('registration_id')
+            ->paginate(100)->withQueryString();
+
+        $code = (int) $ledger->cadre_code;
+        $abbr = \App\Models\CadreMaster::query()->where('cadre_code', $code)->value('cadre_abbr')
+            ?: \App\Models\CadreSubMaster::query()->where('sub_cadre_code', $code)->value('sub_cadre_abbr')
+            ?: '—';
+
+        return view('allocation.run-cadre-results', compact(
+            'run', 'ledger', 'circularEntry', 'results', 'reg', 'basis',
+            'decisionStatus', 'abbr'
         ));
     }
 
     /** Queue corrected monotonic A4 against this exact completed A3 run. */
-    public function startA4(Request $request, AllocationRun $run, ExaminationContext $context): RedirectResponse
+    public function startA4(
+        Request $request,
+        AllocationRun $run,
+        ExaminationContext $context,
+        AllocationReadinessService $readiness,
+    ): RedirectResponse
     {
         $examId = $context->currentId();
         abort_if($examId === null, 409, 'No examination selected.');
+
+        /*
+         * A4 is a downstream result-affecting phase. Never trust a visible button
+         * or the old A3 status alone: the same strict Allocation pre-run gate must
+         * still be READY at the exact moment A4/Re-Run is requested.
+         */
+        $gate = $readiness->inspectStrict();
+        if (! (bool) ($gate['ready'] ?? false)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'allocation' => 'Allocation Pre-run Gate is BLOCKED. Make all required upstream inputs current/finalized, rebuild the frozen input if required, and re-run A3 before starting A4.',
+            ]);
+        }
+
         $actorId = $request->user()?->id;
 
         $a4Run = DB::connection('exam')->transaction(function () use ($run, $actorId): AllocationA4Run {
@@ -542,37 +673,173 @@ final class AllocationController extends Controller
     }
 
     /** A4 review mirrors A3 while adding NM/SHIFTED and movement-audit visibility. */
+    /**
+     * A4 primary review page: intentionally limited to the Seat Ledger.
+     * Candidate-level review and movement details live on dedicated pages so the
+     * ledger remains compact and easy to scan operationally.
+     */
     public function showA4(Request $request, AllocationA4Run $a4Run): View
+    {
+        $ledgerSearch = strtoupper(trim((string) $request->query('ledger_search', '')));
+        $ledgerCadreCode = trim((string) $request->query('ledger_cadre_code', ''));
+
+        $allLedgers = $this->a4LedgersInCircularOrder($a4Run);
+        $abbreviationByCode = $this->a4Abbreviations($allLedgers->pluck('cadre_code'));
+        $ledgerCadreOptions = $allLedgers->map(fn ($ledger) => [
+            'code' => (int) $ledger->cadre_code,
+            'abbr' => (string) $abbreviationByCode->get((int) $ledger->cadre_code, ''),
+        ])->unique('code')->values();
+
+        // Review-only filters: one free-text Code/Abbreviation search and one exact dropdown.
+        $ledgers = $allLedgers;
+        if ($ledgerSearch !== '') {
+            $ledgers = $ledgers->filter(function ($ledger) use ($ledgerSearch, $abbreviationByCode): bool {
+                $code = (string) $ledger->cadre_code;
+                $abbr = strtoupper((string) $abbreviationByCode->get((int) $ledger->cadre_code, ''));
+                return str_contains(strtoupper($code), $ledgerSearch) || str_contains($abbr, $ledgerSearch);
+            })->values();
+        }
+        if ($ledgerCadreCode !== '' && ctype_digit($ledgerCadreCode)) {
+            $ledgers = $ledgers->filter(fn ($ledger) => (int) $ledger->cadre_code === (int) $ledgerCadreCode)->values();
+        }
+
+        return view('allocation.a4-show', compact(
+            'a4Run', 'ledgers', 'ledgerSearch', 'ledgerCadreCode',
+            'ledgerCadreOptions', 'abbreviationByCode'
+        ));
+    }
+
+    /** Dedicated full A4 candidate-result review with candidate/basis/movement filters. */
+    public function showA4Candidates(Request $request, AllocationA4Run $a4Run): View
     {
         $reg = trim((string) $request->query('reg', ''));
         $cadreCode = trim((string) $request->query('cadre_code', ''));
         $basis = strtoupper(trim((string) $request->query('basis', '')));
         $movement = strtoupper(trim((string) $request->query('movement', '')));
-        if (! in_array($basis, ['', 'MQ','CFF','EM','PHC'], true)) $basis = '';
-        if (! in_array($movement, ['', 'DIRECT','NM','SHIFTED'], true)) $movement = '';
+        if (! in_array($basis, ['', 'MQ', 'CFF', 'EM', 'PHC'], true)) $basis = '';
+        if (! in_array($movement, ['', 'DIRECT', 'NM', 'SHIFTED'], true)) $movement = '';
 
         $query = $a4Run->results()->with('circularEntry');
         if ($reg !== '') $query->where('reg', 'like', '%'.$reg.'%');
         if ($cadreCode !== '' && ctype_digit($cadreCode)) $query->where('cadre_code', (int) $cadreCode);
         if ($basis !== '') $query->where('allocation_basis', $basis);
         if ($movement !== '') $query->where('movement_type', $movement);
-        $results = $query->orderBy('cadre_code')->orderBy('merit_position')->orderBy('registration_id')->paginate(100)->withQueryString();
 
-        $ledgers = $a4Run->seatLedgers()->with('circularEntry')->get()->sort(function ($left, $right): int {
-            $a=$left->circularEntry; $b=$right->circularEntry;
-            $sa=(int)($a?->cadre_serial??PHP_INT_MAX); $sb=(int)($b?->cadre_serial??PHP_INT_MAX);
-            if($sa!==$sb)return $sa<=>$sb; $subA=$a?->sub_serial; $subB=$b?->sub_serial;
-            if($subA===null&&$subB!==null)return -1; if($subA!==null&&$subB===null)return 1;
-            if((int)$subA!==(int)$subB)return (int)$subA<=>(int)$subB; return (int)$left->id<=>(int)$right->id;
+        $results = $query
+            ->orderBy('cadre_code')
+            ->orderBy('merit_position')
+            ->orderBy('registration_id')
+            ->paginate(100)
+            ->withQueryString();
+
+        $allLedgers = $this->a4LedgersInCircularOrder($a4Run);
+        $abbreviationByCode = $this->a4Abbreviations($allLedgers->pluck('cadre_code'));
+        $cadreOptions = $allLedgers->map(fn ($ledger) => [
+            'code' => (int) $ledger->cadre_code,
+            'abbr' => (string) $abbreviationByCode->get((int) $ledger->cadre_code, ''),
+            'title' => (string) ($ledger->circularEntry?->post_name_snapshot ?: $ledger->circularEntry?->cadre_name_snapshot ?: ''),
+        ])->unique('code')->values();
+
+        $movements = $a4Run->movements()
+            ->whereNotNull('registration_id')
+            ->latest('sequence_no')
+            ->limit(100)
+            ->get();
+
+        return view('allocation.a4-candidates', compact(
+            'a4Run', 'results', 'reg', 'cadreCode', 'basis', 'movement',
+            'cadreOptions', 'abbreviationByCode', 'movements'
+        ));
+    }
+
+    /**
+     * Cadre drill-down reached by clicking the Seat Ledger abbreviation.
+     * The circular entry is verified against this exact A4 ledger before rows
+     * are shown, preventing a URL from crossing into an unrelated cadre/post.
+     */
+    public function showA4CadreResults(Request $request, AllocationA4Run $a4Run, CircularEntry $circularEntry): View
+    {
+        $ledger = $a4Run->seatLedgers()
+            ->with('circularEntry')
+            ->where('circular_entry_id', (int) $circularEntry->id)
+            ->firstOrFail();
+
+        $reg = trim((string) $request->query('reg', ''));
+        $basis = strtoupper(trim((string) $request->query('basis', '')));
+        $movement = strtoupper(trim((string) $request->query('movement', '')));
+        if (! in_array($basis, ['', 'MQ', 'CFF', 'EM', 'PHC'], true)) $basis = '';
+        if (! in_array($movement, ['', 'DIRECT', 'NM', 'SHIFTED'], true)) $movement = '';
+
+        $query = $a4Run->results()
+            ->where('circular_entry_id', (int) $circularEntry->id)
+            ->with('circularEntry');
+        if ($reg !== '') $query->where('reg', 'like', '%'.$reg.'%');
+        if ($basis !== '') $query->where('allocation_basis', $basis);
+        if ($movement !== '') $query->where('movement_type', $movement);
+
+        $results = $query
+            ->orderBy('merit_position')
+            ->orderBy('registration_id')
+            ->paginate(100)
+            ->withQueryString();
+
+        $abbreviationByCode = $this->a4Abbreviations(collect([(int) $ledger->cadre_code]));
+        $cadreAbbreviation = (string) $abbreviationByCode->get((int) $ledger->cadre_code, '—');
+
+        return view('allocation.a4-cadre-results', compact(
+            'a4Run', 'ledger', 'circularEntry', 'results', 'reg', 'basis',
+            'movement', 'cadreAbbreviation', 'abbreviationByCode'
+        ));
+    }
+
+    /**
+     * Circular order is group-first, then the serial printed inside that group.
+     * General and Technical/Professional sections may both legitimately start at
+     * serial 1, so sorting by serial alone incorrectly interleaves the sections.
+     */
+    private function a4LedgersInCircularOrder(AllocationA4Run $a4Run): \Illuminate\Support\Collection
+    {
+        return $a4Run->seatLedgers()->with('circularEntry')->get()->sort(function ($left, $right): int {
+            $a = $left->circularEntry;
+            $b = $right->circularEntry;
+
+            $typeA = (string) ($a?->cadre_type?->value ?? $a?->cadre_type ?? '');
+            $typeB = (string) ($b?->cadre_type?->value ?? $b?->cadre_type ?? '');
+            $rank = static fn (string $type): int => match ($type) {
+                'GG' => 0,
+                'TT' => 1,
+                default => 2,
+            };
+            if ($rank($typeA) !== $rank($typeB)) return $rank($typeA) <=> $rank($typeB);
+
+            $serialA = (int) ($a?->cadre_serial ?? PHP_INT_MAX);
+            $serialB = (int) ($b?->cadre_serial ?? PHP_INT_MAX);
+            if ($serialA !== $serialB) return $serialA <=> $serialB;
+
+            $subA = $a?->sub_serial;
+            $subB = $b?->sub_serial;
+            if ($subA === null && $subB !== null) return -1;
+            if ($subA !== null && $subB === null) return 1;
+            if ((int) $subA !== (int) $subB) return (int) $subA <=> (int) $subB;
+
+            return (int) $left->id <=> (int) $right->id;
         })->values();
-        $cadreOptions = $ledgers->map(fn($l)=>['code'=>(int)$l->cadre_code,'title'=>(string)($l->circularEntry?->post_name_snapshot ?: $l->circularEntry?->cadre_name_snapshot ?: '')])->unique('code')->sortBy('code')->values();
-        $codes=$ledgers->pluck('cadre_code')->map(fn($v)=>(int)$v)->unique()->values();
-        $ca=\App\Models\CadreMaster::query()->whereIn('cadre_code',$codes)->pluck('cadre_abbr','cadre_code')->mapWithKeys(fn($a,$c)=>[(int)$c=>(string)$a]);
-        $sa=\App\Models\CadreSubMaster::query()->whereIn('sub_cadre_code',$codes)->pluck('sub_cadre_abbr','sub_cadre_code')->mapWithKeys(fn($a,$c)=>[(int)$c=>(string)$a]);
-        $abbreviationByCode=$ca->union($sa);
+    }
 
-        $movements = $a4Run->movements()->whereNotNull('registration_id')->latest('sequence_no')->limit(100)->get();
-        return view('allocation.a4-show', compact('a4Run','results','ledgers','reg','cadreCode','basis','movement','cadreOptions','abbreviationByCode','movements'));
+    /** Resolve both cadre and sub-cadre abbreviations against effective codes. */
+    private function a4Abbreviations(\Illuminate\Support\Collection $codes): \Illuminate\Support\Collection
+    {
+        $codes = $codes->map(fn ($value) => (int) $value)->unique()->values();
+        $cadres = \App\Models\CadreMaster::query()
+            ->whereIn('cadre_code', $codes)
+            ->pluck('cadre_abbr', 'cadre_code')
+            ->mapWithKeys(fn ($abbr, $code) => [(int) $code => (string) $abbr]);
+        $subCadres = \App\Models\CadreSubMaster::query()
+            ->whereIn('sub_cadre_code', $codes)
+            ->pluck('sub_cadre_abbr', 'sub_cadre_code')
+            ->mapWithKeys(fn ($abbr, $code) => [(int) $code => (string) $abbr]);
+
+        return $cadres->union($subCadres);
     }
 
     public function finalizeSettings(Request $request, AllocationSettingsService $service): RedirectResponse

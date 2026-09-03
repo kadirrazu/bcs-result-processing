@@ -30,6 +30,7 @@ final class ChoiceOptimizationHistoricalChoiceService
         $this->assertHistoricalSourcesReady();
 
         $pendingReview = ChoiceOptimizationHistoricalMatch::query()
+            ->whereHas('source', fn ($q) => $q->where('included_in_optimization', true))
             ->where('match_status', 'review')
             ->where('resolution_status', 'pending')
             ->count();
@@ -436,6 +437,7 @@ final class ChoiceOptimizationHistoricalChoiceService
         $context = hash_init('sha256');
 
         ChoiceOptimizationHistoricalSource::query()
+            ->where('included_in_optimization', true)
             ->orderBy('previous_bcs_number')
             ->get()
             ->each(function (ChoiceOptimizationHistoricalSource $source) use ($context): void {
@@ -450,6 +452,7 @@ final class ChoiceOptimizationHistoricalChoiceService
             });
 
         ChoiceOptimizationHistoricalMatch::query()
+            ->whereHas('source', fn ($q) => $q->where('included_in_optimization', true))
             ->whereIn('match_status', ['matched', 'review', 'rejected'])
             ->orderBy('historical_source_id')
             ->orderBy('registration_id')
@@ -611,6 +614,7 @@ final class ChoiceOptimizationHistoricalChoiceService
     private function assertHistoricalSourcesReady(): void
     {
         $sources = ChoiceOptimizationHistoricalSource::query()
+            ->where('included_in_optimization', true)
             ->orderBy('previous_bcs_number')
             ->get();
 

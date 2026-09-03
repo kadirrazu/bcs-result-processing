@@ -19,6 +19,7 @@ final class ChoiceOptimizationHistoricalSource extends ExaminationModel
             'review_count' => 'integer',
             'no_match_count' => 'integer',
             'last_pulled_at' => 'datetime',
+            'included_in_optimization' => 'boolean',
         ];
     }
 

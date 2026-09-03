@@ -5,7 +5,7 @@
         <div class="row align-items-center">
             <div class="col">
                 <h2 class="page-title">Google Form Historical Recommendations</h2>
-                <div class="text-secondary">Batch #{{ $batch->id }} · {{ $batch->original_name }}</div>
+                <div class="text-secondary">Batch #{{ $batch->id }} · {{ $batch->original_name }} · <span class="badge {{ $isLatestBatch ? 'bg-green-lt' : 'bg-secondary-lt' }}">{{ $isLatestBatch ? 'LATEST / AUTHORITY CANDIDATE' : 'HISTORY ONLY' }}</span></div>
             </div>
             <div class="col-auto"><a href="{{ route('choice-optimization.index') }}" class="btn btn-outline-secondary">Back</a></div>
         </div>
@@ -51,16 +51,18 @@
         </div>
     </div>
 
+    @if(!$isLatestBatch)<div class="alert alert-secondary mb-3">This is an older Google Form batch. It is retained for history/audit only and cannot be validated or merged again.</div>@endif
+
     <div class="card mb-3"><div class="card-body d-flex flex-wrap gap-2 align-items-center">
-        @if(in_array($batch->status,['staged','validation_failed'],true))
+        @if($isLatestBatch && in_array($batch->status,['staged','validation_failed'],true))
             <form method="POST" action="{{ route('choice-optimization.google-form.validate',$batch) }}">@csrf<button class="btn btn-primary">Validate</button></form>
         @endif
-        @if($batch->status==='validated' && $batch->valid_rows>0)
+        @if($isLatestBatch && $batch->status==='validated' && $batch->valid_rows>0)
             <form method="POST" action="{{ route('choice-optimization.google-form.merge-valid',$batch) }}">@csrf<button class="btn btn-success">Merge Valid Rows</button></form>
         @endif
         @if($batch->invalid_rows>0)
             <a class="btn btn-outline-danger" href="{{ route('choice-optimization.google-form.invalid-rows',$batch) }}">Download Invalid Rows</a>
-            <span class="text-secondary small">Correct the downloaded rows and upload them from the Choice Optimization landing page as a new batch.</span>
+            <span class="text-secondary small">Correct the source and upload a complete replacement file as a new batch. The new latest batch replaces all older Google Form batches for optimization.</span>
         @endif
     </div></div>
 

@@ -16,6 +16,15 @@ final class ChoiceOptimizationGoogleFormMergeService
         $batch = ChoiceOptimizationGoogleFormBatch::query()->findOrFail($batchId);
         abort_unless(in_array((string) $batch->status, ['validated', 'merge_queued'], true), 409, 'Only a validated Google Form batch can be merged.');
 
+        // A Google Form upload is a full replacement snapshot. Prevent an operator from
+        // reopening an older batch and accidentally making historical data authoritative again.
+        $latestBatchId = (int) (ChoiceOptimizationGoogleFormBatch::query()->max('id') ?? 0);
+        abort_unless(
+            (int) $batch->id === $latestBatchId,
+            409,
+            'Only the latest Google Form batch can be approved/merged. Older batches are history only.'
+        );
+
         $target = ChoiceOptimizationGoogleFormRow::query()
             ->where('batch_id', $batchId)
             ->where('validation_status', 'valid')
@@ -46,10 +55,10 @@ final class ChoiceOptimizationGoogleFormMergeService
             ->chunkById(100, function ($rows) use ($batch, $actorId, $target, $alreadyMerged, &$mergedThisRun): void {
                 DB::connection('exam')->transaction(function () use ($rows, $batch, $actorId, &$mergedThisRun): void {
                     foreach ($rows as $row) {
-                        // A newer valid Google Form row supersedes the previously accepted
-                        // recommendation for the same current candidate + previous BCS.
-                        // Unrelated accepted recommendations are left untouched so targeted
-                        // correction/re-upload batches remain safe.
+                        // A valid row becomes part of this batch's authoritative snapshot.
+                        // Same candidate + previous BCS keys are updated in-place; after the
+                        // batch completes, recommendations left behind from older batches are
+                        // removed from the effective recommendation table (batch rows remain audit history).
                         $rec = ChoiceOptimizationGoogleFormRecommendation::query()->updateOrCreate(
                             [
                                 'registration_id' => $row->registration_id,
@@ -82,6 +91,12 @@ final class ChoiceOptimizationGoogleFormMergeService
                 ]);
             });
 
+        // Latest-batch authority: recommendations not represented by this batch must not
+        // remain effective. Batch rows themselves are retained, so historical audit is preserved.
+        $supersededOldRecommendations = ChoiceOptimizationGoogleFormRecommendation::query()
+            ->where('source_batch_id', '<>', (int) $batch->id)
+            ->delete();
+
         $totalMerged = ChoiceOptimizationGoogleFormRow::query()
             ->where('batch_id', $batchId)
             ->where('merge_status', 'merged')
@@ -97,11 +112,16 @@ final class ChoiceOptimizationGoogleFormMergeService
             'finished_at' => now(),
         ]);
 
-        if ($mergedThisRun > 0) {
+        if ($mergedThisRun > 0 || $supersededOldRecommendations > 0) {
             $this->staleness->markIfProduced(
                 'Accepted Google Form historical recommendations changed. Historical Choice Optimization must be re-processed.',
                 $actorId,
-                ['google_form_batch_id' => $batchId, 'merged_rows' => $mergedThisRun]
+                [
+                    'google_form_batch_id' => $batchId,
+                    'merged_rows' => $mergedThisRun,
+                    'superseded_old_recommendations' => $supersededOldRecommendations,
+                    'authority' => 'latest_batch_only',
+                ]
             );
         }
 

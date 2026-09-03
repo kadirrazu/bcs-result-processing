@@ -28,6 +28,7 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::post('/historical-choices/finalize', [ChoiceOptimizationController::class, 'finalizeHistoricalChoices'])->name('historical-choices.finalize');
 
         Route::post('/historical/pull', [ChoiceOptimizationController::class, 'pullHistorical'])->name('historical.pull');
+        Route::post('/historical/source-usage', [ChoiceOptimizationController::class, 'updateHistoricalSourceUsage'])->name('historical.source-usage');
         Route::get('/historical/{source}', [ChoiceOptimizationController::class, 'showHistorical'])->name('historical.show');
         Route::get('/historical/{source}/status', [ChoiceOptimizationController::class, 'historicalStatus'])->name('historical.status');
         Route::get('/historical/{source}/matches/{match}', [ChoiceOptimizationController::class, 'showHistoricalMatch'])->name('historical.matches.show');

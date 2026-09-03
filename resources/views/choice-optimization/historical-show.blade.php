@@ -8,6 +8,7 @@
                 <h2 class="page-title">Historical Previous BCS Match</h2>
                 <div class="text-secondary mt-1">
                     BCS {{ $source->previous_bcs_number }} · Workspace snapshot from repository v{{ $source->repository_dataset_version }}
+                    · <span class="badge {{ $source->included_in_optimization ? 'bg-green-lt' : 'bg-secondary-lt' }}">{{ $source->included_in_optimization ? 'INCLUDED IN OPTIMIZATION' : 'EXCLUDED FROM OPTIMIZATION' }}</span>
                 </div>
             </div>
             <div class="col-auto ms-auto d-flex gap-2">

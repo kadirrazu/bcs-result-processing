@@ -240,14 +240,22 @@ final class AllocationA4Service
     }
 
     /**
-     * Solve A4 as a sequence of stable merit-only improvement rounds.
+     * Solve A4 through FULL residual merit competition, not free-seat-only filling.
      *
-     * Each inner round fills only the merit capacity currently FREE while every
-     * existing allocation remains reserved as fallback. Accepted moves are then
-     * committed simultaneously, old seats are released, released quota seats are
-     * permanently converted, and another round is solved. This avoids a subtle
-     * wrong-allocation bug where an early tentative move could destroy a fallback
-     * before a later higher-ranked claimant appears in the same merit competition.
+     * Why this matters:
+     * A free-seat-only solver can add candidates into an immediately vacant NM seat,
+     * but it cannot discover a merit-valid reshuffle where a TEMPORARY MQ incumbent
+     * moves to a higher choice and another candidate takes the released merit seat.
+     * A4 must therefore re-solve the whole residual merit market on every round.
+     *
+     * Locked boundary:
+     * - A3 FINAL candidates are removed from the residual market and remain untouched.
+     * - TEMPORARY candidates may receive their CURRENT choice or a HIGHER choice only.
+     * - A current quota holder's current choice is a merit-conversion opportunity; if
+     *   merit cannot hold that candidate, the original quota allocation remains fallback.
+     * - NON-ALLOCATED candidates may propose through their full frozen choice list.
+     * - No CFF/EM/PHC entitlement or priority participates in residual selection.
+     * - Releasing a quota allocation permanently expands generic merit/NM capacity.
      */
     private function solve(array $source, ?callable $progress, bool $captureEvents): array
     {
@@ -255,11 +263,12 @@ final class AllocationA4Service
         $original = [];
         $lockedFinal = [];
         foreach ($source['a3_results'] as $candidateId => $row) {
+            $candidateId = (int) $candidateId;
             $a = $this->assignmentFromA3($row);
-            $assignments[(int) $candidateId] = $a;
-            $original[(int) $candidateId] = $a;
+            $assignments[$candidateId] = $a;
+            $original[$candidateId] = $a;
             if ((string) $row->decision_status === 'FINAL') {
-                $lockedFinal[(int) $candidateId] = true;
+                $lockedFinal[$candidateId] = true;
             }
         }
 
@@ -270,24 +279,35 @@ final class AllocationA4Service
         foreach ($source['a3_ledgers'] as $entryId => $ledger) {
             $entryId = (int) $entryId;
             $seatMeta[$entryId] = [
-                'circular_entry_id' => $entryId, 'cadre_code' => (int) $ledger->cadre_code,
-                'total' => (int) $ledger->total_capacity, 'MQ' => (int) $ledger->mq_capacity,
-                'CFF' => (int) $ledger->cff_capacity, 'EM' => (int) $ledger->em_capacity, 'PHC' => (int) $ledger->phc_capacity,
+                'circular_entry_id' => $entryId,
+                'cadre_code' => (int) $ledger->cadre_code,
+                'total' => (int) $ledger->total_capacity,
+                'MQ' => (int) $ledger->mq_capacity,
+                'CFF' => (int) $ledger->cff_capacity,
+                'EM' => (int) $ledger->em_capacity,
+                'PHC' => (int) $ledger->phc_capacity,
             ];
-            // A3 fixed point is the conversion boundary: all remaining quota is
-            // now generic merit capacity. It will never be offered as quota again.
+
+            // A3 fixed point is the conversion boundary. Only VACANT quota seats
+            // become generic merit/NM capacity initially. Occupied quota allocations
+            // remain valid fallbacks until their holders move or normalize to merit.
             $converted[$entryId] = [
                 'CFF' => (int) $ledger->cff_remaining,
                 'EM' => (int) $ledger->em_remaining,
                 'PHC' => (int) $ledger->phc_remaining,
             ];
+
             if ($captureEvents) {
-                foreach (['CFF','EM','PHC'] as $bucket) {
+                foreach (['CFF', 'EM', 'PHC'] as $bucket) {
                     $count = $converted[$entryId][$bucket];
                     if ($count > 0) {
-                        $events[] = $this->event(++$sequence, 0, 'INITIAL_QUOTA_VACANCY_CONVERTED', null, null, null, null, null,
-                            $entryId, (int) $ledger->cadre_code, 'MQ', null, null, 'NM', 'A3_QUOTA_VACANCY_TO_MERIT', $bucket,
-                            ['converted_seat_count' => $count]);
+                        $events[] = $this->event(
+                            ++$sequence, 0, 'INITIAL_QUOTA_VACANCY_CONVERTED',
+                            null, null, null, null, null,
+                            $entryId, (int) $ledger->cadre_code, 'MQ', null, null,
+                            'NM', 'A3_QUOTA_VACANCY_TO_MERIT', $bucket,
+                            ['converted_seat_count' => $count]
+                        );
                     }
                 }
             }
@@ -301,56 +321,134 @@ final class AllocationA4Service
         while (true) {
             $iteration++;
             if ($iteration > $maxIterations) {
-                throw new RuntimeException('ALLOCATION_A4_CONVERGENCE_GUARD_EXCEEDED: Monotonic improvement rounds exceeded finite bound.');
+                throw new RuntimeException('ALLOCATION_A4_CONVERGENCE_GUARD_EXCEEDED: Residual merit rounds exceeded finite monotonic bound.');
             }
 
-            $free = $this->freeMeritCapacity($seatMeta, $converted, $assignments);
-            $opportunities = $this->buildOpportunities($source, $assignments, $lockedFinal);
-            $accepted = $this->stableFillFreeCapacity($opportunities, $free);
+            // The residual capacity contains ALL generic merit seats available to
+            // movable candidates, not only seats currently vacant. This is the key
+            // correction that allows merit-valid displacement / chain shifting.
+            $capacity = $this->residualMeritCapacity($seatMeta, $converted, $assignments, $lockedFinal);
+            $preferences = $this->buildResidualPreferences($source, $assignments, $lockedFinal);
+            $meritAssignments = $this->stableResidualCompetition($preferences, $capacity);
 
-            if ($accepted === []) {
-                break;
-            }
+            $nextAssignments = $assignments;
+            $roundChanges = [];
 
-            ksort($accepted, SORT_NUMERIC);
-            foreach ($accepted as $candidateId => $target) {
+            foreach ($source['candidates'] as $candidateId => $candidate) {
+                $candidateId = (int) $candidateId;
+                if (isset($lockedFinal[$candidateId])) {
+                    continue;
+                }
+
                 $old = $assignments[$candidateId] ?? null;
-                $sameCadreConversion = $old !== null
-                    && (int) $old['circular_entry_id'] === (int) $target['circular_entry_id']
-                    && in_array((string) $old['allocation_basis'], ['CFF','EM','PHC'], true);
+                $held = $meritAssignments[$candidateId] ?? null;
+
+                // A TEMPORARY MQ holder must never lose the current fallback. If a
+                // full residual solve cannot place that holder at current-or-better,
+                // the proposed state is not legally monotonic and must not commit.
+                if ($old !== null && (string) $old['allocation_basis'] === 'MQ' && $held === null) {
+                    throw new RuntimeException("INVARIANT_A4_TEMPORARY_MQ_FALLBACK_LOST: Candidate {$candidateId} would become unallocated in residual competition.");
+                }
+
+                // A quota holder that cannot secure a merit seat simply retains the
+                // original quota allocation. Quota is a fallback only; it never gives
+                // priority inside the A4 merit competition itself.
+                if ($held === null) {
+                    if ($old === null) {
+                        unset($nextAssignments[$candidateId]);
+                    }
+                    continue;
+                }
+
+                $sameCadre = $old !== null
+                    && (int) $old['circular_entry_id'] === (int) $held['circular_entry_id'];
+                $sameCadreQuotaConversion = $sameCadre
+                    && in_array((string) $old['allocation_basis'], ['CFF', 'EM', 'PHC'], true);
 
                 if ($old === null) {
                     $movement = 'NM';
                     $reason = 'NON_ALLOCATED_TO_MERIT_NM';
-                } elseif ($sameCadreConversion) {
+                } elseif ($sameCadreQuotaConversion) {
                     $movement = 'NM';
                     $reason = 'QUOTA_TO_MERIT_CONVERSION';
-                    $quotaToMeritSteps++;
+                } elseif ($sameCadre && (string) $old['allocation_basis'] === 'MQ') {
+                    // Current MQ fallback survived the fresh residual competition;
+                    // this is not a movement and produces no duplicate audit event.
+                    $nextAssignments[$candidateId] = $old;
+                    continue;
                 } else {
-                    if ((int) $target['choice_position'] >= (int) $old['choice_position']) {
+                    if ((int) $held['choice_position'] >= (int) $old['choice_position']) {
                         throw new RuntimeException("INVARIANT_A4_MONOTONICITY_FAILED_BEFORE_COMMIT: Candidate {$candidateId} target is not a higher choice.");
                     }
                     $movement = 'SHIFTED';
                     $reason = 'HIGHER_CHOICE_MERIT_UPGRADE';
                 }
 
-                $new = $target + [
+                $new = $held + [
                     'allocation_basis' => 'MQ',
                     'movement_type' => $movement,
                     'decision_reason' => $reason,
                 ];
 
-                if ($captureEvents) {
-                    $events[] = $this->event(++$sequence, $iteration, $sameCadreConversion ? 'QUOTA_TO_MERIT_CONVERSION' : ($old ? 'SHIFTED' : 'NM_ALLOCATED'),
-                        $candidateId,
-                        $old['circular_entry_id'] ?? null, $old['cadre_code'] ?? null, $old['allocation_basis'] ?? null, $old['choice_position'] ?? null,
-                        $new['circular_entry_id'], $new['cadre_code'], 'MQ', $new['choice_position'], $new['merit_position'], $movement, $reason, null,
-                        ['merit_source' => $new['merit_source'], 'fallback_preserved_until_commit' => true]);
+                // Skip an identical state defensively. Every recorded round change
+                // must be a real monotonic movement or first-time NM allocation.
+                if ($old !== null
+                    && (int) $old['circular_entry_id'] === (int) $new['circular_entry_id']
+                    && (string) $old['allocation_basis'] === (string) $new['allocation_basis']) {
+                    $nextAssignments[$candidateId] = $old;
+                    continue;
                 }
 
-                // Releasing an occupied quota seat permanently expands merit/NM
-                // capacity by exactly one seat. The source bucket is audit-only.
-                if ($old && in_array((string) $old['allocation_basis'], ['CFF','EM','PHC'], true)) {
+                $roundChanges[$candidateId] = ['old' => $old, 'new' => $new, 'movement' => $movement, 'reason' => $reason];
+                $nextAssignments[$candidateId] = $new;
+            }
+
+            if ($roundChanges === []) {
+                break;
+            }
+
+            ksort($roundChanges, SORT_NUMERIC);
+            foreach ($roundChanges as $candidateId => $change) {
+                $old = $change['old'];
+                $new = $change['new'];
+                $movement = $change['movement'];
+                $reason = $change['reason'];
+                $sameCadreConversion = $reason === 'QUOTA_TO_MERIT_CONVERSION';
+
+                if ($sameCadreConversion) {
+                    $quotaToMeritSteps++;
+                }
+
+                if ($captureEvents) {
+                    $events[] = $this->event(
+                        ++$sequence,
+                        $iteration,
+                        $sameCadreConversion ? 'QUOTA_TO_MERIT_CONVERSION' : ($old ? 'SHIFTED' : 'NM_ALLOCATED'),
+                        (int) $candidateId,
+                        $old['circular_entry_id'] ?? null,
+                        $old['cadre_code'] ?? null,
+                        $old['allocation_basis'] ?? null,
+                        $old['choice_position'] ?? null,
+                        (int) $new['circular_entry_id'],
+                        (int) $new['cadre_code'],
+                        'MQ',
+                        (int) $new['choice_position'],
+                        (int) $new['merit_position'],
+                        $movement,
+                        $reason,
+                        null,
+                        [
+                            'merit_source' => $new['merit_source'],
+                            'solver' => 'FULL_RESIDUAL_DEFERRED_ACCEPTANCE',
+                            'current_allocation_was_floor' => $old !== null,
+                        ]
+                    );
+                }
+
+                // Once an occupied quota allocation is left or normalized to merit,
+                // that exact seat permanently loses quota identity and expands the
+                // next round's generic merit/NM capacity by one.
+                if ($old && in_array((string) $old['allocation_basis'], ['CFF', 'EM', 'PHC'], true)) {
                     $oldEntry = (int) $old['circular_entry_id'];
                     $bucket = (string) $old['allocation_basis'];
                     $converted[$oldEntry][$bucket]++;
@@ -358,22 +456,32 @@ final class AllocationA4Service
                         throw new RuntimeException("INVARIANT_QUOTA_CONVERTED_MORE_THAN_ONCE_FAILED: {$bucket} conversion exceeded capacity for entry {$oldEntry}.");
                     }
                     if ($captureEvents) {
-                        $events[] = $this->event(++$sequence, $iteration, 'RELEASED_QUOTA_SEAT_CONVERTED', $candidateId,
+                        $events[] = $this->event(
+                            ++$sequence, $iteration, 'RELEASED_QUOTA_SEAT_CONVERTED',
+                            (int) $candidateId,
                             $oldEntry, (int) $old['cadre_code'], $bucket, (int) $old['choice_position'],
-                            null, null, null, null, null, 'NM', 'RELEASED_QUOTA_TO_MERIT_CAPACITY', $bucket,
-                            ['released_by_movement' => $movement, 'released_by_reason' => $reason]);
+                            null, null, null, null, null,
+                            'NM', 'RELEASED_QUOTA_TO_MERIT_CAPACITY', $bucket,
+                            ['released_by_movement' => $movement, 'released_by_reason' => $reason]
+                        );
                     }
                 }
 
-                $assignments[$candidateId] = $new;
                 $movementSteps++;
             }
 
+            $assignments = $nextAssignments;
+
             if ($progress) {
                 $pct = min(78, 12 + ($iteration * 5));
-                $this->progress($progress, 'GLOBAL_FIXED_POINT', $pct,
-                    "A4 iteration {$iteration}: committed ".count($accepted).' monotonic merit improvements; rebuilding queues.',
-                    $movementSteps, $source['candidates']->count());
+                $this->progress(
+                    $progress,
+                    'GLOBAL_FIXED_POINT',
+                    $pct,
+                    "A4 iteration {$iteration}: committed ".count($roundChanges).' residual-merit movements; rebuilding full queues.',
+                    $movementSteps,
+                    $source['candidates']->count()
+                );
             }
         }
 
@@ -382,9 +490,16 @@ final class AllocationA4Service
         $counts = $this->countResults($source, $results, $events);
 
         return [
-            'results' => $results, 'seat_ledgers' => $ledgers, 'events' => $events,
-            'counts' => $counts, 'iteration_count' => $iteration,
-            'converted' => $converted, 'assignments' => $assignments, 'original' => $original,
+            'results' => $results,
+            'seat_ledgers' => $ledgers,
+            'events' => $events,
+            'counts' => $counts,
+            'iteration_count' => $iteration,
+            'converted' => $converted,
+            'assignments' => $assignments,
+            'original' => $original,
+            'seat_meta' => $seatMeta,
+            'locked_final' => $lockedFinal,
             'output_hash' => $this->hashRows($results, [
                 'registration_id','cadre_code','choice_position','merit_position','merit_source','allocation_basis','movement_type','decision_status',
                 'original_cadre_code','original_choice_position','original_allocation_basis',
@@ -419,29 +534,44 @@ final class AllocationA4Service
         ];
     }
 
-    /** Generic merit capacity minus all current MQ occupants. Quota occupants remain reserved separately. */
-    private function freeMeritCapacity(array $seatMeta, array $converted, array $assignments): array
+    /**
+     * Capacity available to the MOVABLE A4 merit market.
+     *
+     * FINAL A3 candidates are locked outside this market and consume their MQ seat.
+     * TEMPORARY MQ holders are intentionally NOT subtracted: they participate in
+     * the fresh residual competition with their current seat as last fallback.
+     */
+    private function residualMeritCapacity(array $seatMeta, array $converted, array $assignments, array $lockedFinal): array
     {
-        $used = [];
-        foreach ($assignments as $a) {
-            if ((string) $a['allocation_basis'] === 'MQ') {
-                $e = (int) $a['circular_entry_id'];
-                $used[$e] = (int) ($used[$e] ?? 0) + 1;
+        $lockedMq = [];
+        foreach ($lockedFinal as $candidateId => $_true) {
+            $a = $assignments[(int) $candidateId] ?? null;
+            if ($a && (string) $a['allocation_basis'] === 'MQ') {
+                $entryId = (int) $a['circular_entry_id'];
+                $lockedMq[$entryId] = (int) ($lockedMq[$entryId] ?? 0) + 1;
             }
         }
-        $free = [];
+
+        $capacity = [];
         foreach ($seatMeta as $entryId => $seat) {
-            $meritCapacity = (int) $seat['MQ'] + array_sum($converted[$entryId] ?? []);
-            $free[$entryId] = $meritCapacity - (int) ($used[$entryId] ?? 0);
-            if ($free[$entryId] < 0) {
-                throw new RuntimeException("INVARIANT_NEGATIVE_A4_MERIT_CAPACITY_FAILED: Entry {$entryId} has more MQ occupants than merit capacity.");
+            $entryId = (int) $entryId;
+            $genericMerit = (int) $seat['MQ'] + array_sum($converted[$entryId] ?? []);
+            $capacity[$entryId] = $genericMerit - (int) ($lockedMq[$entryId] ?? 0);
+            if ($capacity[$entryId] < 0) {
+                throw new RuntimeException("INVARIANT_NEGATIVE_A4_RESIDUAL_CAPACITY_FAILED: Entry {$entryId} has locked FINAL MQ occupancy above merit capacity.");
             }
         }
-        return $free;
+        return $capacity;
     }
 
-    /** Build only legally monotonic A4 opportunities; no quota flags are present or consulted. */
-    private function buildOpportunities(array $source, array $assignments, array $lockedFinal): array
+    /**
+     * Build fresh A4 preferences from frozen choices.
+     * - Unallocated: all choices.
+     * - Temporary: higher choices + exact current choice as fallback/conversion.
+     * - Final: excluded.
+     * No lower choice is ever present, so downward movement is impossible by construction.
+     */
+    private function buildResidualPreferences(array $source, array $assignments, array $lockedFinal): array
     {
         $out = [];
         foreach ($source['candidates'] as $candidateId => $candidate) {
@@ -449,21 +579,23 @@ final class AllocationA4Service
             if (isset($lockedFinal[$candidateId])) {
                 continue;
             }
+
             $rows = $source['choices'][$candidateId] ?? [];
             $current = $assignments[$candidateId] ?? null;
             if ($current === null) {
                 $allowed = $rows;
             } else {
                 $allowed = array_values(array_filter($rows, function (array $q) use ($current): bool {
-                    if ((int) $q['choice_position'] < (int) $current['choice_position']) {
-                        return true;
-                    }
-                    return in_array((string) $current['allocation_basis'], ['CFF','EM','PHC'], true)
-                        && (int) $q['circular_entry_id'] === (int) $current['circular_entry_id']
-                        && (int) $q['choice_position'] === (int) $current['choice_position'];
+                    return (int) $q['choice_position'] < (int) $current['choice_position']
+                        || ((int) $q['circular_entry_id'] === (int) $current['circular_entry_id']
+                            && (int) $q['choice_position'] === (int) $current['choice_position']);
                 }));
             }
-            usort($allowed, fn (array $a, array $b): int => [$a['choice_position'], $a['circular_entry_id']] <=> [$b['choice_position'], $b['circular_entry_id']]);
+
+            usort($allowed, fn (array $a, array $b): int =>
+                [(int) $a['choice_position'], (int) $a['circular_entry_id']]
+                <=> [(int) $b['choice_position'], (int) $b['circular_entry_id']]
+            );
             if ($allowed !== []) {
                 $out[$candidateId] = $allowed;
             }
@@ -471,46 +603,71 @@ final class AllocationA4Service
         return $out;
     }
 
-    /** Candidate-proposing deferred acceptance for the CURRENT free merit slots only. */
-    private function stableFillFreeCapacity(array $opportunities, array $free): array
+    /**
+     * Candidate-proposing deferred acceptance over the FULL residual capacity.
+     *
+     * Target-cadre merit decides who is held. Candidate choice order decides proposal
+     * order. Registration id is only the deterministic safety tie-break after the
+     * authoritative frozen merit position (which should already be unique).
+     */
+    private function stableResidualCompetition(array $preferences, array $capacity): array
     {
-        $next = array_fill_keys(array_keys($opportunities), 0);
+        $next = array_fill_keys(array_keys($preferences), 0);
         $heldByCadre = [];
         $heldByCandidate = [];
-        $pending = array_keys($opportunities);
+        $pending = array_keys($preferences);
 
         while ($pending !== []) {
             sort($pending, SORT_NUMERIC);
             $proposals = [];
+
             foreach ($pending as $candidateId) {
-                if (isset($heldByCandidate[$candidateId])) continue;
+                if (isset($heldByCandidate[$candidateId])) {
+                    continue;
+                }
                 $idx = (int) ($next[$candidateId] ?? 0);
-                if (! isset($opportunities[$candidateId][$idx])) continue;
-                $p = $opportunities[$candidateId][$idx];
-                $proposals[(int) $p['circular_entry_id']][$candidateId] = $p;
+                if (! isset($preferences[$candidateId][$idx])) {
+                    continue;
+                }
+                $proposal = $preferences[$candidateId][$idx];
+                $proposals[(int) $proposal['circular_entry_id']][(int) $candidateId] = $proposal;
             }
-            if ($proposals === []) break;
+
+            if ($proposals === []) {
+                break;
+            }
 
             $rejected = [];
             ksort($proposals, SORT_NUMERIC);
             foreach ($proposals as $entryId => $newRows) {
                 $contenders = $heldByCadre[$entryId] ?? [];
-                foreach ($newRows as $candidateId => $p) $contenders[$candidateId] = $p;
+                foreach ($newRows as $candidateId => $proposal) {
+                    $contenders[(int) $candidateId] = $proposal;
+                }
+
                 uasort($contenders, fn (array $a, array $b): int =>
                     [(int) $a['merit_position'], (int) $a['registration_id']]
-                    <=> [(int) $b['merit_position'], (int) $b['registration_id']]);
+                    <=> [(int) $b['merit_position'], (int) $b['registration_id']]
+                );
 
-                $keep = array_slice($contenders, 0, max(0, (int) ($free[$entryId] ?? 0)), true);
-                foreach ($contenders as $candidateId => $p) {
-                    if (! isset($keep[$candidateId])) {
-                        unset($heldByCandidate[$candidateId]);
-                        $next[$candidateId] = ((int) $next[$candidateId]) + 1;
-                        if (isset($opportunities[$candidateId][$next[$candidateId]])) $rejected[$candidateId] = true;
+                $keep = array_slice($contenders, 0, max(0, (int) ($capacity[$entryId] ?? 0)), true);
+                foreach ($contenders as $candidateId => $proposal) {
+                    if (isset($keep[$candidateId])) {
+                        continue;
+                    }
+                    unset($heldByCandidate[$candidateId]);
+                    $next[$candidateId] = ((int) $next[$candidateId]) + 1;
+                    if (isset($preferences[$candidateId][$next[$candidateId]])) {
+                        $rejected[(int) $candidateId] = true;
                     }
                 }
+
                 $heldByCadre[$entryId] = $keep;
-                foreach ($keep as $candidateId => $p) $heldByCandidate[$candidateId] = $p;
+                foreach ($keep as $candidateId => $proposal) {
+                    $heldByCandidate[(int) $candidateId] = $proposal;
+                }
             }
+
             $pending = array_keys($rejected);
         }
 
@@ -617,24 +774,53 @@ final class AllocationA4Service
             if((int)$l['mq_occupied']>(int)$l['merit_capacity']) throw new RuntimeException('INVARIANT_A4_MERIT_CAPACITY_FAILED.');
         }
 
-        // Global fixed-point / higher-choice test: no legal monotonic claimant may
-        // remain while a generic merit seat is free in a higher allowed choice.
-        $free=$this->freeMeritCapacity(
-            collect($source['a3_ledgers'])->mapWithKeys(fn($l,$e)=>[(int)$e=>['MQ'=>(int)$l->mq_capacity,'CFF'=>(int)$l->cff_capacity,'EM'=>(int)$l->em_capacity,'PHC'=>(int)$l->phc_capacity,'total'=>(int)$l->total_capacity,'cadre_code'=>(int)$l->cadre_code]])->all(),
-            $solution['converted'], $solution['assignments']);
-        $locked=[]; foreach($source['a3_results'] as $cid=>$r) if((string)$r->decision_status==='FINAL')$locked[(int)$cid]=true;
-        $remaining=$this->buildOpportunities($source,$solution['assignments'],$locked);
-        foreach($remaining as $cid=>$opps){ foreach($opps as $q){ if((int)($free[(int)$q['circular_entry_id']]??0)>0) throw new RuntimeException("INVARIANT_HIGHER_CHOICE_ATTAINABLE_FAILED: Candidate {$cid} still has free merit capacity at choice {$q['choice_position']}."); } }
+        // Re-solve the COMPLETE residual market from the committed A4 state.
+        // A global fixed point means this verification solve cannot produce any
+        // first allocation, higher-choice movement or same-cadre quota->merit move.
+        $capacity = $this->residualMeritCapacity(
+            $solution['seat_meta'],
+            $solution['converted'],
+            $solution['assignments'],
+            $solution['locked_final']
+        );
+        $preferences = $this->buildResidualPreferences(
+            $source,
+            $solution['assignments'],
+            $solution['locked_final']
+        );
+        $held = $this->stableResidualCompetition($preferences, $capacity);
 
-        // Merit-bypass protection: if a candidate still wants an allowed target,
-        // they cannot outrank an MQ occupant there. Retained quota occupants are
-        // intentionally excluded because their A3 quota seat remains valid until release.
-        $mqByEntry=[]; foreach($solution['results'] as $r) if($r['allocation_basis']==='MQ') $mqByEntry[(int)$r['circular_entry_id']][]=$r;
-        foreach($remaining as $cid=>$opps){ foreach($opps as $q){
-            foreach($mqByEntry[(int)$q['circular_entry_id']]??[] as $occupant){
-                if((int)$q['merit_position'] < (int)$occupant['merit_position']) throw new RuntimeException("INVARIANT_A4_MERIT_BYPASS_FAILED: Candidate {$cid} outranks MQ occupant {$occupant['registration_id']} for cadre {$q['cadre_code']}.");
+        foreach ($source['candidates'] as $candidateId => $candidate) {
+            $candidateId = (int) $candidateId;
+            if (isset($solution['locked_final'][$candidateId])) {
+                continue;
             }
-        }}
+            $current = $solution['assignments'][$candidateId] ?? null;
+            $target = $held[$candidateId] ?? null;
+
+            if ($current === null && $target !== null) {
+                throw new RuntimeException("INVARIANT_HIGHER_CHOICE_ATTAINABLE_FAILED: Unallocated candidate {$candidateId} still has an attainable merit seat.");
+            }
+            if ($current !== null && (string) $current['allocation_basis'] === 'MQ' && $target === null) {
+                throw new RuntimeException("INVARIANT_A4_TEMPORARY_MQ_FALLBACK_LOST: Candidate {$candidateId} cannot retain current MQ floor during final verification.");
+            }
+            if ($current !== null && $target !== null) {
+                $same = (int) $current['circular_entry_id'] === (int) $target['circular_entry_id'];
+                if (! $same && (int) $target['choice_position'] < (int) $current['choice_position']) {
+                    throw new RuntimeException("INVARIANT_HIGHER_CHOICE_ATTAINABLE_FAILED: Candidate {$candidateId} still has higher attainable choice {$target['choice_position']}.");
+                }
+                if ($same && in_array((string) $current['allocation_basis'], ['CFF','EM','PHC'], true)) {
+                    throw new RuntimeException("INVARIANT_QUOTA_TO_MERIT_ATTAINABLE_FAILED: Candidate {$candidateId} still qualifies for same-cadre merit conversion.");
+                }
+            }
+        }
+
+        // Stable-residual merit protection: the final verification above is stronger
+        // than checking only currently free seats. Because all movable MQ incumbents
+        // and all legal claimants are re-ranked together for every cadre, an accepted
+        // fixed point cannot leave a higher-ranked legal claimant outside a residual
+        // merit seat while a lower-ranked movable MQ claimant occupies it. This is the
+        // effective INVARIANT_A4_MERIT_BYPASS_FAILED protection in the full-market solver.
     }
 
     private function event(int $seq,int $iteration,string $event,?int $registrationId,?int $fromEntry,?int $fromCadre,?string $fromBasis,?int $fromChoice,?int $toEntry,?int $toCadre,?string $toBasis,?int $toChoice,?int $merit,?string $movement,?string $reason,?string $convertedFrom,array $context=[]): array

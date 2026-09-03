@@ -42,7 +42,7 @@
                         <div class="row g-3">
                             <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Current state</div><div class="fw-semibold">{{ strtoupper(str_replace('_', ' ', $state->status)) }}</div></div></div>
                             <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Allocation choice source</div><div class="fw-semibold">{{ $setting->optimization_enabled ? 'Finalized Optimized Choice' : 'Finalized Validated Choice' }}</div></div></div>
-                            <div class="col-12"><div class="alert alert-info mb-0">Viva OMR establishes the effective choice. Confirmed Previous BCS Repository recommendations and accepted Google Form recommendations are consolidated first, then Choice Optimization runs once.</div></div>
+                            <div class="col-12"><div class="alert alert-info mb-0">Viva OMR establishes the effective choice. INCLUDED Previous BCS Repository recommendations and only the latest approved Google Form batch are consolidated first, then Choice Optimization runs once.</div></div>
                         </div>
                     </div>
                 </div>
@@ -79,11 +79,14 @@
                         @endif
                     </div>
                     <div class="col-lg-3">
-                        <div class="text-secondary small">Accepted Recommendations</div><div class="h3 mb-1">{{ number_format($googleFormAcceptedCount) }}</div>
+                        <div class="text-secondary small">Latest Batch Accepted</div><div class="h3 mb-1">{{ number_format($googleFormAcceptedCount) }}</div>
+                        @if($latestGoogleFormBatch)
+                            <div class="small text-secondary mb-2">Rows {{ number_format($latestGoogleFormBatch->total_rows) }} · Valid {{ number_format($latestGoogleFormBatch->valid_rows) }}</div>
+                        @endif
                         @if($latestGoogleFormBatch)<a class="btn btn-sm btn-outline-primary" href="{{ route('choice-optimization.google-form.show',$latestGoogleFormBatch) }}">Latest Batch #{{ $latestGoogleFormBatch->id }}</a>@endif
                     </div>
                 </div>
-                @if($setting->google_form_enabled === true)<div class="alert alert-info mt-3 mb-0">Invalid/unmatched reg rows do not block valid-row merge. Download invalid rows, correct them, and upload the corrected subset later as a new batch.</div>@endif
+                @if($setting->google_form_enabled === true)<div class="alert alert-info mt-3 mb-0">Only the latest approved Google Form batch participates in optimization; older batches are history only. If corrections are required, upload a complete replacement batch so the new latest batch remains the full authoritative snapshot.</div>@endif
             </div>
         </div>
 
@@ -126,17 +129,22 @@
         </div>
 
         <div class="card mt-3">
+            <form id="historical-usage-form" method="POST" action="{{ route('choice-optimization.historical.source-usage') }}">@csrf</form>
             <form method="POST" action="{{ route('choice-optimization.historical.pull') }}">
                 @csrf
                 <div class="card-header">
                     <div>
                         <h3 class="card-title">Historical Previous BCS Sources</h3>
                         <div class="card-subtitle">
-                            Select one or more EFFECTIVE Previous BCS sources, then Pull/Re-pull them together.
-                            Each selected BCS runs as an independent queue job.
+                            Pull/Re-pull repository snapshots independently. The same row selection drives Pull, Include/Exclude, and Use Only Selected. Excluded source data remains preserved for audit/history.
+                            <div class="small mt-1"><strong>Use Only Selected</strong> makes the selected pulled sources the complete optimization source set and excludes every other pulled Historical source.</div>
                         </div>
                     </div>
-                    <div class="ms-auto d-flex gap-2 align-items-center">
+                    <div class="ms-auto d-flex flex-wrap gap-2 align-items-center">
+                        <button class="btn btn-outline-secondary" id="historical-deselect-all" type="button" disabled>Deselect All</button>
+                        <button class="btn btn-outline-success" id="historical-include-selected" type="submit" name="action" value="include" form="historical-usage-form" disabled>Include Selected</button>
+                        <button class="btn btn-outline-secondary" id="historical-exclude-selected" type="submit" name="action" value="exclude" form="historical-usage-form" disabled>Exclude Selected</button>
+                        <button class="btn btn-outline-primary" id="historical-use-only-selected" type="submit" name="action" value="only" form="historical-usage-form" disabled>Use Only Selected</button>
                         <button class="btn btn-primary" id="historical-pull-selected" type="submit" disabled>
                             Pull / Re-pull Selected
                         </button>
@@ -181,11 +189,23 @@
                                         type="checkbox"
                                         name="bcs_numbers[]"
                                         value="{{ $repository->bcs_number }}"
+                                        data-source-id="{{ $source?->id }}"
                                         @disabled($running)
                                         aria-label="Select BCS {{ $repository->bcs_number }}"
                                     >
                                 </td>
-                                <td><strong>{{ $repository->bcs_number }}</strong></td>
+                                <td>
+                                    <strong>{{ $repository->bcs_number }}</strong>
+                                    @if($source)
+                                        <div class="mt-1">
+                                            @if($source->included_in_optimization)
+                                                <span class="badge bg-green-lt">INCLUDED</span>
+                                            @else
+                                                <span class="badge bg-secondary-lt">EXCLUDED</span>
+                                            @endif
+                                        </div>
+                                    @endif
+                                </td>
                                 <td>
                                     <span class="badge bg-green-lt">v{{ $effective->version }} EFFECTIVE</span>
                                     <div class="small text-secondary mt-1"><code>{{ substr((string) $effective->dataset_hash, 0, 12) }}…</code></div>
@@ -239,7 +259,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-secondary py-5">
+                                <td colspan="8" class="text-center text-secondary py-5">
                                     No EFFECTIVE Previous BCS repository dataset is available in the central repository.
                                 </td>
                             </tr>
@@ -255,7 +275,7 @@
                 <div>
                     <h3 class="card-title">Consolidated Historical Choice Optimization</h3>
                     <div class="card-subtitle">
-                        Confirmed Previous BCS recommendations + accepted Google Form recommendations are consolidated, then the current effective choice is trimmed once into the Allocation-ready sequence.
+                        INCLUDED Previous BCS recommendations + the latest approved Google Form batch are consolidated, then the current effective choice is trimmed once into the Allocation-ready sequence.
                     </div>
                 </div>
                 <div class="ms-auto d-flex gap-2">
@@ -325,22 +345,57 @@
         <script>
         (() => {
             const all = document.getElementById('historical-select-all');
+            const deselectAll = document.getElementById('historical-deselect-all');
             const submit = document.getElementById('historical-pull-selected');
             const boxes = [...document.querySelectorAll('.historical-source-checkbox:not(:disabled)')];
+            const includeSelected = document.getElementById('historical-include-selected');
+            const excludeSelected = document.getElementById('historical-exclude-selected');
+            const useOnlySelected = document.getElementById('historical-use-only-selected');
+            const usageForm = document.getElementById('historical-usage-form');
             const sourceRows = [...document.querySelectorAll('.historical-source-row[data-status-url]')];
             const fmt = new Intl.NumberFormat();
 
+            const selectedBoxes = () => boxes.filter(box => box.checked);
+            const selectedPulledBoxes = () => selectedBoxes().filter(box => box.dataset.sourceId);
+
             const sync = () => {
-                const selected = boxes.filter(box => box.checked).length;
+                const selected = selectedBoxes().length;
+                const usageSelected = selectedPulledBoxes().length;
+
                 if(submit) submit.disabled = selected === 0;
+                if(includeSelected) includeSelected.disabled = usageSelected === 0;
+                if(excludeSelected) excludeSelected.disabled = usageSelected === 0;
+                if(useOnlySelected) useOnlySelected.disabled = usageSelected === 0;
+                if(deselectAll) deselectAll.disabled = selected === 0;
+
                 if(all) {
                     all.checked = boxes.length > 0 && selected === boxes.length;
                     all.indeterminate = selected > 0 && selected < boxes.length;
                 }
             };
 
+            // Include/Exclude operate on pulled Historical sources only. We materialize the
+            // selected source IDs into the separate usage form immediately before submit so
+            // the same visible row checkbox can safely drive both Pull and Usage workflows.
+            usageForm?.addEventListener('submit', () => {
+                usageForm.querySelectorAll('input[data-generated-source-id="1"]').forEach(el => el.remove());
+                selectedPulledBoxes().forEach(box => {
+                    const hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'source_ids[]';
+                    hidden.value = box.dataset.sourceId;
+                    hidden.dataset.generatedSourceId = '1';
+                    usageForm.appendChild(hidden);
+                });
+            });
+
             all?.addEventListener('change', () => {
                 boxes.forEach(box => box.checked = all.checked);
+                sync();
+            });
+
+            deselectAll?.addEventListener('click', () => {
+                boxes.forEach(box => box.checked = false);
                 sync();
             });
 
