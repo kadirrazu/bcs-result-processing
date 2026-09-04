@@ -20,7 +20,7 @@ final class DocxPlaceholderTemplateService
      * @param array<string, string> $replacements Keys without [[ ]].
      * @return array{replaced: array<string,int>, total_replacements:int, unknown_placeholders: array<int,string>}
      */
-    public function fill(string $templatePath, string $outputPath, array $replacements): array
+    public function fill(string $templatePath, string $outputPath, array $replacements, array $literalReplacements = []): array
     {
         if (! class_exists(ZipArchive::class)) {
             throw new RuntimeException('The PHP ZIP extension is required to create a Word publishing document.');
@@ -68,7 +68,7 @@ final class DocxPlaceholderTemplateService
                 continue;
             }
 
-            [$processedXml, $partCounts, $partUnknown] = $this->processXml($xml, $replacements);
+            [$processedXml, $partCounts, $partUnknown] = $this->processXml($xml, $replacements, $literalReplacements);
             foreach ($partCounts as $key => $count) {
                 $counts[$key] = ($counts[$key] ?? 0) + $count;
             }
@@ -94,7 +94,7 @@ final class DocxPlaceholderTemplateService
      * @param array<string, string> $replacements
      * @return array{0:string,1:array<string,int>,2:array<int,string>}
      */
-    private function processXml(string $xml, array $replacements): array
+    private function processXml(string $xml, array $replacements, array $literalReplacements = []): array
     {
         $dom = new DOMDocument('1.0', 'UTF-8');
         $dom->preserveWhiteSpace = true;
@@ -136,6 +136,18 @@ final class DocxPlaceholderTemplateService
                 }
                 $newText = str_replace($marker, $replacement, $newText);
                 $counts[$key] += $occurrences;
+                $changed = true;
+            }
+
+            // Optional exact literal markers keep legacy double-bracket callers
+            // unchanged while allowing publishing modules to support explicitly
+            // contracted markers such as [REPORT_GENERATION_TIMESTAMP].
+            foreach ($literalReplacements as $marker => $replacement) {
+                $occurrences = substr_count($newText, (string) $marker);
+                if ($occurrences < 1) {
+                    continue;
+                }
+                $newText = str_replace((string) $marker, (string) $replacement, $newText);
                 $changed = true;
             }
 

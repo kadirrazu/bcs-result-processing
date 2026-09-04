@@ -3,6 +3,7 @@
 namespace App\Services\Allocation;
 
 use App\Models\AllocationA4Run;
+use App\Models\AllocationA5Run;
 use App\Models\AllocationInputFreeze;
 use App\Models\AllocationProcessingAudit;
 use App\Models\AllocationProcessingState;
@@ -56,7 +57,20 @@ final class AllocationRunStaleService
                 ]);
             }
 
-            if ($a3Ids->isNotEmpty() || $a4Ids->isNotEmpty()) {
+            $a5Ids = AllocationA5Run::query()
+                ->whereIn('status', ['validated_ok','validated_failed','finalized'])
+                ->where('is_stale', false)
+                ->pluck('id');
+            if ($a5Ids->isNotEmpty()) {
+                AllocationA5Run::query()->whereIn('id', $a5Ids)->update([
+                    'is_stale' => true,
+                    'stale_reason' => $reason,
+                    'staled_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+
+            if ($a3Ids->isNotEmpty() || $a4Ids->isNotEmpty() || $a5Ids->isNotEmpty()) {
                 AllocationProcessingAudit::query()->create([
                     'event' => 'ALLOCATION_PHASE_RESULTS_STALED',
                     'actor_id' => $actorId,
@@ -66,6 +80,7 @@ final class AllocationRunStaleService
                         'reason' => $reason,
                         'a3_run_ids' => $a3Ids->values()->all(),
                         'a4_run_ids' => $a4Ids->values()->all(),
+                        'a5_run_ids' => $a5Ids->values()->all(),
                     ],
                     'created_at' => $now,
                 ]);
@@ -95,6 +110,12 @@ final class AllocationRunStaleService
                 'staled_at' => $now,
                 'updated_at' => $now,
             ]);
+            AllocationA5Run::query()->whereIn('allocation_a4_run_id', $ids)->where('is_stale', false)->update([
+                'is_stale' => true,
+                'stale_reason' => $reason,
+                'staled_at' => $now,
+                'updated_at' => $now,
+            ]);
 
             AllocationProcessingAudit::query()->create([
                 'event' => 'ALLOCATION_A4_STALED_BY_A3_RERUN',
@@ -107,6 +128,31 @@ final class AllocationRunStaleService
                     'a4_run_ids' => $ids->values()->all(),
                     'reason' => $reason,
                 ],
+                'created_at' => $now,
+            ]);
+        });
+    }
+
+    /** A new completed A4 supersedes A5 validations bound to older A4 evidence. */
+    public function staleA5ForNewA4(AllocationA4Run $currentA4, ?int $actorId = null): void
+    {
+        DB::connection('exam')->transaction(function () use ($currentA4, $actorId): void {
+            $now = now();
+            $reason = "A4 Phase-2 was re-run and current source is now v{$currentA4->version}. Re-run A5 Final Allocation Validity Check.";
+            $ids = AllocationA5Run::query()
+                ->whereIn('status', ['validated_ok','validated_failed','finalized'])
+                ->where('is_stale', false)
+                ->where('allocation_a4_run_id', '<>', (int) $currentA4->id)
+                ->pluck('id');
+            if ($ids->isEmpty()) return;
+
+            AllocationA5Run::query()->whereIn('id', $ids)->update([
+                'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => $now, 'updated_at' => $now,
+            ]);
+            AllocationProcessingAudit::query()->create([
+                'event' => 'ALLOCATION_A5_STALED_BY_A4_RERUN', 'actor_id' => $actorId,
+                'from_status' => null, 'to_status' => 'stale',
+                'context' => ['current_a4_run_id' => (int) $currentA4->id, 'current_a4_version' => (int) $currentA4->version, 'a5_run_ids' => $ids->values()->all(), 'reason' => $reason],
                 'created_at' => $now,
             ]);
         });
@@ -171,6 +217,15 @@ final class AllocationRunStaleService
 
         if ($currentA3) {
             $this->staleA4ForNewA3($currentA3);
+        }
+
+        $currentA4 = AllocationA4Run::query()
+            ->where('status', 'a4_complete')
+            ->where('is_stale', false)
+            ->latest('version')
+            ->first();
+        if ($currentA4) {
+            $this->staleA5ForNewA4($currentA4);
         }
     }
 }

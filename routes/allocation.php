@@ -1,5 +1,6 @@
 <?php
 use App\Http\Controllers\AllocationController;
+use App\Http\Controllers\AllocationA6Controller;
 use App\Http\Middleware\ConfigureExaminationConnection;
 use App\Http\Middleware\EnsureExaminationSelected;
 use Illuminate\Support\Facades\Route;
@@ -22,6 +23,22 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     Route::get('/a4/runs/{a4Run}',[AllocationController::class,'showA4'])->name('a4.show');
     Route::get('/a4/runs/{a4Run}/candidates',[AllocationController::class,'showA4Candidates'])->name('a4.candidates');
     Route::get('/a4/runs/{a4Run}/cadre/{circularEntry}',[AllocationController::class,'showA4CadreResults'])->name('a4.cadre-results');
+    Route::post('/a5/start',[AllocationController::class,'startA5'])->name('a5.start');
+    Route::get('/a5/runs/{a5Run}/status',[AllocationController::class,'a5Status'])->name('a5.status');
+    Route::get('/a5/runs/{a5Run}/processing',[AllocationController::class,'showA5Processing'])->name('a5.processing');
+    Route::get('/a5/runs/{a5Run}',[AllocationController::class,'showA5'])->name('a5.show');
+    Route::get('/a5/runs/{a5Run}/candidates',[AllocationController::class,'showA5Candidates'])->name('a5.candidates');
+    Route::get('/a5/runs/{a5Run}/cadre/{circularEntry}',[AllocationController::class,'showA5CadreResults'])->name('a5.cadre-results');
+    Route::post('/a5/runs/{a5Run}/finalize',[AllocationController::class,'finalizeA5'])->name('a5.finalize');
+    Route::get('/a6',[AllocationA6Controller::class,'index'])->name('a6.index');
+    Route::get('/a6/candidates',[AllocationA6Controller::class,'candidates'])->name('a6.candidates');
+    Route::get('/a6/candidates/{reg}',[AllocationA6Controller::class,'candidate'])->name('a6.candidate');
+    Route::get('/a6/cadres',[AllocationA6Controller::class,'cadres'])->name('a6.cadres');
+    Route::get('/a6/cadres/{cadreCode}',[AllocationA6Controller::class,'cadre'])->name('a6.cadre');
+    Route::get('/a6/exports/txt',[AllocationA6Controller::class,'exportTxt'])->name('a6.exports.txt');
+    Route::get('/a6/exports/xlsx',[AllocationA6Controller::class,'exportXlsx'])->name('a6.exports.xlsx');
+    Route::get('/a6/docx',[AllocationA6Controller::class,'docx'])->name('a6.docx');
+    Route::post('/a6/docx',[AllocationA6Controller::class,'generateDocx'])->name('a6.docx.generate');
     Route::get('/seat-breakup/template',[AllocationController::class,'seatTemplate'])->name('seat-breakup.template');
     Route::post('/seat-breakup/upload',[AllocationController::class,'uploadSeatBreakup'])->name('seat-breakup.upload');
     Route::get('/seat-breakup/{version}',[AllocationController::class,'showSeatBreakup'])->name('seat-breakup.show');

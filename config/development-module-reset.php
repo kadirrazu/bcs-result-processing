@@ -173,6 +173,10 @@ return [
         'allocation' => [
             'label' => 'Allocation',
             'tables' => [
+                'allocation_a6_export_audits',
+                'allocation_a5_candidate_results',
+                'allocation_a5_capacity_results',
+                'allocation_a5_runs',
                 'allocation_a4_movement_events',
                 'allocation_a4_seat_ledgers',
                 'allocation_a4_results',

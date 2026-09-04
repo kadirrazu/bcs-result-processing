@@ -14,15 +14,21 @@ use App\Models\AllocationA4Run;
 use App\Models\AllocationA4Result;
 use App\Models\AllocationA4SeatLedger;
 use App\Models\AllocationA4MovementEvent;
+use App\Models\AllocationA5Run;
+use App\Models\AllocationA5CandidateResult;
+use App\Models\AllocationA5CapacityResult;
 use App\Models\CircularEntry;
 use App\Jobs\ProcessAllocationInputFreeze;
 use App\Jobs\ProcessAllocationPhaseOne;
 use App\Jobs\ProcessAllocationA4;
+use App\Jobs\ProcessAllocationA5;
 use App\Support\Examinations\ExaminationContext;
 use App\Services\Allocation\AllocationReadinessService;
 use App\Services\Allocation\AllocationSeatBreakupService;
 use App\Services\Allocation\AllocationSettingsService;
 use App\Services\Allocation\AllocationInputFreezeService;
+use App\Services\Allocation\AllocationA5ValidityService;
+use App\Services\Circular\CircularFinalizedDatasetService;
 use App\Reports\Pdf\AllocationSeatBreakupPdfReport;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
@@ -34,7 +40,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class AllocationController extends Controller
 {
-    public function index(AllocationReadinessService $readiness, AllocationSettingsService $settings, \App\Services\Allocation\AllocationRunStaleService $runStale): View
+    public function index(AllocationReadinessService $readiness, AllocationSettingsService $settings, \App\Services\Allocation\AllocationRunStaleService $runStale, \App\Services\Allocation\AllocationA6ReadinessService $a6Readiness): View
     {
         // Defensive metadata reconciliation keeps A3/A4 currentness visible even if an upstream change occurred outside a normal UI path.
         $runStale->reconcileCurrentness();
@@ -53,6 +59,8 @@ final class AllocationController extends Controller
             // A4 is persisted separately from A3. Landing-page history makes the next phase
             // visible without mutating or hiding the exact Phase-1 evidence.
             'a4Runs' => AllocationA4Run::query()->with('phase1Run')->latest('version')->limit(5)->get(),
+            'a5Runs' => AllocationA5Run::query()->with('a4Run')->latest('version')->limit(5)->get(),
+            'a6Gate' => $a6Readiness->inspect(),
         ]);
     }
 
@@ -907,4 +915,245 @@ final class AllocationController extends Controller
         $service->finalize($version, $request->user()?->id);
         return back()->with('success', "Seat Breakup v{$version->version} finalized/frozen.");
     }
+
+    /** Queue A5 against the latest current completed A4. A5 never mutates A4. */
+    public function startA5(
+        Request $request,
+        ExaminationContext $context,
+        CircularFinalizedDatasetService $circular,
+        AllocationReadinessService $readiness,
+    ): RedirectResponse {
+        $examId = $context->currentId();
+        abort_if($examId === null, 409, 'No examination selected.');
+        $actorId = $request->user()?->id;
+
+        // A5 is a downstream assurance gate, so source readiness is re-verified
+        // server-side; a visible/current A4 card alone is never sufficient.
+        $gate = $readiness->inspectStrict();
+        if (! (bool) ($gate['ready'] ?? false)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'allocation_a5' => 'A5 start blocked: Allocation upstream readiness/integrity gate is not READY.',
+            ]);
+        }
+        $confirmation = $circular->verifiedConfirmation();
+
+        $a5 = DB::connection('exam')->transaction(function () use ($actorId, $confirmation): AllocationA5Run {
+            $a4 = AllocationA4Run::query()
+                ->where('status', 'a4_complete')
+                ->where('is_stale', false)
+                ->latest('version')
+                ->lockForUpdate()
+                ->first();
+
+            if (! $a4 || ! $a4->a4_output_hash) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'allocation_a5' => 'A5 requires the latest current, non-stale completed A4 Phase-2 result.',
+                ]);
+            }
+            if (AllocationA5Run::query()->whereIn('status', ['queued','running'])->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'allocation_a5' => 'Another A5 validity check is already queued or running.',
+                ]);
+            }
+
+            // Re-processing never destroys older A5 evidence. A new version is
+            // bound to the exact A4 + Circular authority visible at queue time.
+            $nextVersion = ((int) AllocationA5Run::query()->max('version')) + 1;
+            $run = AllocationA5Run::query()->create([
+                'version' => $nextVersion,
+                'allocation_a4_run_id' => (int) $a4->id,
+                'status' => 'queued', 'phase' => 'QUEUED',
+                'a4_output_hash' => (string) $a4->a4_output_hash,
+                'circular_version' => (int) $confirmation->version,
+                'circular_hash' => (string) $confirmation->dataset_hash,
+                'progress_message' => 'A5 Final Allocation Validity Check queued.',
+                'started_by' => $actorId, 'started_at' => now(),
+            ]);
+
+            AllocationProcessingAudit::query()->create([
+                'event' => 'ALLOCATION_A5_QUEUED', 'actor_id' => $actorId,
+                'from_status' => 'a4_complete', 'to_status' => 'queued',
+                'context' => [
+                    'allocation_a5_run_id' => (int) $run->id,
+                    'allocation_a4_run_id' => (int) $a4->id,
+                    'a4_output_hash' => (string) $a4->a4_output_hash,
+                    'circular_version' => (int) $confirmation->version,
+                    'circular_hash' => (string) $confirmation->dataset_hash,
+                ],
+                'created_at' => now(),
+            ]);
+            return $run;
+        });
+
+        ProcessAllocationA5::dispatch((int) $examId, (int) $a5->id, $actorId ? (int) $actorId : null);
+        return redirect()->route('allocation.a5.processing', $a5)
+            ->with('success', "A5 validity check v{$a5->version} queued. A4 result remains unchanged.");
+    }
+
+    public function a5Status(AllocationA5Run $a5Run): JsonResponse
+    {
+        return response()->json([
+            'status' => (string) $a5Run->status,
+            'phase' => (string) $a5Run->phase,
+            'progress_percent' => (int) $a5Run->progress_percent,
+            'progress_current' => (int) $a5Run->progress_current,
+            'progress_total' => (int) $a5Run->progress_total,
+            'message' => (string) ($a5Run->progress_message ?: ''),
+            'error' => (string) ($a5Run->failure_message ?: ''),
+            'view_url' => in_array((string) $a5Run->status, ['validated_ok','validated_failed','finalized'], true)
+                ? route('allocation.a5.show', $a5Run) : null,
+        ]);
+    }
+
+    public function showA5Processing(AllocationA5Run $a5Run): View|RedirectResponse
+    {
+        if (in_array((string) $a5Run->status, ['validated_ok','validated_failed','finalized'], true)) {
+            return redirect()->route('allocation.a5.show', $a5Run);
+        }
+        return view('allocation.a5-processing', ['a5Run' => $a5Run->load('a4Run')]);
+    }
+
+    /**
+     * A5 summary page is cadre-first. It intentionally keeps candidate detail
+     * off this screen so operators can review the final assurance gate exactly
+     * like the A4 Seat Ledger: Circular group/serial order, then drill down.
+     */
+    public function showA5(AllocationA5Run $a5Run): View
+    {
+        $capacityResults = $a5Run->capacityResults()->get();
+        $candidateStats = $a5Run->candidateResults()
+            ->selectRaw('circular_entry_id, COUNT(*) AS total_candidates, SUM(CASE WHEN overall_status = ? THEN 1 ELSE 0 END) AS passed_candidates, SUM(CASE WHEN overall_status = ? THEN 1 ELSE 0 END) AS failed_candidates', ['PASS', 'FAIL'])
+            ->groupBy('circular_entry_id')
+            ->get()
+            ->keyBy('circular_entry_id');
+
+        $entries = CircularEntry::query()
+            ->whereIn('id', $capacityResults->pluck('circular_entry_id')->all())
+            ->get()
+            ->keyBy('id');
+
+        // Preserve the same General -> Technical/Professional -> Circular serial
+        // order used by the A4 Seat Ledger so A4/A5 can be compared visually.
+        $capacityResults = $capacityResults->sort(function ($left, $right) use ($entries): int {
+            $a = $entries->get((int) $left->circular_entry_id);
+            $b = $entries->get((int) $right->circular_entry_id);
+            $typeA = (string) ($a?->cadre_type?->value ?? $a?->cadre_type ?? '');
+            $typeB = (string) ($b?->cadre_type?->value ?? $b?->cadre_type ?? '');
+            $rank = static fn (string $type): int => match ($type) { 'GG' => 0, 'TT' => 1, default => 2 };
+            if ($rank($typeA) !== $rank($typeB)) return $rank($typeA) <=> $rank($typeB);
+            if ((int) ($a?->cadre_serial ?? PHP_INT_MAX) !== (int) ($b?->cadre_serial ?? PHP_INT_MAX)) {
+                return (int) ($a?->cadre_serial ?? PHP_INT_MAX) <=> (int) ($b?->cadre_serial ?? PHP_INT_MAX);
+            }
+            $subA = $a?->sub_serial; $subB = $b?->sub_serial;
+            if ($subA === null && $subB !== null) return -1;
+            if ($subA !== null && $subB === null) return 1;
+            if ((int) $subA !== (int) $subB) return (int) $subA <=> (int) $subB;
+            return (int) $left->id <=> (int) $right->id;
+        })->values();
+
+        $abbreviationByCode = $this->a4Abbreviations($capacityResults->pluck('cadre_code'));
+
+        return view('allocation.a5-show', compact(
+            'a5Run', 'capacityResults', 'candidateStats', 'entries', 'abbreviationByCode'
+        ));
+    }
+
+    /** Separate pre/post-finalized candidate validity report with search/filter. */
+    public function showA5Candidates(Request $request, AllocationA5Run $a5Run): View
+    {
+        $status = strtoupper(trim((string) $request->query('status', '')));
+        if (! in_array($status, ['', 'PASS', 'FAIL'], true)) $status = '';
+
+        $search = trim((string) $request->query('search', ''));
+        $cadreCode = trim((string) $request->query('cadre_code', ''));
+        $allCodes = $a5Run->candidateResults()->distinct()->orderBy('cadre_code')->pluck('cadre_code');
+        $abbreviationByCode = $this->a4Abbreviations($allCodes);
+        $cadreOptions = $allCodes->map(fn ($code): array => [
+            'code' => (int) $code,
+            'abbr' => (string) $abbreviationByCode->get((int) $code, ''),
+        ])->values();
+
+        $query = $a5Run->candidateResults();
+        if ($status !== '') $query->where('overall_status', $status);
+        if ($cadreCode !== '' && ctype_digit($cadreCode)) $query->where('cadre_code', (int) $cadreCode);
+
+        if ($search !== '') {
+            // Search supports registration number, numeric cadre code, or cadre
+            // abbreviation while the exact 110 - ADMN selector remains separate.
+            $matchingCodes = $abbreviationByCode
+                ->filter(fn ($abbr, $code) => str_contains(strtoupper((string) $abbr), strtoupper($search)) || str_contains((string) $code, $search))
+                ->keys()->map(fn ($code) => (int) $code)->all();
+            $query->where(function ($q) use ($search, $matchingCodes): void {
+                $q->where('reg', 'like', '%'.$search.'%');
+                if ($matchingCodes !== []) $q->orWhereIn('cadre_code', $matchingCodes);
+                if (ctype_digit($search)) $q->orWhere('cadre_code', (int) $search);
+            });
+        }
+
+        // The all-candidate report is grouped visually by cadre first, then by
+        // the exact A4 target-cadre merit position used for the final allocation.
+        // This avoids mixing merit positions from unrelated cadre competitions.
+        // Registration number is only the deterministic final fallback.
+        $meritPositionSubquery = AllocationA4Result::query()
+            ->select('merit_position')
+            ->whereColumn('allocation_a4_results.id', 'allocation_a5_candidate_results.allocation_a4_result_id');
+
+        $results = $query
+            ->select('allocation_a5_candidate_results.*')
+            ->addSelect(['merit_position' => $meritPositionSubquery])
+            ->orderBy('cadre_code')
+            ->orderBy('merit_position')
+            ->orderBy('reg')
+            ->paginate(100)
+            ->withQueryString();
+        return view('allocation.a5-candidates', compact(
+            'a5Run', 'results', 'status', 'search', 'cadreCode', 'cadreOptions', 'abbreviationByCode'
+        ));
+    }
+
+    /** Cadre drill-down from the A5 summary assurance table. */
+    public function showA5CadreResults(Request $request, AllocationA5Run $a5Run, CircularEntry $circularEntry): View
+    {
+        $capacity = $a5Run->capacityResults()->where('circular_entry_id', (int) $circularEntry->id)->firstOrFail();
+        $status = strtoupper(trim((string) $request->query('status', '')));
+        if (! in_array($status, ['', 'PASS', 'FAIL'], true)) $status = '';
+        $reg = trim((string) $request->query('reg', ''));
+
+        $query = $a5Run->candidateResults()->where('circular_entry_id', (int) $circularEntry->id);
+        if ($status !== '') $query->where('overall_status', $status);
+        if ($reg !== '') $query->where('reg', 'like', '%'.$reg.'%');
+        // Cadre drill-down is one competition only, so its natural display
+        // order is the exact A4 merit position ascending. Expose that same merit
+        // position to the view so the operator can immediately see why rows are
+        // ordered this way. Registration number remains the stable fallback.
+        $meritPositionSubquery = AllocationA4Result::query()
+            ->select('merit_position')
+            ->whereColumn('allocation_a4_results.id', 'allocation_a5_candidate_results.allocation_a4_result_id');
+
+        $results = $query
+            ->select('allocation_a5_candidate_results.*')
+            ->addSelect(['merit_position' => $meritPositionSubquery])
+            ->orderBy('merit_position')
+            ->orderBy('reg')
+            ->paginate(100)
+            ->withQueryString();
+
+        $abbreviationByCode = $this->a4Abbreviations(collect([(int) $capacity->cadre_code]));
+        $cadreAbbreviation = (string) $abbreviationByCode->get((int) $capacity->cadre_code, '—');
+        $candidatePassed = $a5Run->candidateResults()->where('circular_entry_id', (int) $circularEntry->id)->where('overall_status', 'PASS')->count();
+        $candidateFailed = $a5Run->candidateResults()->where('circular_entry_id', (int) $circularEntry->id)->where('overall_status', 'FAIL')->count();
+
+        return view('allocation.a5-cadre-results', compact(
+            'a5Run', 'circularEntry', 'capacity', 'results', 'status', 'reg',
+            'cadreAbbreviation', 'candidatePassed', 'candidateFailed'
+        ));
+    }
+
+    public function finalizeA5(Request $request, AllocationA5Run $a5Run, AllocationA5ValidityService $service): RedirectResponse
+    {
+        $finalized = $service->finalize($a5Run, $request->user()?->id ? (int) $request->user()->id : null);
+        return redirect()->route('allocation.a5.show', $finalized)
+            ->with('success', "A5 v{$finalized->version} finalized. Final Allocation Validity Gate is 100% PASS and ready for Reporting/Export.");
+    }
+
 }

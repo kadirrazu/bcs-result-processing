@@ -55,6 +55,7 @@
     $summaryFreeze = $inputFreezes->first(fn($f) => $f->status === 'frozen') ?: $inputFreezes->first();
     $summaryA3 = $allocationRuns->first();
     $summaryA4 = $a4Runs->first();
+    $summaryA5 = $a5Runs->first();
 
     $seatSummaryStatus = $summarySeat?->status === 'finalized' ? 'FINALIZED / CURRENT' : ($summarySeat ? strtoupper((string)$summarySeat->status) : 'NOT READY');
     $seatSummaryClass = $summarySeat?->status === 'finalized' ? 'success' : ($summarySeat ? 'warning' : 'secondary');
@@ -81,6 +82,25 @@
     $a4SummaryStatus = !$summaryA4 ? 'NOT STARTED' : ($a4SummaryStale ? 'STALE / OUTDATED' : ($summaryA4->status === 'a4_complete' ? 'PHASE-2 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA4->status))));
     $a4SummaryClass = !$summaryA4 ? 'secondary' : ($a4SummaryStale ? 'warning' : ($summaryA4->status === 'a4_complete' ? 'success' : ($summaryA4->status === 'failed' ? 'danger' : 'azure')));
     $a4SummaryDetail = !$summaryA4 ? 'Run A4 after a current, completed A3 exists.' : ($a4SummaryStale ? ($summaryA4->stale_reason ?: 'A3 or Allocation inputs changed; re-run Phase-2.') : ($summaryA4->status === 'a4_complete' ? 'A4 v'.$summaryA4->version.' is current · '.number_format($summaryA4->allocated_count).' final allocated results after NM/shifting.' : ($summaryA4->progress_message ?: 'Phase-2 processing is in progress.')));
+
+    $a5SummaryStale = $summaryA5 && (bool)$summaryA5->is_stale;
+    $a5SummaryStatus = !$summaryA5 ? 'NOT STARTED' : ($a5SummaryStale ? 'STALE / OUTDATED' : match((string)$summaryA5->status) {
+        'finalized' => 'FINALIZED / REPORTING READY',
+        'validated_ok' => '100% PASS / FINALIZE REQUIRED',
+        'validated_failed' => 'VALIDATION FAILED / BLOCKED',
+        'queued', 'running' => 'PROCESSING',
+        'failed' => 'FAILED',
+        default => strtoupper(str_replace('_',' ', (string)$summaryA5->status)),
+    });
+    $a5SummaryClass = !$summaryA5 ? 'secondary' : ($a5SummaryStale ? 'warning' : match((string)$summaryA5->status) {
+        'finalized' => 'success', 'validated_ok' => 'azure', 'validated_failed', 'failed' => 'danger', 'queued', 'running' => 'azure', default => 'secondary'
+    });
+    $a5SummaryDetail = !$summaryA5
+        ? 'Run A5 after a current completed A4 to validate final eligibility, quota entitlement and cadre seat limits.'
+        : ($a5SummaryStale ? ($summaryA5->stale_reason ?: 'A4 or authoritative inputs changed; re-run A5.')
+            : ((string)$summaryA5->status === 'finalized'
+                ? 'A5 v'.$summaryA5->version.' is finalized · 100% candidate validity PASS and all cadre seat limits PASS.'
+                : ($summaryA5->progress_message ?: 'Final Allocation Validity Check is awaiting action.')));
 @endphp
 <div class="card mb-3 allocation-stage-summary" id="allocation-processing-summary">
     <div class="card-header">
@@ -96,6 +116,7 @@
         <div class="summary-row"><div class="summary-name">A2 — Frozen Input</div><div class="summary-detail">{{ $a2SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a2SummaryClass }}-lt">{{ $a2SummaryStatus }}</span></div></div>
         <div class="summary-row"><div class="summary-name">A3 — Phase-1</div><div class="summary-detail">{{ $a3SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a3SummaryClass }}-lt">{{ $a3SummaryStatus }}</span></div></div>
         <div class="summary-row"><div class="summary-name">A4 — Phase-2</div><div class="summary-detail">{{ $a4SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a4SummaryClass }}-lt">{{ $a4SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A5 — Final Validity Check</div><div class="summary-detail">{{ $a5SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a5SummaryClass }}-lt">{{ $a5SummaryStatus }}</span></div></div>
     </div>
 </div>
 <div class="card mb-3" id="allocation-seat-breakup-card">
@@ -374,6 +395,80 @@
         </table>
     </div>
     @endif
+
+</div>
+@php
+    $latestA5 = $a5Runs->first();
+    $latestCurrentA4 = $a4Runs->first(fn($r) => $r->status === 'a4_complete' && !(bool)$r->is_stale);
+    $a5Busy = $latestA5 && in_array((string)$latestA5->status, ['queued','running'], true);
+@endphp
+<div class="card mb-3" id="allocation-a5-card">
+    <div class="card-header">
+        <div>
+            <h3 class="card-title">A5 — Final Allocation Validity Check</h3>
+            <div class="card-subtitle">Read-only assurance gate over final A4 allocation: Circular bachelor/PRS requirements, technical eligibility, quota entitlement, and final cadre seat-limit validation.</div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-8">
+                @if($latestA5 && (bool)$latestA5->is_stale)
+                    <div class="alert alert-warning py-2 px-3 mb-2"><strong>A5 STALE / OUTDATED.</strong> {{ $latestA5->stale_reason ?: 'A4 or authoritative Allocation inputs changed. Re-run A5.' }}</div>
+                @endif
+                @if($latestCurrentA4)
+                    <div>Current A4 source: <strong>v{{ $latestCurrentA4->version }}</strong> · Final Allocated {{ number_format($latestCurrentA4->allocated_count) }}</div>
+                    <div class="small text-secondary mt-1">A5 never changes A4 allocation. Any mismatch blocks downstream Reporting/Export and must be corrected upstream.</div>
+                @else
+                    <div class="text-secondary">Complete a current, non-stale A4 Phase-2 result before running A5.</div>
+                @endif
+            </div>
+            <div class="col-md-4 text-md-end">
+                @if($a5Busy)
+                    <a class="btn btn-sm btn-warning text-uppercase" href="{{ route('allocation.a5.processing',$latestA5) }}">View A5 Processing</a>
+                @elseif($latestCurrentA4)
+                    <div class="d-inline-flex gap-2 align-items-center flex-nowrap">
+                        <form method="POST" action="{{ route('allocation.a5.start') }}" class="m-0">@csrf
+                            <button class="btn btn-sm btn-primary text-uppercase text-nowrap" type="submit">{{ $latestA5 ? 'Re-run A5 Check' : 'Run A5 Check' }}</button>
+                        </form>
+                        @if($latestA5 && in_array((string)$latestA5->status,['validated_ok','validated_failed','finalized'],true))
+                            <a class="btn btn-sm btn-success text-uppercase text-nowrap" href="{{ route('allocation.a5.show',$latestA5) }}">View A5 Report</a>
+                        @endif
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+    @if($latestA5)
+    <div id="a5-landing-progress-wrap" class="card-body border-top {{ $a5Busy || $latestA5->status === 'failed' ? '' : 'd-none' }}" data-status-url="{{ route('allocation.a5.status',$latestA5) }}">
+        <div class="d-flex justify-content-between align-items-center mb-2"><div><strong id="a5-landing-phase">{{ strtoupper(str_replace('_',' ',$latestA5->phase ?: $latestA5->status)) }}</strong><div class="small text-secondary" id="a5-landing-message">{{ $latestA5->progress_message }}</div></div><span><span id="a5-landing-percent">{{ (int)$latestA5->progress_percent }}</span>%</span></div>
+        <div class="progress"><div id="a5-landing-progress-bar" class="progress-bar" style="width:{{ (int)$latestA5->progress_percent }}%"></div></div>
+        <div id="a5-landing-counter" class="small text-secondary mt-2 {{ (int)$latestA5->progress_total > 0 ? '' : 'd-none' }}">Processed {{ number_format($latestA5->progress_current) }} / {{ number_format($latestA5->progress_total) }}</div>
+        <div id="a5-landing-error" class="alert alert-danger mt-3 mb-0 {{ $latestA5->status === 'failed' ? '' : 'd-none' }}">{{ $latestA5->failure_message }}</div>
+    </div>
+    @endif
+    @if($a5Runs->isNotEmpty())
+    <div class="table-responsive">
+        <table class="table table-vcenter mb-0">
+            <thead><tr><th class="text-center">Run</th><th class="text-center">A4 Source</th><th>Status</th><th class="text-center">Allocated</th><th class="text-center">Candidate Fail</th><th class="text-center">Capacity Fail</th><th></th></tr></thead>
+            <tbody>
+            @foreach($a5Runs as $a5)
+                <tr>
+                    <td class="text-center">v{{ $a5->version }}</td>
+                    <td class="text-center">A4 v{{ $a5->a4Run?->version ?? '—' }}</td>
+                    <td>
+                        @if((bool)$a5->is_stale)<span class="badge bg-warning-lt">STALE / OUTDATED</span>
+                        @else<span class="badge bg-{{ $a5->status === 'finalized' ? 'success' : ($a5->status === 'validated_ok' ? 'azure' : (in_array($a5->status,['validated_failed','failed'],true) ? 'danger' : 'warning')) }}-lt">{{ strtoupper(str_replace('_',' ',(string)$a5->status)) }}</span>@endif
+                    </td>
+                    <td class="text-center">{{ number_format($a5->total_allocated) }}</td>
+                    <td class="text-center">{{ number_format($a5->candidate_failed) }}</td>
+                    <td class="text-center">{{ number_format($a5->capacity_failed) }}</td>
+                    <td class="text-end">@if(in_array((string)$a5->status,['validated_ok','validated_failed','finalized'],true))<a class="btn btn-sm btn-secondary" href="{{ route('allocation.a5.show',$a5) }}">View A5 Report</a>@elseif(in_array((string)$a5->status,['queued','running','failed'],true))<a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.a5.processing',$a5) }}">View A5 Run</a>@endif</td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+    @endif
 </div>
 </div></div>
 <script>
@@ -530,5 +625,41 @@
     window.setTimeout(pollA4, 500);
 })();
 </script>
+
+<script>
+(function(){
+    const initialBusy = @json($a5Busy);
+    if(!initialBusy) return;
+    const wrap=document.getElementById('a5-landing-progress-wrap'); if(!wrap) return;
+    const url=wrap.dataset.statusUrl;
+    async function pollA5(){try{
+        const r=await fetch(url,{headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'}});
+        if(!r.ok) throw new Error('Unable to read A5 validity status.');
+        const d=await r.json(); const pct=Number(d.progress_percent||0);
+        document.getElementById('a5-landing-percent').textContent=pct;
+        document.getElementById('a5-landing-progress-bar').style.width=pct+'%';
+        document.getElementById('a5-landing-phase').textContent=String(d.phase||d.status||'').replaceAll('_',' ').toUpperCase();
+        document.getElementById('a5-landing-message').textContent=d.message||'';
+        const c=document.getElementById('a5-landing-counter');
+        if(Number(d.progress_total||0)>0){c.textContent='Processed '+Number(d.progress_current||0).toLocaleString()+' / '+Number(d.progress_total||0).toLocaleString();c.classList.remove('d-none')}else c.classList.add('d-none');
+        if(d.status==='failed'){const e=document.getElementById('a5-landing-error');e.textContent=d.error||'A5 failed.';e.classList.remove('d-none');return}
+        if(!['queued','running'].includes(d.status)){window.location.reload();return}
+        setTimeout(pollA5,1200);
+    }catch(e){document.getElementById('a5-landing-message').textContent=e.message+' Retrying…';setTimeout(pollA5,2500)}}
+    setTimeout(pollA5,500);
+})();
+</script>
+
+{{-- A6 is a read-only downstream publishing layer. It stays visibly locked until A1-A5 are current and A5 is finalized at 100% PASS. --}}
+<div class="card mt-3 mb-3" id="allocation-a6-card">
+    <div class="card-header">
+        <div><h3 class="card-title">A6 — Reporting &amp; Export</h3><div class="card-subtitle">Candidate reporting, cadre drill-down, TXT/XLSX export and DOCX publishing from the final validated Allocation result.</div></div>
+        <div class="ms-auto"><span class="badge bg-{{ ($a6Gate['ready'] ?? false) ? 'success' : 'secondary' }}-lt">{{ ($a6Gate['ready'] ?? false) ? 'ACTIVE / READY' : 'INACTIVE / BLOCKED' }}</span></div>
+    </div>
+    <div class="card-body d-flex align-items-center justify-content-between gap-3 flex-wrap">
+        <div class="text-secondary">@if($a6Gate['ready'] ?? false)A5 v{{ $a6Gate['a5_version'] }} finalized 100% PASS · A4 v{{ $a6Gate['a4_version'] }} · Circular v{{ $a6Gate['circular_version'] }}@else{{ $a6Gate['reason'] ?? 'Complete and finalize A1-A5 before Reporting & Export.' }}@endif</div>
+        <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.a6.index') : '#' }}">Open Reporting &amp; Export</a>
+    </div>
+</div>
 
 @endsection

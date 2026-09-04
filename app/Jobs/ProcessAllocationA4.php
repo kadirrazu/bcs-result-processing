@@ -7,6 +7,7 @@ use App\Models\AllocationProcessingAudit;
 use App\Models\AllocationProcessingState;
 use App\Models\Examination;
 use App\Services\Allocation\AllocationA4Service;
+use App\Services\Allocation\AllocationRunStaleService;
 use App\Support\Examinations\ExaminationConnectionManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -31,7 +32,7 @@ final class ProcessAllocationA4 implements ShouldQueue
         $this->onQueue((string) config('allocation.queue', 'imports'));
     }
 
-    public function handle(ExaminationConnectionManager $connections, AllocationA4Service $service): void
+    public function handle(ExaminationConnectionManager $connections, AllocationA4Service $service, AllocationRunStaleService $stale): void
     {
         $exam = Examination::query()->findOrFail($this->examinationId);
         $connections->configure($exam);
@@ -62,6 +63,12 @@ final class ProcessAllocationA4 implements ShouldQueue
                     'progress_total' => max(0, $total), 'progress_message' => $message,
                 ]);
             });
+
+            // Only a successfully completed new A4 supersedes earlier A5 evidence.
+            $completed = AllocationA4Run::query()->findOrFail($run->id);
+            if ((string) $completed->status === 'a4_complete' && ! (bool) $completed->is_stale) {
+                $stale->staleA5ForNewA4($completed, $this->actorId);
+            }
         } catch (Throwable $e) {
             AllocationA4Run::query()->whereKey($this->a4RunId)->update([
                 'status' => 'failed', 'phase' => 'FAILED', 'failure_message' => mb_substr($e->getMessage(), 0, 65000),
