@@ -40,8 +40,18 @@
                     <div class="card-header"><h3 class="card-title">Processing Status Board</h3></div>
                     <div class="card-body">
                         <div class="row g-3">
-                            <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Current state</div><div class="fw-semibold">{{ strtoupper(str_replace('_', ' ', $state->status)) }}</div></div></div>
-                            <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Allocation choice source</div><div class="fw-semibold">{{ $setting->optimization_enabled ? 'Finalized Optimized Choice' : 'Finalized Validated Choice' }}</div></div></div>
+                            <div class="col-md-6">
+                                <div class="border rounded p-3 h-100">
+                                    <div class="text-secondary small">Effective State</div>
+                                    <div><span class="badge bg-{{ $processingBoardState['badge'] }}-lt">{{ $processingBoardState['label'] }}</span></div>
+                                    <div class="small mt-2">{{ $processingBoardState['detail'] }}</div>
+                                    <div class="small text-secondary mt-2">Stored stage: {{ $processingBoardState['stored_status'] }}</div>
+                                    @if($state->is_stale && filled($state->stale_reason))
+                                        <div class="small text-warning mt-1">Stale reason: {{ $state->stale_reason }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Allocation choice source</div><div class="fw-semibold">{{ $setting->optimization_enabled ? 'Finalized Optimized Choice' : 'Finalized Validated Choice' }}</div><div class="small text-secondary mt-2">Allocation can consume this source only when the effective state is FINALIZED / ALLOCATION READY.</div></div></div>
                             <div class="col-12"><div class="alert alert-info mb-0">Viva OMR establishes the effective choice. INCLUDED Previous BCS Repository recommendations and only the latest approved Google Form batch are consolidated first, then Choice Optimization runs once.</div></div>
                         </div>
                     </div>
@@ -287,7 +297,7 @@
                         <button
                             class="btn btn-primary"
                             type="submit"
-                            @disabled($setting->google_form_enabled === null || $historicalPendingReviewCount > 0 || in_array((string)$state->status, ['historical_optimization_queued','historical_optimizing'], true))
+                            @disabled($setting->google_form_enabled === null || $historicalPendingReviewCount > 0 || !($optimizationInputBinding['can_process'] ?? false) || in_array((string)$state->status, ['historical_optimization_queued','historical_optimizing'], true))
                         >
                             {{ $historicalOptimizationRows > 0 ? 'Re-process Optimization' : 'Process Optimization' }}
                         </button>
@@ -295,6 +305,75 @@
                 </div>
             </div>
             <div class="card-body">
+                @php
+                    $lastOptimizationCvVersion = (int) data_get($state->source_snapshot, 'choice_validation_version', 0);
+                    $lastOptimizationCvHash = (string) data_get($state->source_snapshot, 'choice_validation_hash', '');
+                    $currentCvVersion = (int) ($choiceValidationAuthority['validation_version'] ?? 0);
+                    $currentCvHash = (string) ($choiceValidationAuthority['dataset_hash'] ?? '');
+                    $bindingReady = (bool) ($optimizationInputBinding['can_process'] ?? false);
+                @endphp
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="text-secondary small">Current Finalized Choice Validation</div>
+                            @if($choiceValidationAuthority['ready'] ?? false)
+                                <div class="fw-semibold">Validation v{{ $currentCvVersion }}</div>
+                                <div class="small text-secondary">Source v{{ $choiceValidationAuthority['source_version'] ?? '—' }} · Circular v{{ $choiceValidationAuthority['circular_version'] ?? '—' }}</div>
+                                <div class="small text-break mt-1"><code>{{ $currentCvHash }}</code></div>
+                            @else
+                                <span class="badge bg-red-lt">NOT READY</span>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="text-secondary small">Last Optimization Used</div>
+                            @if($lastOptimizationCvVersion > 0)
+                                <div class="fw-semibold">Choice Validation v{{ $lastOptimizationCvVersion }}</div>
+                                @if($lastOptimizationCvHash !== '')<div class="small text-break mt-1"><code>{{ $lastOptimizationCvHash }}</code></div>@endif
+                            @else
+                                <span class="text-secondary">No processed Optimization source yet.</span>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="text-secondary small">Next Re-Process Input Binding</div>
+                            <div><span class="badge bg-{{ $bindingReady ? 'green' : 'red' }}-lt">{{ $optimizationInputBinding['status_label'] ?? 'UNKNOWN' }}</span></div>
+                            <div class="small mt-2">{{ $optimizationInputBinding['message'] ?? '' }}</div>
+                            @if(!empty($optimizationInputBinding['effective_choice_validation_versions']))
+                                <div class="small text-secondary mt-1">Effective Choice CV version(s): {{ collect($optimizationInputBinding['effective_choice_validation_versions'])->map(fn($v) => 'v'.$v)->implode(', ') }}</div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                @if(!$bindingReady)
+                    <div class="alert alert-danger">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <div>
+                                <strong>Optimization source binding blocked:</strong> {{ $optimizationInputBinding['message'] ?? 'Current Choice Validation source could not be bound safely.' }}
+                                @if(($optimizationInputBinding['status'] ?? '') === 'STALE_EFFECTIVE_OVERRIDE_BLOCKED')
+                                    <div class="small mt-1">The raw OMR upload is preserved. Re-validation reuses the latest batch; no OMR re-upload is required.</div>
+                                @endif
+                            </div>
+                            @if(($optimizationInputBinding['status'] ?? '') === 'STALE_EFFECTIVE_OVERRIDE_BLOCKED' && $latestOmrBatch && (string)$latestOmrBatch->status === 'approved')
+                                <form method="POST" action="{{ route('choice-optimization.omr.revalidate', $latestOmrBatch) }}" class="mb-0">
+                                    @csrf
+                                    <button class="btn btn-sm btn-danger text-nowrap" type="submit">Re-validate Latest OMR Batch #{{ $latestOmrBatch->id }}</button>
+                                </form>
+                            @elseif(($optimizationInputBinding['status'] ?? '') === 'STALE_EFFECTIVE_OVERRIDE_BLOCKED' && $latestOmrBatch)
+                                <a class="btn btn-sm btn-outline-danger text-nowrap" href="{{ route('choice-optimization.omr.show', $latestOmrBatch) }}">Open Latest OMR Batch #{{ $latestOmrBatch->id }}</a>
+                            @endif
+                        </div>
+                    </div>
+                @elseif(($optimizationInputBinding['status'] ?? '') === 'STALE_EFFECTIVE_FALLBACK_TO_LATEST_CV')
+                    <div class="alert alert-info">
+                        <strong>Latest Choice Validation will be used:</strong> the old Effective Choice contains no OMR override, so it will be ignored and Optimization will consume finalized Choice Validation v{{ $currentCvVersion }} directly.
+                    </div>
+                @endif
+
                 <div class="row g-3">
                     <div class="col-md-3">
                         <div class="text-secondary small">Pending Historical Review</div>

@@ -6,6 +6,8 @@ use App\Models\AllocationProcessingAudit;
 use App\Models\AllocationProcessingState;
 use App\Models\AllocationSeatBreakupRow;
 use App\Models\AllocationSeatBreakupVersion;
+use App\Models\AllocationRun;
+use App\Models\AllocationA4Run;
 use App\Services\Circular\CircularFinalizedDatasetService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -214,12 +216,34 @@ final class AllocationSeatBreakupService
                 throw ValidationException::withMessages(['seat_breakup' => 'Circular changed after Seat Breakup validation. Upload a new Seat Breakup.']);
             }
             $hash = $this->hasher->hash($version);
+            $previousFinalized = AllocationSeatBreakupVersion::query()
+                ->where('status', 'finalized')
+                ->whereKeyNot($version->id)
+                ->latest('version')
+                ->first();
+
             AllocationSeatBreakupVersion::query()->where('status', 'finalized')->update(['status' => 'superseded']);
             $version->forceFill(['status' => 'finalized', 'dataset_hash' => $hash, 'finalized_by' => $actorId, 'finalized_at' => now()])->save();
+
+            $reason = $previousFinalized
+                ? "Seat Breakup was re-finalized as v{$version->version}. Re-freeze A2 and re-run A3/A4."
+                : null;
+
             AllocationProcessingState::query()->whereKey(1)->update([
                 'finalized_seat_breakup_version_id' => $version->id,
-                'is_stale' => false, 'stale_reason' => null,
+                // A new effective Seat Breakup invalidates any existing A2/A3/A4 lineage.
+                'is_stale' => $reason !== null,
+                'stale_reason' => $reason,
             ]);
+
+            if ($reason !== null) {
+                AllocationRun::query()->where('status', 'phase1_complete')->where('is_stale', false)->update([
+                    'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
+                ]);
+                AllocationA4Run::query()->where('status', 'a4_complete')->where('is_stale', false)->update([
+                    'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
+                ]);
+            }
             AllocationProcessingAudit::query()->create([
                 'event' => 'SEAT_BREAKUP_FINALIZED', 'actor_id' => $actorId,
                 'from_status' => 'validated', 'to_status' => 'finalized',

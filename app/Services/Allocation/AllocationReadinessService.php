@@ -91,10 +91,17 @@ final class AllocationReadinessService
             ];
         } else {
             $state = ChoiceOptimizationProcessingState::query()->first();
+            $cvReady = (bool) ($checks['choice_validation']['ready'] ?? false);
+            $cvHash = (string) ($checks['choice_validation']['dataset_hash'] ?? '');
+            $coCvHash = (string) data_get($state?->source_snapshot, 'choice_validation_hash', '');
             $ready = $state
+                && $cvReady
                 && (string) $state->status === 'finalized'
                 && !(bool) $state->is_stale
-                && (string) ($state->dataset_hash ?? '') !== '';
+                && (string) ($state->dataset_hash ?? '') !== ''
+                && $coCvHash !== ''
+                && $cvHash !== ''
+                && hash_equals($coCvHash, $cvHash);
 
             $checks['choice_optimization'] = [
                 'ready' => (bool) $ready,
@@ -104,8 +111,10 @@ final class AllocationReadinessService
                 'stored_hash_present' => $ready,
                 'dataset_hash' => $ready ? (string) $state->dataset_hash : null,
                 'detail' => $ready
-                    ? 'Finalized hash metadata is present. Strict hash verification runs at the Allocation pre-run gate.'
-                    : 'Choice Optimization is not current/finalized or finalized hash metadata is missing.',
+                    ? 'Finalized Optimization is bound to the current finalized Choice Validation authority. Strict hash verification runs at the Allocation pre-run gate.'
+                    : (! $cvReady
+                        ? 'Choice Optimization depends on Choice Validation, which is currently stale/not finalized.'
+                        : 'Choice Optimization is stale/not finalized, or its Choice Validation source snapshot no longer matches current authority.'),
             ];
         }
 
@@ -157,6 +166,10 @@ final class AllocationReadinessService
             $state = ChoiceOptimizationProcessingState::query()->first();
             try {
                 if (!$state || $state->status !== 'finalized' || $state->is_stale || !$state->dataset_hash) throw new \RuntimeException('Choice Optimization is not current/finalized.');
+                if (! (bool) ($checks['choice_validation']['ready'] ?? false)) throw new \RuntimeException('Choice Optimization depends on current finalized Choice Validation.');
+                $cvHash = (string) ($checks['choice_validation']['dataset_hash'] ?? '');
+                $coCvHash = (string) data_get($state->source_snapshot, 'choice_validation_hash', '');
+                if ($cvHash === '' || $coCvHash === '' || ! hash_equals($coCvHash, $cvHash)) throw new \RuntimeException('CHOICE_OPTIMIZATION_CHOICE_VALIDATION_SNAPSHOT_MISMATCH. Re-process/finalize Choice Optimization.');
                 $actual = $this->optimized->outputHashFromDatabase();
                 if (!hash_equals((string)$state->dataset_hash, $actual)) throw new \RuntimeException('CHOICE_OPTIMIZATION_HASH_MISMATCH.');
                 $checks['choice_optimization'] = ['ready'=>true,'label'=>'Choice Optimization','status'=>'READY','hash_verified'=>true,'detail'=>'Finalized optimized choice hash verified.','dataset_hash'=>$actual];

@@ -34,8 +34,11 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class AllocationController extends Controller
 {
-    public function index(AllocationReadinessService $readiness, AllocationSettingsService $settings): View
+    public function index(AllocationReadinessService $readiness, AllocationSettingsService $settings, \App\Services\Allocation\AllocationRunStaleService $runStale): View
     {
+        // Defensive metadata reconciliation keeps A3/A4 currentness visible even if an upstream change occurred outside a normal UI path.
+        $runStale->reconcileCurrentness();
+
         return view('allocation.index', [
             // Landing page must stay fast. Strict/expensive re-hashing is reserved
             // for the actual server-side pre-run/finalization gate.
@@ -590,9 +593,9 @@ final class AllocationController extends Controller
 
         $a4Run = DB::connection('exam')->transaction(function () use ($run, $actorId): AllocationA4Run {
             $lockedA3 = AllocationRun::query()->whereKey($run->id)->lockForUpdate()->firstOrFail();
-            if ((string) $lockedA3->status !== 'phase1_complete') {
+            if ((string) $lockedA3->status !== 'phase1_complete' || (bool) $lockedA3->is_stale) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'allocation' => 'A4 may start only from the current completed A3 Phase-1 run.',
+                    'allocation' => 'A4 may start only from the current non-stale completed A3 Phase-1 run.',
                 ]);
             }
             if (! $lockedA3->phase1_output_hash || ! $lockedA3->seat_ledger_hash) {

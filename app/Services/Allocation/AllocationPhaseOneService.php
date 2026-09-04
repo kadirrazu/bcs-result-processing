@@ -38,6 +38,7 @@ final class AllocationPhaseOneService
     public function __construct(
         private readonly AllocationInputFreezeService $inputFreeze,
         private readonly AllocationSettingsService $settings,
+        private readonly AllocationRunStaleService $runStale,
     ) {}
 
     /**
@@ -89,7 +90,7 @@ final class AllocationPhaseOneService
 
         $this->progress($progress, 'COMMITTING_PHASE1', 92, 'Committing verified Phase-1 results, seat ledger and decision events.');
 
-        return DB::connection('exam')->transaction(function () use ($run, $freeze, $solution): AllocationRun {
+        $completed = DB::connection('exam')->transaction(function () use ($run, $freeze, $solution): AllocationRun {
             $lockedRun = AllocationRun::query()->whereKey($run->id)->lockForUpdate()->firstOrFail();
             $state = AllocationProcessingState::query()->whereKey(1)->lockForUpdate()->firstOrFail();
 

@@ -1,5 +1,11 @@
 @extends('layouts.app')
 @section('content')
+@if((bool)$a4Run->is_stale)
+<div class="container-xl mt-3">
+    <div class="alert alert-warning mb-0"><strong>A4 Phase-2 — STALE / OUTDATED.</strong> {{ $a4Run->stale_reason ?: 'Authoritative Allocation inputs/source changed after this result was produced.' }}</div>
+</div>
+@endif
+
 <style>
     /* A4 ledger mirrors the compact A3 seat-ledger visual contract. */
     .a4-seat-ledger .a4-column-header th{font-weight:700}

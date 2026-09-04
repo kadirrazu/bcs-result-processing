@@ -5,6 +5,8 @@ namespace App\Services\Allocation;
 use App\Models\AllocationProcessingAudit;
 use App\Models\AllocationProcessingState;
 use App\Models\AllocationSetting;
+use App\Models\AllocationRun;
+use App\Models\AllocationA4Run;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -155,13 +157,22 @@ final class AllocationSettingsService
             ]);
 
             if ($oldHash && ! hash_equals($oldHash, $newHash)) {
+                $reason = 'A1 Allocation configuration changed and was re-frozen. Re-freeze A2 and re-run A3/A4.';
                 $state = AllocationProcessingState::query()->whereKey(1)->lockForUpdate()->first();
                 if ($state && (string) $state->status !== 'not_started') {
                     $state->forceFill([
                         'is_stale' => true,
-                        'stale_reason' => 'Allocation configuration changed and was re-frozen. Allocation must be re-run.',
+                        'stale_reason' => $reason,
                     ])->save();
                 }
+
+                // Result evidence remains immutable; only currentness metadata changes.
+                AllocationRun::query()->where('status', 'phase1_complete')->where('is_stale', false)->update([
+                    'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
+                ]);
+                AllocationA4Run::query()->where('status', 'a4_complete')->where('is_stale', false)->update([
+                    'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
+                ]);
             }
 
             return $setting->refresh();

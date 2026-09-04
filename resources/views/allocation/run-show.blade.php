@@ -1,5 +1,11 @@
 @extends('layouts.app')
 @section('content')
+@if((bool)$run->is_stale)
+<div class="container-xl mt-3">
+    <div class="alert alert-warning mb-0"><strong>A3 Phase-1 — STALE / OUTDATED.</strong> {{ $run->stale_reason ?: 'Authoritative Allocation inputs/source changed after this result was produced.' }}</div>
+</div>
+@endif
+
 <style>
     /* A3 review tables deliberately keep all operational numeric/status fields centered. */
     .a3-seat-ledger .a3-column-header th,

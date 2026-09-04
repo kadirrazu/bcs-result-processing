@@ -13,7 +13,7 @@ final class AllocationA4Run extends ExaminationModel
         'progress_percent', 'progress_current', 'progress_total', 'progress_message',
         'allocated_count', 'unallocated_count', 'mq_count', 'cff_count', 'em_count', 'phc_count',
         'nm_count', 'shifted_count', 'quota_to_merit_count', 'a4_output_hash', 'seat_ledger_hash',
-        'movement_hash', 'failure_message', 'started_by', 'started_at', 'completed_at',
+        'movement_hash', 'failure_message', 'is_stale', 'stale_reason', 'staled_at', 'started_by', 'started_at', 'completed_at',
     ];
 
     protected function casts(): array
@@ -25,7 +25,7 @@ final class AllocationA4Run extends ExaminationModel
             'allocated_count' => 'integer', 'unallocated_count' => 'integer',
             'mq_count' => 'integer', 'cff_count' => 'integer', 'em_count' => 'integer',
             'phc_count' => 'integer', 'nm_count' => 'integer', 'shifted_count' => 'integer',
-            'quota_to_merit_count' => 'integer', 'started_at' => 'datetime', 'completed_at' => 'datetime',
+            'quota_to_merit_count' => 'integer', 'is_stale' => 'boolean', 'staled_at' => 'datetime', 'started_at' => 'datetime', 'completed_at' => 'datetime',
         ];
     }
 

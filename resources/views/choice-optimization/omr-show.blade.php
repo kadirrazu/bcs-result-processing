@@ -168,6 +168,8 @@
                             Resolve <strong id="co-review-remaining">{{ number_format($remainingOperatorReviews) }}</strong> operator review(s), then re-validate.
                         @elseif($batch->status === 'validated')
                             Validation is complete. Review details if required, then approve/consolidate.
+                        @elseif($batch->status === 'approved')
+                            This approved raw OMR batch can be re-validated against a newer finalized Choice Validation without re-uploading the file.
                         @else
                             Current batch status: {{ strtoupper(str_replace('_',' ', $batch->status)) }}.
                         @endif
@@ -179,10 +181,10 @@
                             @csrf
                             <button class="btn btn-primary" type="submit">Validate OMR Choices</button>
                         </form>
-                    @elseif(in_array((string)$batch->status, ['needs_review','validation_failed'], true))
+                    @elseif(in_array((string)$batch->status, ['approved','needs_review','validation_failed'], true))
                         <form method="POST" action="{{ route('choice-optimization.omr.revalidate',$batch) }}" class="mb-0">
                             @csrf
-                            <button class="btn btn-outline-primary" type="submit">Re-validate OMR Choices</button>
+                            <button class="btn btn-outline-primary" type="submit">{{ $batch->status === 'approved' ? 'Re-validate Against Current Choice Validation' : 'Re-validate OMR Choices' }}</button>
                         </form>
                     @elseif(in_array((string)$batch->status, ['validation_queued','validating'], true))
                         <button class="btn btn-outline-secondary" disabled>Validation in progress…</button>

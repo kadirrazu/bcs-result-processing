@@ -1,5 +1,46 @@
 @extends('layouts.app')
 @section('content')
+<style>
+/* Landing-only alignment helpers: preserve Status/Hash/Action readability while centering numeric/value columns. */
+#allocation-seat-breakup-card tbody td:nth-child(1),
+#allocation-seat-breakup-card tbody td:nth-child(3),
+#allocation-seat-breakup-card tbody td:nth-child(4),
+#allocation-seat-breakup-card tbody td:nth-child(5),
+#allocation-seat-breakup-card tbody td:nth-child(6),
+#allocation-seat-breakup-card tbody td:nth-child(7),
+#allocation-seat-breakup-card tbody td:nth-child(8) { text-align:center; vertical-align:middle; }
+
+#allocation-input-freeze-card tbody td:nth-child(1),
+#allocation-input-freeze-card tbody td:nth-child(4),
+#allocation-input-freeze-card tbody td:nth-child(5),
+#allocation-input-freeze-card tbody td:nth-child(6) { text-align:center; vertical-align:middle; }
+
+#allocation-phase1-card tbody td:nth-child(1),
+#allocation-phase1-card tbody td:nth-child(3),
+#allocation-phase1-card tbody td:nth-child(4),
+#allocation-phase1-card tbody td:nth-child(5),
+#allocation-phase1-card tbody td:nth-child(6),
+#allocation-phase1-card tbody td:nth-child(7),
+#allocation-phase1-card tbody td:nth-child(8),
+#allocation-phase1-card tbody td:nth-child(9),
+#allocation-a4-card tbody td:nth-child(1),
+#allocation-a4-card tbody td:nth-child(2),
+#allocation-a4-card tbody td:nth-child(4),
+#allocation-a4-card tbody td:nth-child(5),
+#allocation-a4-card tbody td:nth-child(6),
+#allocation-a4-card tbody td:nth-child(7),
+#allocation-a4-card tbody td:nth-child(8),
+#allocation-a4-card tbody td:nth-child(9) { text-align:center; vertical-align:middle; }
+
+.allocation-setting-line { display:flex; align-items:center; gap:.5rem; margin-bottom:.5rem; }
+.allocation-setting-label { font-weight:700; color:var(--tblr-body-color); min-width:215px; }
+.allocation-setting-value { color:var(--tblr-primary); font-weight:600; }
+.allocation-stage-summary .summary-row { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:.6rem 0; border-bottom:1px solid var(--tblr-border-color); }
+.allocation-stage-summary .summary-row:last-child { border-bottom:0; }
+.allocation-stage-summary .summary-name { font-weight:700; min-width:190px; }
+.allocation-stage-summary .summary-detail { flex:1; color:var(--tblr-secondary); }
+.allocation-stage-summary .summary-status { min-width:155px; text-align:right; }
+</style>
 <div class="page-header"><div class="container-xl"><h2 class="page-title">Allocation</h2><div class="text-secondary">Deterministic cadre allocation with strict upstream readiness, freeze and integrity gates.</div></div></div>
 <div class="page-body"><div class="container-xl">
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
@@ -7,6 +48,56 @@
 <div class="card mb-3"><div class="card-header"><div><h3 class="card-title">Upstream Readiness & Integrity Board</h3><div class="card-subtitle">Fast landing view uses finalized/stored integrity metadata. Full dataset hashes are re-verified by the strict server-side pre-run gate before Allocation can start.</div></div></div><div class="card-body"><div class="row row-cards">
 @foreach($readiness['checks'] as $check)<div class="col-md-4"><div class="card h-100"><div class="card-body"><div class="d-flex justify-content-between gap-2"><strong>{{ $check['label'] }}</strong><span class="badge bg-{{ $check['ready']?'success':'danger' }}-lt">{{ $check['status'] }}</span></div><div class="small text-secondary mt-2">{{ $check['detail'] }}</div>@if(($check['hash_verified']??null)===true)<div class="small mt-2"><span class="badge bg-success-lt">HASH VERIFIED</span></div>@elseif(($check['stored_hash_present']??false)===true)<div class="small mt-2"><span class="badge bg-azure-lt">FINALIZED HASH ON FILE</span></div>@endif</div></div></div>@endforeach
 </div><div class="mt-3"><strong>Pre-run Gate:</strong> <span class="badge bg-{{ $readiness['ready']?'success':'danger' }}-lt">{{ $readiness['ready']?'READY':'BLOCKED' }}</span> <span class="text-secondary small ms-2">Checked {{ $readiness['checked_at'] }} · {{ strtoupper(str_replace('_',' ', $readiness['verification_mode'] ?? 'strict')) }}</span></div></div></div>
+
+@php
+    /* Operator-facing effective stage summary. Historical/stored rows remain below in each section. */
+    $summarySeat = $seatVersions->first(fn($v) => $v->status === 'finalized') ?: $seatVersions->first();
+    $summaryFreeze = $inputFreezes->first(fn($f) => $f->status === 'frozen') ?: $inputFreezes->first();
+    $summaryA3 = $allocationRuns->first();
+    $summaryA4 = $a4Runs->first();
+
+    $seatSummaryStatus = $summarySeat?->status === 'finalized' ? 'FINALIZED / CURRENT' : ($summarySeat ? strtoupper((string)$summarySeat->status) : 'NOT READY');
+    $seatSummaryClass = $summarySeat?->status === 'finalized' ? 'success' : ($summarySeat ? 'warning' : 'secondary');
+    $seatSummaryDetail = $summarySeat?->status === 'finalized'
+        ? 'Seat Breakup v'.$summarySeat->version.' is the current finalized capacity authority.'
+        : ($summarySeat ? 'Seat Breakup v'.$summarySeat->version.' requires finalization before A2.' : 'Generate/upload and finalize the Circular-authoritative Seat Breakup.');
+
+    $a1SummaryReady = (bool)($settingsInfo['matches_frozen'] ?? false);
+    $a1SummaryStatus = $a1SummaryReady ? 'FROZEN & CURRENT' : 'FREEZE REQUIRED';
+    $a1SummaryClass = $a1SummaryReady ? 'success' : 'warning';
+    $a1SummaryDetail = $a1SummaryReady ? 'Current config hash matches the frozen A1 configuration.' : 'Review config/allocation.php and freeze the current A1 configuration.';
+
+    $a2BusySummary = in_array((string)$state->status, ['input_freeze_queued','input_freeze_running'], true);
+    $a2SummaryStatus = $a2BusySummary ? 'PROCESSING' : ($summaryFreeze?->status === 'frozen' && !(bool)$state->is_stale ? 'FROZEN / CURRENT' : ((bool)$state->is_stale ? 'STALE / RE-FREEZE' : ($summaryFreeze ? strtoupper((string)$summaryFreeze->status) : 'NOT STARTED')));
+    $a2SummaryClass = $a2BusySummary ? 'azure' : ($summaryFreeze?->status === 'frozen' && !(bool)$state->is_stale ? 'success' : ((bool)$state->is_stale ? 'warning' : 'secondary'));
+    $a2SummaryDetail = $a2BusySummary ? ($state->progress_message ?: 'Frozen input and deterministic queues are being rebuilt.') : ((bool)$state->is_stale ? ($state->stale_reason ?: 'Allocation inputs changed; re-freeze A2.') : ($summaryFreeze ? 'Frozen input v'.$summaryFreeze->version.' · '.number_format($summaryFreeze->total_queue_entries).' deterministic queue entries.' : 'Freeze authoritative inputs and build deterministic queues.'));
+
+    $a3SummaryStale = $summaryA3 && (bool)$summaryA3->is_stale;
+    $a3SummaryStatus = !$summaryA3 ? 'NOT STARTED' : ($a3SummaryStale ? 'STALE / OUTDATED' : ($summaryA3->status === 'phase1_complete' ? 'PHASE-1 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA3->status))));
+    $a3SummaryClass = !$summaryA3 ? 'secondary' : ($a3SummaryStale ? 'warning' : ($summaryA3->status === 'phase1_complete' ? 'success' : (str_contains((string)$summaryA3->status, 'failed') ? 'danger' : 'azure')));
+    $a3SummaryDetail = !$summaryA3 ? 'Run A3 after A2 is current.' : ($a3SummaryStale ? ($summaryA3->stale_reason ?: 'A1/A2/Seat Breakup changed; re-run Phase-1.') : ($summaryA3->status === 'phase1_complete' ? 'A3 v'.$summaryA3->version.' is current · '.number_format($summaryA3->allocated_count).' allocated.' : ($state->progress_message ?: 'Phase-1 processing is in progress.')));
+
+    $a4SummaryStale = $summaryA4 && (bool)$summaryA4->is_stale;
+    $a4SummaryStatus = !$summaryA4 ? 'NOT STARTED' : ($a4SummaryStale ? 'STALE / OUTDATED' : ($summaryA4->status === 'a4_complete' ? 'PHASE-2 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA4->status))));
+    $a4SummaryClass = !$summaryA4 ? 'secondary' : ($a4SummaryStale ? 'warning' : ($summaryA4->status === 'a4_complete' ? 'success' : ($summaryA4->status === 'failed' ? 'danger' : 'azure')));
+    $a4SummaryDetail = !$summaryA4 ? 'Run A4 after a current, completed A3 exists.' : ($a4SummaryStale ? ($summaryA4->stale_reason ?: 'A3 or Allocation inputs changed; re-run Phase-2.') : ($summaryA4->status === 'a4_complete' ? 'A4 v'.$summaryA4->version.' is current · '.number_format($summaryA4->allocated_count).' final allocated results after NM/shifting.' : ($summaryA4->progress_message ?: 'Phase-2 processing is in progress.')));
+@endphp
+<div class="card mb-3 allocation-stage-summary" id="allocation-processing-summary">
+    <div class="card-header">
+        <div>
+            <h3 class="card-title">Allocation Processing Summary</h3>
+            <div class="card-subtitle">Operator view of the current authoritative state for each Allocation preparation/processing stage and the next required action.</div>
+        </div>
+        <div class="ms-auto text-end"><span class="badge bg-{{ $readiness['ready'] ? 'success' : 'danger' }}-lt">PRE-RUN GATE {{ $readiness['ready'] ? 'READY' : 'BLOCKED' }}</span></div>
+    </div>
+    <div class="card-body py-2">
+        <div class="summary-row"><div class="summary-name">Seat Breakup</div><div class="summary-detail">{{ $seatSummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $seatSummaryClass }}-lt">{{ $seatSummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A1 — Allocation Settings</div><div class="summary-detail">{{ $a1SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a1SummaryClass }}-lt">{{ $a1SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A2 — Frozen Input</div><div class="summary-detail">{{ $a2SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a2SummaryClass }}-lt">{{ $a2SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A3 — Phase-1</div><div class="summary-detail">{{ $a3SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a3SummaryClass }}-lt">{{ $a3SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A4 — Phase-2</div><div class="summary-detail">{{ $a4SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a4SummaryClass }}-lt">{{ $a4SummaryStatus }}</span></div></div>
+    </div>
+</div>
 <div class="card mb-3" id="allocation-seat-breakup-card">
     <div class="card-header"><div><h3 class="card-title">Seat Breakup</h3><div class="card-subtitle">Initial Allocation preparation: generate, edit and validate the Circular-authoritative MQ/CFF/EM/PHC breakup before freezing A1/A2 inputs.</div></div></div>
     <div class="card-body">
@@ -21,19 +112,22 @@
         </form>
     </div>
     @if($seatVersions->isNotEmpty())
-    <div class="table-responsive border-top"><table class="table table-vcenter mb-0"><thead><tr><th>Version</th><th>Status</th><th>Rows</th><th>Total</th><th>MQ</th><th>CFF</th><th>EM</th><th>PHC</th><th>Hash</th><th></th></tr></thead><tbody>@foreach($seatVersions as $v)<tr><td>v{{ $v->version }}</td><td><span class="badge bg-{{ $v->status==='finalized'?'success':($v->status==='validated'?'azure':'secondary') }}-lt">{{ strtoupper($v->status) }}</span></td><td>{{ $v->total_rows }}</td><td>{{ $v->total_posts }}</td><td>{{ $v->mq_posts }}</td><td>{{ $v->cff_posts }}</td><td>{{ $v->em_posts }}</td><td>{{ $v->phc_posts }}</td><td class="small text-break" style="max-width:220px"><code>{{ $v->dataset_hash ?: '—' }}</code></td><td><div class="btn-list flex-nowrap"><a class="btn btn-sm btn-outline-primary" href="{{ route('allocation.seat-breakup.show',$v) }}">View Data</a><a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.seat-breakup.pdf',$v) }}">PDF</a>@if($v->status==='validated')<form method="POST" action="{{ route('allocation.seat-breakup.finalize',$v) }}">@csrf<button class="btn btn-sm btn-success">Finalize / Freeze</button></form>@endif</div></td></tr>@endforeach</tbody></table></div>
+    <div class="table-responsive border-top"><table class="table table-vcenter mb-0"><thead><tr><th class="text-center">Version</th><th>Status</th><th class="text-center">Rows</th><th class="text-center">Total</th><th class="text-center">MQ</th><th class="text-center">CFF</th><th class="text-center">EM</th><th class="text-center">PHC</th><th>Hash</th><th></th></tr></thead><tbody>@foreach($seatVersions as $v)<tr><td>v{{ $v->version }}</td><td><span class="badge bg-{{ $v->status==='finalized'?'success':($v->status==='validated'?'azure':'secondary') }}-lt">{{ strtoupper($v->status) }}</span></td><td>{{ $v->total_rows }}</td><td>{{ $v->total_posts }}</td><td>{{ $v->mq_posts }}</td><td>{{ $v->cff_posts }}</td><td>{{ $v->em_posts }}</td><td>{{ $v->phc_posts }}</td><td class="small text-break" style="max-width:220px"><code>{{ $v->dataset_hash ?: '—' }}</code></td><td><div class="btn-list flex-nowrap"><a class="btn btn-sm btn-outline-primary" href="{{ route('allocation.seat-breakup.show',$v) }}">View Data</a><a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.seat-breakup.pdf',$v) }}">PDF</a>@if($v->status==='validated')<form method="POST" action="{{ route('allocation.seat-breakup.finalize',$v) }}">@csrf<button class="btn btn-sm btn-success">Finalize / Freeze</button></form>@endif</div></td></tr>@endforeach</tbody></table></div>
     @endif
 </div>
 
 <div class="card mb-3" id="allocation-settings-card">
-    <div class="card-header"><div><h3 class="card-title">A1 — Allocation Settings</h3><div class="card-subtitle">Read-only operational settings. Configure in <code>{{ $settingsInfo['config_file'] }}</code>, then freeze the current configuration before A2.</div></div></div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-md-4"><div class="d-flex justify-content-between align-items-center"><span>Configuration status</span><span class="badge bg-{{ $settingsInfo['matches_frozen'] ? 'success' : 'warning' }}-lt">{{ $settingsInfo['matches_frozen'] ? 'FROZEN & CURRENT' : 'REVIEW / FREEZE REQUIRED' }}</span></div></div>
-            <div class="col-md-4">Quota priority: <code>{{ implode(' → ', $settingsInfo['current']['quota_priority']) }}</code></div>
-            <div class="col-md-4">Provisional target: MQ {{ $settingsInfo['current']['mq_percent'] }}%, CFF {{ $settingsInfo['current']['cff_percent'] }}%, EM {{ $settingsInfo['current']['em_percent'] }}%, PHC {{ $settingsInfo['current']['phc_percent'] }}%</div>
+    <div class="card-header">
+        <div><h3 class="card-title">A1 — Allocation Settings</h3><div class="card-subtitle">Read-only operational settings. Configure in <code>{{ $settingsInfo['config_file'] }}</code>, then freeze the current configuration before A2.</div></div>
+        <div class="ms-auto text-end">
+            <div class="small text-secondary mb-1">Configuration Status</div>
+            <span class="badge bg-{{ $settingsInfo['matches_frozen'] ? 'success' : 'warning' }}-lt">{{ $settingsInfo['matches_frozen'] ? 'FROZEN & CURRENT' : 'REVIEW / FREEZE REQUIRED' }}</span>
         </div>
-        <div class="mt-3"><strong>Quota Breakup Minimum Total Posts:</strong> {{ $settingsInfo['current']['quota_breakup_minimum_total_posts'] }} <span class="badge bg-secondary-lt ms-1">LOCKED RULE</span></div>
+    </div>
+    <div class="card-body">
+        <div class="allocation-setting-line"><span class="allocation-setting-label">Quota Priority</span><span class="allocation-setting-value">{{ implode(' → ', $settingsInfo['current']['quota_priority']) }}</span></div>
+        <div class="allocation-setting-line"><span class="allocation-setting-label">Provisional Target</span><span class="allocation-setting-value">MQ {{ $settingsInfo['current']['mq_percent'] }}% · CFF {{ $settingsInfo['current']['cff_percent'] }}% · EM {{ $settingsInfo['current']['em_percent'] }}% · PHC {{ $settingsInfo['current']['phc_percent'] }}%</span></div>
+        <div class="allocation-setting-line mb-0"><span class="allocation-setting-label">Quota Breakup Minimum Total Post</span><span class="allocation-setting-value">{{ $settingsInfo['current']['quota_breakup_minimum_total_posts'] }}</span><span class="badge bg-secondary-lt ms-1">LOCKED RULE</span></div>
         <div class="small text-secondary mt-1">Quota breakup applies only when sanctioned total posts are 10 or more. For 1–9 posts, all seats are MQ and CFF/EM/PHC are zero.</div>
         <div class="alert alert-info mt-3 mb-0 py-2"><div class="fw-semibold">How to change</div><div class="small">Edit <code>config/allocation.php</code>, then run <code>php artisan config:clear</code> (or rebuild production config cache), review this card, and freeze the current config.</div></div>
         @if($settingsInfo['frozen_hash'])<div class="small text-secondary text-break mt-3">Frozen hash: <code>{{ $settingsInfo['frozen_hash'] }}</code></div>@endif
@@ -84,7 +178,7 @@
     @if($inputFreezes->isNotEmpty())
     <div class="table-responsive">
         <table class="table table-vcenter mb-0">
-            <thead><tr><th>Version</th><th>Status</th><th>Choice Source</th><th>Candidates</th><th>Choice Ready</th><th>Queue Entries</th><th>Queue Hash</th><th></th></tr></thead>
+            <thead><tr><th class="text-center">Version</th><th>Status</th><th>Choice Source</th><th class="text-center">Candidates</th><th class="text-center">Choice Ready</th><th class="text-center">Queue Entries</th><th>Queue Hash</th><th></th></tr></thead>
             <tbody>
             @foreach($inputFreezes as $freeze)
                 <tr>
@@ -124,17 +218,20 @@
                 @if($currentFreeze)
                     <div class="small mt-2">Current frozen input: <strong>v{{ $currentFreeze->version }}</strong> · Queue entries {{ number_format($currentFreeze->total_queue_entries) }}</div>
                 @endif
+                @if($latestRun && (bool)$latestRun->is_stale)
+                    <div class="alert alert-warning py-2 px-3 mt-2 mb-0"><strong>A3 STALE / OUTDATED.</strong> {{ $latestRun->stale_reason ?: 'Allocation inputs changed. Re-run Phase-1.' }}</div>
+                @endif
             </div>
             <div class="col-md-4 text-md-end">
                 <div class="d-inline-flex gap-2 justify-content-md-end align-items-center flex-nowrap">
                     <form class="m-0" method="POST" action="{{ route('allocation.phase-one.start') }}">
                         @csrf
-                        <button class="btn btn-sm btn-primary text-nowrap" {{ $canStartPhase1 ? '' : 'disabled' }}>
-                            {{ $latestRun && $latestRun->status === 'phase1_complete' ? 'Re-run Phase-1' : 'Start Phase-1' }}
+                        <button class="btn btn-sm btn-primary text-nowrap text-uppercase" {{ $canStartPhase1 ? '' : 'disabled' }}>
+                            {{ $latestRun && $latestRun->status === 'phase1_complete' && !(bool)$latestRun->is_stale ? 'Re-run Phase-1' : 'Start Phase-1' }}
                         </button>
                     </form>
                     @if($latestRun && $latestRun->status === 'phase1_complete')
-                        <a class="btn btn-sm btn-success text-nowrap" href="{{ route('allocation.runs.show',$latestRun) }}">View Phase-1 Result</a>
+                        <a class="btn btn-sm btn-success text-nowrap text-uppercase" href="{{ route('allocation.runs.show',$latestRun) }}">View Phase-1 Result</a>
                     @endif
                 </div>
             </div>
@@ -155,12 +252,18 @@
     @if($allocationRuns->isNotEmpty())
     <div class="table-responsive">
         <table class="table table-vcenter mb-0">
-            <thead><tr><th>Run</th><th>Status</th><th>Allocated</th><th>Unallocated</th><th>MQ</th><th>CFF</th><th>EM</th><th>PHC</th><th>Iterations</th><th></th></tr></thead>
+            <thead><tr><th>Run</th><th>Status</th><th>Allocated</th><th>Unallocated</th><th class="text-center">MQ</th><th class="text-center">CFF</th><th class="text-center">EM</th><th class="text-center">PHC</th><th>Iterations</th><th></th></tr></thead>
             <tbody>
             @foreach($allocationRuns as $run)
                 <tr>
                     <td>v{{ $run->version }}</td>
-                    <td><span class="badge bg-{{ $run->status === 'phase1_complete' ? 'success' : ($run->status === 'failed' ? 'danger' : 'azure') }}-lt">{{ strtoupper(str_replace('_',' ', $run->status)) }}</span></td>
+                    <td>
+                        @if((bool)$run->is_stale)
+                            <span class="badge bg-warning-lt">STALE / OUTDATED</span>
+                        @else
+                            <span class="badge bg-{{ $run->status === 'phase1_complete' ? 'success' : ($run->status === 'failed' ? 'danger' : 'azure') }}-lt">{{ strtoupper(str_replace('_',' ', $run->status)) }}</span>
+                        @endif
+                    </td>
                     <td>{{ number_format($run->allocated_count) }}</td>
                     <td>{{ number_format($run->unallocated_count) }}</td>
                     <td>{{ number_format($run->mq_count) }}</td>
@@ -168,7 +271,7 @@
                     <td>{{ number_format($run->em_count) }}</td>
                     <td>{{ number_format($run->phc_count) }}</td>
                     <td>{{ number_format($run->iteration_count) }}</td>
-                    <td class="text-end">@if($run->status === 'phase1_complete')<a class="btn btn-sm btn-success" href="{{ route('allocation.runs.show',$run) }}">View Phase-1 Result</a>@endif</td>
+                    <td class="text-end">@if($run->status === 'phase1_complete')<a class="btn btn-sm btn-secondary" href="{{ route('allocation.runs.show',$run) }}">View Phase-1 Result</a>@endif</td>
                 </tr>
             @endforeach
             </tbody>
@@ -177,7 +280,7 @@
     @endif
 </div>
 @php
-    $latestCompletedA3 = $allocationRuns->first(fn($r) => $r->status === 'phase1_complete');
+    $latestCompletedA3 = $allocationRuns->first(fn($r) => $r->status === 'phase1_complete' && !(bool)$r->is_stale);
     $latestA4 = $a4Runs->first();
     $a4Busy = $latestA4 && in_array((string)$latestA4->status, ['queued','running'], true);
 @endphp
@@ -191,6 +294,9 @@
     <div class="card-body">
         <div class="row g-3 align-items-end">
             <div class="col-md-8">
+                @if($latestA4 && (bool)$latestA4->is_stale)
+                    <div class="alert alert-warning py-2 px-3 mb-2"><strong>A4 STALE / OUTDATED.</strong> {{ $latestA4->stale_reason ?: 'A3 or Allocation inputs changed. Re-run Phase-2 after current A3 is ready.' }}</div>
+                @endif
                 @if($latestCompletedA3)
                     <div>Source Phase-1: <strong>v{{ $latestCompletedA3->version }}</strong> · Allocated {{ number_format($latestCompletedA3->allocated_count) }} · Temporary {{ number_format($latestCompletedA3->temporary_count) }}</div>
                     <div class="small text-secondary mt-1">A4 can only improve TEMPORARY allocations or allocate previously unallocated candidates; FINAL A3 candidates stay locked.</div>
@@ -203,14 +309,17 @@
                     <a class="btn btn-warning" href="{{ route('allocation.a4.processing', $latestA4) }}">View A4 Processing</a>
                 @elseif($latestCompletedA3)
                     <div class="d-inline-flex gap-2 justify-content-md-end align-items-center flex-nowrap">
-                        @if($latestA4 && $latestA4->status === 'a4_complete')
-                            <a class="btn btn-sm btn-success text-nowrap" href="{{ route('allocation.a4.show', $latestA4) }}">View Phase-2 Result</a>
-                        @endif
+                        
                         <form class="m-0" method="POST" action="{{ route('allocation.a4.start', $latestCompletedA3) }}">@csrf
-                            <button class="btn btn-sm btn-primary text-nowrap" type="submit" {{ $readiness['ready'] ? '' : 'disabled' }}>
+                            <button class="btn btn-sm btn-primary text-nowrap text-uppercase" type="submit" {{ $readiness['ready'] ? '' : 'disabled' }}>
                                 {{ $latestA4 ? 'Re-run Phase-2' : 'Start Phase-2' }}
                             </button>
                         </form>
+						
+						@if($latestA4 && $latestA4->status === 'a4_complete')
+                            <a class="btn btn-sm btn-success text-nowrap text-uppercase" href="{{ route('allocation.a4.show', $latestA4) }}">View Phase-2 Result</a>
+                        @endif
+						
                     </div>
                     @if(!$readiness['ready'])
                         <div class="small text-danger mt-2">Pre-run Gate is BLOCKED. A4 Start/Re-Run is disabled until required upstream inputs are READY.</div>
@@ -239,7 +348,13 @@
                 <tr>
                     <td>v{{ $a4->version }}</td>
                     <td>A3 v{{ $a4->phase1Run?->version ?? '—' }}</td>
-                    <td><span class="badge bg-{{ $a4->status === 'a4_complete' ? 'success' : ($a4->status === 'failed' ? 'danger' : 'azure') }}-lt">{{ strtoupper(str_replace('_',' ', $a4->status)) }}</span></td>
+                    <td>
+                        @if((bool)$a4->is_stale)
+                            <span class="badge bg-warning-lt">STALE / OUTDATED</span>
+                        @else
+                            <span class="badge bg-{{ $a4->status === 'a4_complete' ? 'success' : ($a4->status === 'failed' ? 'danger' : 'azure') }}-lt">{{ strtoupper(str_replace('_',' ', $a4->status)) }}</span>
+                        @endif
+                    </td>
                     <td>{{ number_format($a4->allocated_count) }}</td>
                     <td>{{ number_format($a4->unallocated_count) }}</td>
                     <td>{{ number_format($a4->nm_count) }}</td>
@@ -248,7 +363,7 @@
                     <td>{{ number_format($a4->iteration_count) }}</td>
                     <td class="text-end">
                         @if($a4->status === 'a4_complete')
-                            <a class="btn btn-sm btn-success" href="{{ route('allocation.a4.show', $a4) }}">View Phase-2 Result</a>
+                            <a class="btn btn-sm btn-secondary" href="{{ route('allocation.a4.show', $a4) }}">View Phase-2 Result</a>
                         @else
                             <a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.a4.processing', $a4) }}">View A4 Run</a>
                         @endif
@@ -260,7 +375,6 @@
     </div>
     @endif
 </div>
-<div class="card"><div class="card-header"><h3 class="card-title">Processing State</h3></div><div class="card-body"><strong>{{ strtoupper($state->status) }}</strong>@if($state->is_stale)<div class="alert alert-warning mt-2 mb-0">STALE: {{ $state->stale_reason }}</div>@endif<div class="text-secondary small mt-2">A3 processes frozen MQ/CFF/EM/PHC capacity to a Phase-1 fixed point. Quota vacancy conversion and NM/shifting remain pending for A4.</div></div></div>
 </div></div>
 <script>
 (function () {

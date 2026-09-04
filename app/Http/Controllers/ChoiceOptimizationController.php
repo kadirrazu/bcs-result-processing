@@ -16,6 +16,7 @@ use App\Models\ChoiceOptimizationHistoricalMatch;
 use App\Models\ChoiceOptimizationHistoricalSource;
 use App\Models\ChoiceOptimizationProcessingAudit;
 use App\Models\ChoiceOptimizationOmrBatch;
+use App\Models\ChoiceOptimizationProcessingState;
 use App\Models\ChoiceOptimizationOmrStaging;
 use App\Models\ChoiceValidationResult;
 use App\Models\District;
@@ -29,6 +30,8 @@ use App\Services\ChoiceOptimization\ChoiceOptimizationOmrTemplateService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalReviewService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalStalenessService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalChoiceFinalizationService;
+use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalInputService;
+use App\Services\ChoiceOptimization\ChoiceOptimizationUpstreamStaleService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationSettingsService;
 use App\Services\ChoiceValidation\ChoiceValidationFinalizedDatasetService;
 use App\Support\Examinations\ExaminationContext;
@@ -41,9 +44,29 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class ChoiceOptimizationController extends Controller
 {
-    public function index(ChoiceOptimizationSettingsService $settings): View
+    public function index(
+        ChoiceOptimizationSettingsService $settings,
+        ChoiceOptimizationUpstreamStaleService $upstreamStale,
+        ChoiceValidationFinalizedDatasetService $finalizedChoices,
+        ChoiceOptimizationHistoricalInputService $historicalInput,
+    ): View
     {
         $setting = $settings->setting();
+        if ($setting->optimization_enabled) {
+            $upstreamStale->synchronize();
+        }
+
+        // Show the exact current Choice Validation authority and the input-binding
+        // status that a new Optimization run would consume. This provenance is
+        // operator-visible because using an older finalized Choice source is result-affecting.
+        $state = $settings->state();
+        $choiceValidationAuthority = $setting->optimization_enabled
+            ? $finalizedChoices->summary()
+            : ['ready' => false];
+        $optimizationInputBinding = $setting->optimization_enabled
+            ? $historicalInput->bindingSummary()
+            : ['can_process' => false, 'status_label' => 'OPTIMIZATION DISABLED'];
+
         $latestOmrBatch = $setting->optimization_enabled
             ? ChoiceOptimizationOmrBatch::query()->latest('id')->first()
             : null;
@@ -93,9 +116,24 @@ final class ChoiceOptimizationController extends Controller
             $consolidatedHistoricalCount = ChoiceOptimizationConsolidatedHistoricalRecommendation::query()->count();
         }
 
+        /*
+         * The persisted processing status records the last completed stage, while the
+         * operator needs the CURRENT actionable authority state. For example, a row can
+         * legitimately retain status=historical_optimized as historical evidence while
+         * being stale because Choice Validation changed. Never present that as current.
+         */
+        $processingBoardState = $this->choiceOptimizationBoardState(
+            $setting->optimization_enabled,
+            $state,
+            $latestOmrBatch,
+            $optimizationInputBinding,
+        );
+
         return view('choice-optimization.index', [
             'setting' => $setting,
-            'state' => $settings->state(),
+            'state' => $state,
+            'choiceValidationAuthority' => $choiceValidationAuthority,
+            'optimizationInputBinding' => $optimizationInputBinding,
             'latestOmrBatch' => $latestOmrBatch,
             'omrBatches' => $setting->optimization_enabled
                 ? ChoiceOptimizationOmrBatch::query()->latest('id')->limit(10)->get()
@@ -107,6 +145,7 @@ final class ChoiceOptimizationController extends Controller
             'latestGoogleFormBatch' => $latestGoogleFormBatch,
             'googleFormAcceptedCount' => $googleFormAcceptedCount,
             'consolidatedHistoricalCount' => $consolidatedHistoricalCount,
+            'processingBoardState' => $processingBoardState,
         ]);
     }
 
@@ -342,10 +381,25 @@ final class ChoiceOptimizationController extends Controller
     ): RedirectResponse {
         $this->assertOptimizationEnabled($settings);
         abort_unless(
-            in_array((string) $batch->status, ['validated', 'needs_review', 'validation_failed'], true),
+            in_array((string) $batch->status, ['approved', 'validated', 'needs_review', 'validation_failed'], true),
             409,
-            'Only a completed OMR validation can be re-validated.'
+            'Only a completed OMR validation/approval can be re-validated.'
         );
+
+        /*
+         * An already-approved batch may be reused after Choice Validation changes; the
+         * raw OMR evidence has not changed. We re-run only the derived validation against
+         * the new authority. For an approved batch, require it to be the latest upload so
+         * an old historical OMR batch cannot accidentally replace a newer authority.
+         */
+        if ((string) $batch->status === 'approved') {
+            $latestBatchId = (int) (ChoiceOptimizationOmrBatch::query()->max('id') ?? 0);
+            abort_if(
+                $latestBatchId !== (int) $batch->id,
+                409,
+                'Only the latest approved OMR batch can be re-validated for current Optimization.'
+            );
+        }
 
         return $this->queueOmrValidation(
             request: $request,
@@ -851,8 +905,25 @@ final class ChoiceOptimizationController extends Controller
         Request $request,
         ChoiceOptimizationSettingsService $settings,
         ExaminationContext $context,
+        ChoiceValidationFinalizedDatasetService $finalizedChoices,
+        ChoiceOptimizationHistoricalInputService $historicalInput,
     ): RedirectResponse {
         $this->assertOptimizationEnabled($settings);
+
+        // Server-side dependency gate: Optimization may never queue on stale/outdated
+        // Choice Validation, even if a stale UI page or crafted POST bypasses buttons.
+        $finalizedChoices->storedFinalizedSummary();
+
+        // A previous OMR Effective Choice is also an upstream result-affecting source.
+        // It may participate only when bound to this exact finalized Choice Validation
+        // version; stale OMR overrides must be revalidated/re-approved first.
+        $inputBinding = $historicalInput->bindingSummary();
+        abort_if(
+            ! (bool) ($inputBinding['can_process'] ?? false),
+            409,
+            (string) ($inputBinding['message'] ?? 'Choice Optimization input is not bound to current Choice Validation.')
+        );
+        $historicalInput->assertReadyForOptimization();
 
         $googleFormSetting = $settings->setting();
         abort_if(
@@ -948,6 +1019,8 @@ final class ChoiceOptimizationController extends Controller
     public function historicalChoices(
         Request $request,
         ChoiceOptimizationSettingsService $settings,
+        ChoiceValidationFinalizedDatasetService $finalizedChoices,
+        ChoiceOptimizationHistoricalInputService $historicalInput,
     ): View {
         $this->assertOptimizationEnabled($settings);
 
@@ -969,6 +1042,8 @@ final class ChoiceOptimizationController extends Controller
 
         $state = $settings->state();
         $summary = (array) data_get($state->summary, 'historical_choice_optimization', []);
+        $choiceValidationAuthority = $finalizedChoices->summary();
+        $optimizationInputBinding = $historicalInput->bindingSummary();
         $choiceCodeAbbrMap = $this->choiceCodeAbbrMap();
 
         return view('choice-optimization.historical-choices-index', compact(
@@ -977,6 +1052,8 @@ final class ChoiceOptimizationController extends Controller
             'status',
             'search',
             'summary',
+            'choiceValidationAuthority',
+            'optimizationInputBinding',
             'choiceCodeAbbrMap',
         ));
     }
@@ -1097,6 +1174,49 @@ final class ChoiceOptimizationController extends Controller
             ->all();
     }
 
+    /**
+     * Build the operator-facing CURRENT state without destroying the persisted last-stage
+     * evidence. This deliberately gives stale/revalidation requirements precedence over a
+     * historical status such as HISTORICAL_OPTIMIZED.
+     *
+     * @return array{label:string,badge:string,detail:string,stored_status:string}
+     */
+    private function choiceOptimizationBoardState(
+        bool $enabled,
+        ChoiceOptimizationProcessingState $state,
+        ?ChoiceOptimizationOmrBatch $latestOmrBatch,
+        array $inputBinding,
+    ): array {
+        $storedStatus = strtoupper(str_replace('_', ' ', (string) $state->status));
+
+        if (! $enabled) {
+            return ['label' => 'BYPASSED', 'badge' => 'secondary', 'detail' => 'Optimization is disabled.', 'stored_status' => $storedStatus];
+        }
+
+        $batchStatus = (string) ($latestOmrBatch?->status ?? '');
+        if (in_array($batchStatus, ['validation_queued', 'validating'], true)) {
+            return ['label' => 'OMR RE-VALIDATING', 'badge' => 'azure', 'detail' => 'Latest OMR batch is being validated against the current finalized Choice Validation.', 'stored_status' => $storedStatus];
+        }
+
+        if ($batchStatus === 'validated' && ($inputBinding['status'] ?? '') === 'STALE_EFFECTIVE_OVERRIDE_BLOCKED') {
+            return ['label' => 'OMR RE-APPROVAL REQUIRED', 'badge' => 'yellow', 'detail' => 'Re-validation finished. Approve & Consolidate the latest OMR batch before re-processing Optimization.', 'stored_status' => $storedStatus];
+        }
+
+        if (($inputBinding['status'] ?? '') === 'STALE_EFFECTIVE_OVERRIDE_BLOCKED') {
+            return ['label' => 'OMR RE-VALIDATION REQUIRED', 'badge' => 'red', 'detail' => (string) ($inputBinding['message'] ?? 'Latest OMR authority must be re-validated.'), 'stored_status' => $storedStatus];
+        }
+
+        if ((bool) $state->is_stale) {
+            return ['label' => 'STALE / RE-PROCESS REQUIRED', 'badge' => 'yellow', 'detail' => (string) ($state->stale_reason ?: 'Optimization output is stale.'), 'stored_status' => $storedStatus];
+        }
+
+        if ((string) $state->status === 'finalized') {
+            return ['label' => 'FINALIZED / ALLOCATION READY', 'badge' => 'green', 'detail' => 'Current optimized choice output is finalized and current.', 'stored_status' => $storedStatus];
+        }
+
+        return ['label' => $storedStatus, 'badge' => 'secondary', 'detail' => 'Current processing stage.', 'stored_status' => $storedStatus];
+    }
+
     private function queueOmrValidation(
         Request $request,
         ChoiceOptimizationOmrBatch $batch,
@@ -1105,6 +1225,7 @@ final class ChoiceOptimizationController extends Controller
     ): RedirectResponse {
         $examId = $context->currentId();
         abort_if($examId === null, 409, 'No examination is selected.');
+        $previousBatchStatus = (string) $batch->status;
 
         // Preserve raw OMR evidence and operator resolutions. Invalidate only
         // derived validation data so an older validation cannot be treated as current.
@@ -1129,6 +1250,21 @@ final class ChoiceOptimizationController extends Controller
             'validated_at' => null,
             'finished_at' => null,
         ]);
+
+        /*
+         * Re-validating an OMR authority invalidates any previously produced optimized
+         * output until this batch is validated, explicitly re-approved/consolidated and
+         * Historical Optimization is re-run. Keep the old status as evidence, but mark
+         * the authority stale so Allocation cannot consume it in the meantime.
+         */
+        if ($previousBatchStatus === 'approved') {
+            $processingState = ChoiceOptimizationProcessingState::query()
+                ->firstOrCreate(['id' => 1], ['status' => 'not_started']);
+            $processingState->update([
+                'is_stale' => true,
+                'stale_reason' => 'Latest approved OMR batch is being re-validated against the current finalized Choice Validation. Re-approve OMR, then re-process Optimization.',
+            ]);
+        }
 
         ProcessChoiceOptimizationOmrValidation::dispatch(
             (int) $examId,

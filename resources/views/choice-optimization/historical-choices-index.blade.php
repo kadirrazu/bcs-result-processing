@@ -18,7 +18,7 @@
                 @if(!$running)
                     <form method="POST" action="{{ route('choice-optimization.historical-choices.process') }}" class="mb-0">
                         @csrf
-                        <button class="btn btn-outline-primary" type="submit">
+                        <button class="btn btn-outline-primary" type="submit" @disabled(!($optimizationInputBinding['can_process'] ?? false))>
                             {{ $rows->total() > 0 ? 'Re-process' : 'Process' }}
                         </button>
                     </form>
@@ -37,6 +37,42 @@
 
 <div class="page-body">
 <div class="container-xl">
+
+    @php
+        $lastOptimizationCvVersion = (int) data_get($state->source_snapshot, 'choice_validation_version', 0);
+        $lastOptimizationCvHash = (string) data_get($state->source_snapshot, 'choice_validation_hash', '');
+        $currentCvVersion = (int) ($choiceValidationAuthority['validation_version'] ?? 0);
+    @endphp
+
+    <div class="card mb-3">
+        <div class="card-body py-3">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="text-secondary small">Current Finalized Choice Validation</div>
+                    @if($choiceValidationAuthority['ready'] ?? false)
+                        <div class="fw-semibold">Validation v{{ $currentCvVersion }}</div>
+                        <div class="small text-secondary">Source v{{ $choiceValidationAuthority['source_version'] ?? '—' }} · Circular v{{ $choiceValidationAuthority['circular_version'] ?? '—' }}</div>
+                    @else
+                        <span class="badge bg-red-lt">NOT READY</span>
+                    @endif
+                </div>
+                <div class="col-md-4">
+                    <div class="text-secondary small">This Output Used</div>
+                    <div class="fw-semibold">{{ $lastOptimizationCvVersion > 0 ? 'Choice Validation v'.$lastOptimizationCvVersion : '—' }}</div>
+                    @if($lastOptimizationCvHash !== '')<div class="small text-break"><code>{{ $lastOptimizationCvHash }}</code></div>@endif
+                </div>
+                <div class="col-md-4">
+                    <div class="text-secondary small">Next Re-Process Binding</div>
+                    <span class="badge bg-{{ ($optimizationInputBinding['can_process'] ?? false) ? 'green' : 'red' }}-lt">{{ $optimizationInputBinding['status_label'] ?? 'UNKNOWN' }}</span>
+                    <div class="small mt-1">{{ $optimizationInputBinding['message'] ?? '' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if(!($optimizationInputBinding['can_process'] ?? false))
+        <div class="alert alert-danger"><strong>Re-process blocked:</strong> {{ $optimizationInputBinding['message'] ?? 'Choice source binding is not safe.' }}</div>
+    @endif
 
     @if((string)$state->status === 'finalization_failed')
         <div class="alert alert-danger">

@@ -38,6 +38,7 @@ final class AllocationInputFreezeService
         private readonly ChoiceOptimizationHistoricalChoiceService $optimizedChoices,
         private readonly AllocationSettingsService $settings,
         private readonly AllocationSeatBreakupService $seatBreakup,
+        private readonly AllocationRunStaleService $runStale,
     ) {}
 
     /**
@@ -79,7 +80,9 @@ final class AllocationInputFreezeService
         $queueHash = $this->hashQueueRows($built['queues']);
         $this->progress($progress, 'PERSISTING', 90, 'Persisting frozen snapshot and queue rows…');
 
-        return DB::connection('exam')->transaction(function () use ($actorId, $built, $sourceSnapshot, $fingerprint, $queueHash): AllocationInputFreeze {
+        $hadPriorFreeze = AllocationInputFreeze::query()->where('status', 'frozen')->exists();
+
+        $freeze = DB::connection('exam')->transaction(function () use ($actorId, $built, $sourceSnapshot, $fingerprint, $queueHash): AllocationInputFreeze {
             $state = AllocationProcessingState::query()->whereKey(1)->lockForUpdate()->firstOrFail();
             $fromStatus = (string) $state->status;
 
@@ -174,6 +177,18 @@ final class AllocationInputFreezeService
 
             return $freeze->refresh();
         });
+
+        // A2 is a versioned immutable input authority. A successful re-freeze
+        // requires fresh Phase-1/Phase-2 processing even when the data hashes
+        // happen to be identical, so operators can prove exact-version lineage.
+        if ($hadPriorFreeze) {
+            $this->runStale->staleA3AndA4(
+                "A2 Allocation Input Freeze was re-built as v{$freeze->version}. Re-run A3 Phase-1 and A4 Phase-2.",
+                $actorId
+            );
+        }
+
+        return $freeze;
     }
 
     /** Lightweight landing-page verification: no large dataset re-hash. */
