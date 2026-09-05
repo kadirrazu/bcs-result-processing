@@ -20,7 +20,7 @@ final class AllocationA5CadreGroupedMeritDisplayPolishContractTest extends TestC
         // cadre's resolved A4 merit order. REG is deterministic fallback only.
         self::assertStringContainsString("->orderBy('cadre_code')", $controller);
         self::assertGreaterThanOrEqual(2, substr_count($controller, "->orderBy('merit_position')"));
-        self::assertGreaterThanOrEqual(2, substr_count($controller, "->addSelect(['merit_position' => $meritPositionSubquery])"));
+        self::assertGreaterThanOrEqual(2, substr_count($controller, "->addSelect(['merit_position' => \$meritPositionSubquery])"));
 
         // Both operator-facing reports must make the resolved merit evidence visible.
         self::assertStringContainsString('<th>Merit Position</th>', $candidateView);

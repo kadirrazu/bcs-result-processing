@@ -15,9 +15,9 @@ final class ChoiceOptimizationLatestGoogleBatchHistoricalSourceUsageContractTest
         $showView = file_get_contents(resource_path('views/choice-optimization/google-form-show.blade.php'));
         $view = file_get_contents(resource_path('views/choice-optimization/index.blade.php'));
 
-        $this->assertStringContainsString("where('source_batch_id', (int) $latestGoogleFormBatch->id)", $controller);
+        $this->assertStringContainsString("where('source_batch_id', (int) \$latestGoogleFormBatch->id)", $controller);
         $this->assertStringContainsString('latestGoogleFormAuthorityBatch', $consolidated);
-        $this->assertStringContainsString("where('source_batch_id', '<>', (int) $batch->id)", $merge);
+        $this->assertStringContainsString("where('source_batch_id', '<>', (int) \$batch->id)", $merge);
         $this->assertStringContainsString('Only the latest Google Form batch can be approved/merged', $googleController);
         $this->assertStringContainsString('HISTORY ONLY', $showView);
         $this->assertStringContainsString('Latest Batch Accepted', $view);

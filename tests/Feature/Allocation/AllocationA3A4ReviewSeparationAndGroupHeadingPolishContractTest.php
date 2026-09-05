@@ -16,7 +16,7 @@ class AllocationA3A4ReviewSeparationAndGroupHeadingPolishContractTest extends Te
         $a4 = file_get_contents(resource_path('views/allocation/a4-show.blade.php'));
 
         $this->assertStringContainsString("name('runs.candidates')", $routes);
-        $this->assertStringContainsString("allocation.runs.candidates", $a3);
+        $this->assertStringContainsString('allocation.runs.candidates', $a3);
         $this->assertStringNotContainsString('<h3 class="card-title">Phase-1 Candidate Results</h3>', $a3);
         $this->assertStringContainsString('Phase-1 Candidate Results', $a3Candidates);
 
@@ -29,14 +29,13 @@ class AllocationA3A4ReviewSeparationAndGroupHeadingPolishContractTest extends Te
     }
 
     #[Test]
-    public function landing_preserves_section_actions_and_phase_run_log_labels(): void
+    public function landing_preserves_latest_phase_actions_and_run_history_labels(): void
     {
         $view = file_get_contents(resource_path('views/allocation/index.blade.php'));
 
-        $this->assertStringContainsString('View A3 Result', $view);
         $this->assertStringContainsString('View Phase-1 Result', $view);
         $this->assertStringContainsString('View Phase-2 Result', $view);
-        $this->assertStringContainsString('Re-run Phase-1 MQ + Quota', $view);
-        $this->assertStringContainsString('Re-run A4 NM + Shifting', $view);
+        $this->assertStringContainsString("'Re-run Phase-1' : 'Start Phase-1'", $view);
+        $this->assertStringContainsString("'Re-run Phase-2' : 'Start Phase-2'", $view);
     }
 }

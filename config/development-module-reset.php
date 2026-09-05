@@ -194,6 +194,9 @@ return [
                 'allocation_processing_states',
                 'allocation_settings',
             ],
+            'scoped_deletes' => [
+                ['table' => 'reporting_export_runs', 'column' => 'module', 'values' => ['allocation_a6']],
+            ],
             'downstream' => ['Reports and future Non-Cadre Allocation'],
         ],
 

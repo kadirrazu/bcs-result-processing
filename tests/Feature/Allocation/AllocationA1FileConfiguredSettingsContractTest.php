@@ -25,7 +25,8 @@ final class AllocationA1FileConfiguredSettingsContractTest extends TestCase
         self::assertStringContainsString('ALLOCATION_SETTINGS_REFROZEN', $service);
         self::assertStringContainsString("'config_file' => 'config/allocation.php'", $service);
 
-        self::assertStringContainsString('Quota Breakup Minimum Total Posts:', $view);
+        // Latest polished UI intentionally omits punctuation from the label.
+        self::assertStringContainsString('Quota Breakup Minimum Total Post', $view);
         self::assertStringContainsString('LOCKED RULE', $view);
         self::assertStringContainsString('config/allocation.php', $view);
         self::assertStringContainsString('php artisan config:clear', $view);

@@ -31,9 +31,9 @@ class AllocationA2QueuedFreezeReviewPolishContractTest extends TestCase
         $this->assertStringContainsString('@if($q->eligible_cff)', $view);
         $this->assertStringContainsString('@if($q->eligible_em)', $view);
         $this->assertStringContainsString('@if($q->eligible_phc)', $view);
-        $this->assertStringNotContainsString("CFF {{ $q->eligible_cff?'Y':'N' }}", $view);
+        $this->assertStringNotContainsString('CFF {{ $q->eligible_cff?\'Y\':\'N\' }}', $view);
         $this->assertStringNotContainsString('<th>Seats</th>', $view);
-        $this->assertStringContainsString("where('cadre_code', (int) $cadreCode)", $controller);
+        $this->assertStringContainsString('where(\'cadre_code\', (int) $cadreCode)', $controller);
         $this->assertStringContainsString('MAX(total_post) AS total_post', $controller);
     }
 

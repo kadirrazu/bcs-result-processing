@@ -23,7 +23,8 @@ class ChoiceOptimizationCo391FunctionalRevalidationContractTest extends TestCase
 
         $this->assertStringContainsString('choice-optimization.omr.revalidate', $view);
         $this->assertStringContainsString('Re-validate OMR Choices', $view);
-        $this->assertStringContainsString('Re-validation in progress', $view);
+        $this->assertStringContainsString('Validation in progress…', $view);
+        $this->assertStringContainsString('Queue OMR Re-validation', $view);
 
         $this->assertStringContainsString('Processing Action', $view);
         $this->assertStringContainsString('Validated OMR Choice:', $view);

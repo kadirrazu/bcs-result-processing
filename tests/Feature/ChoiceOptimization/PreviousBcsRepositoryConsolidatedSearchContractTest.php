@@ -14,7 +14,7 @@ class PreviousBcsRepositoryConsolidatedSearchContractTest extends TestCase
         $view = file_get_contents(resource_path('views/previous-bcs-repository/search.blade.php'));
 
         $this->assertStringContainsString("/search", $routes);
-        $this->assertStringContainsString("function search(Request $request)", $controller);
+        $this->assertStringContainsString("function search(Request \$request)", $controller);
         $this->assertStringContainsString('current_effective_dataset_id', $controller);
         $this->assertStringContainsString("->where('previous_bcs_repository_rows.name', 'like'", $controller);
         $this->assertStringContainsString('Consolidated Candidate Search', $index);

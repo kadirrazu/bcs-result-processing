@@ -13,7 +13,7 @@ class AllocationA6ChoiceLaneVisualPolishContractTest extends TestCase
         $this->assertStringContainsString('grid-template-columns:repeat(20,minmax(0,1fr))', $view);
         $this->assertStringContainsString('a6-choice-title', $view);
         $this->assertStringContainsString('a6-choice-lane', $view);
-        $this->assertStringContainsString("$key === 'effective' && $allocation", $view);
+        $this->assertStringContainsString("\$key === 'effective' && \$allocation", $view);
         $this->assertStringContainsString('a6-choice-chip-allocated', $view);
         $this->assertStringContainsString('(int)$allocation->cadre_code', $view);
     }

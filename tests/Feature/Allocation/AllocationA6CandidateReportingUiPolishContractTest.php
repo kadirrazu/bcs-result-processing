@@ -14,7 +14,7 @@ final class AllocationA6CandidateReportingUiPolishContractTest extends TestCase
         $detail = file_get_contents(resource_path('views/allocation/a6/candidate-show.blade.php'));
 
         self::assertStringContainsString('$totalCandidates = (clone $baseQuery)->count();', $controller);
-        self::assertStringContainsString("'allocationAbbr'", $service);
+        self::assertStringContainsString("'allocation_abbr'", $service);
         self::assertStringContainsString("'registration_reference'", $service);
         self::assertStringContainsString("'choice_reporting'", $service);
         self::assertStringContainsString('ChoiceOptimizationEffectiveChoice', $service);
@@ -22,7 +22,7 @@ final class AllocationA6CandidateReportingUiPolishContractTest extends TestCase
 
         self::assertStringContainsString('A6 — Reporting &amp; Export - Candidate Search', $list);
         self::assertStringContainsString('Total Candidates', $list);
-        self::assertStringContainsString("$allocationAbbr->get", $list);
+        self::assertStringContainsString("\$allocationAbbr->get", $list);
         self::assertStringContainsString('A6 — Reporting &amp; Export', $list);
 
         self::assertStringContainsString('ALLOCATED TO', $detail);

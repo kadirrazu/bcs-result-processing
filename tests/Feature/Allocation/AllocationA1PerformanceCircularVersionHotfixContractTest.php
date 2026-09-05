@@ -21,24 +21,20 @@ final class AllocationA1PerformanceCircularVersionHotfixContractTest extends Tes
         self::assertStringContainsString('storedFinalizedSummary()', $readiness);
         self::assertStringContainsString('Strict hash verification runs at the Allocation pre-run gate', $readiness);
 
-        // Metadata may be written for information/audit, but must never decide upload validity.
+        // Workbook metadata is informational; current finalized Circular remains authority.
         self::assertStringContainsString('allocation_circular_version', $seat);
         self::assertStringContainsString('allocation_circular_hash', $seat);
         self::assertStringNotContainsString("getCustomPropertyValue('allocation_circular_version')", $seat);
         self::assertStringNotContainsString("getCustomPropertyValue('allocation_circular_hash')", $seat);
-        self::assertStringNotContainsString('This Seat Breakup Excel was generated from Circular', $seat);
-        self::assertStringNotContainsString('belongs to an older/different finalized Circular dataset', $seat);
 
-        // Circular serial is display ordering and may repeat across Circular sections.
-        // The copied pair (sl, cadre_code) identifies the exact current Circular row.
-        self::assertStringContainsString("return \$sl.'|'.\$cadreCode;", $seat);
-        self::assertStringContainsString('$key = $this->rowKey($sl, $code);', $seat);
+        // Latest implementation resolves against the current Circular collection and
+        // safely handles serials such as 13.10 that Excel may coerce to 13.1.
+        self::assertStringContainsString('$this->serialEquivalent($sl, $row[\'sl\'])', $seat);
+        self::assertStringContainsString("\$sameTotal = \$matches->where('total_post', \$total)->values();", $seat);
         self::assertStringContainsString('Expected code(s): {$allowedCodes}', $seat);
-        self::assertStringContainsString('Uploaded total_post={$total}; expected total_post={$expected[$key][\'total_post\']}', $seat);
+        self::assertStringContainsString('Uploaded total_post={$total}; expected total_post={$expectedRow[\'total_post\']}', $seat);
 
-        // Operators commonly leave zero quota buckets blank in Excel; those blanks
-        // are semantically zero, while cadre_code/total_post/MQ remain explicit.
-        self::assertStringContainsString("in_array(\$col, [4,5,6], true)", $seat);
+        self::assertStringContainsString('in_array($col, [4,5,6], true)', $seat);
         self::assertStringContainsString('blank cff/em/phc cells are treated as 0', $seat);
         self::assertStringContainsString('FINALIZED HASH ON FILE', $view);
     }

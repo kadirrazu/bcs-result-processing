@@ -36,9 +36,9 @@ class AllocationA1SeatBreakupPortraitPdfUiPolishContractTest extends TestCase
     {
         $view = file_get_contents(resource_path('views/allocation/seat-breakup-show.blade.php'));
 
-        $this->assertStringContainsString('<th class="text-center">sl</th>', $view);
-        $this->assertStringContainsString('<th>cadre_title / sub_cadre_title</th>', $view);
-        $this->assertStringContainsString('<th class="text-center">cadre_code</th>', $view);
+        $this->assertStringContainsString('<th class="text-center">SL</th>', $view);
+        $this->assertStringContainsString('<th>CADRE TITLE / SUB CADRE TITLE</th>', $view);
+        $this->assertStringContainsString('<th class="text-center">CADRE CODE</th>', $view);
         $this->assertStringContainsString('<td class="text-center">{{ $row->sl }}</td>', $view);
         $this->assertStringContainsString('<td class="text-center">{{ number_format($row->total_post) }}</td>', $view);
     }

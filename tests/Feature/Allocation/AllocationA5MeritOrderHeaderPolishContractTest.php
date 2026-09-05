@@ -18,8 +18,8 @@ final class AllocationA5MeritOrderHeaderPolishContractTest extends TestCase
         // display order from the persisted A4 merit position, not REG/cadre code.
         self::assertGreaterThanOrEqual(2, substr_count($controller, "->select('merit_position')"));
         self::assertGreaterThanOrEqual(2, substr_count($controller, "allocation_a5_candidate_results.allocation_a4_result_id"));
-        self::assertStringNotContainsString("$results = $query->orderBy('cadre_code')->orderBy('reg')", $controller);
-        self::assertStringNotContainsString("$results = $query->orderBy('reg')->paginate(100)", $controller);
+        self::assertStringNotContainsString("\$results = \$query->orderBy('cadre_code')->orderBy('reg')", $controller);
+        self::assertStringNotContainsString("\$results = \$query->orderBy('reg')->paginate(100)", $controller);
 
         // Header controls stay compact and right-aligned alongside the title.
         self::assertStringContainsString('a5-header-actions', $view);

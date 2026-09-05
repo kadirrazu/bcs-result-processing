@@ -15,12 +15,12 @@ final class AllocationA4ProcessingDeterminismHotfixContractTest extends TestCase
         $processing = file_get_contents(resource_path('views/allocation/a4-processing.blade.php'));
 
         $this->assertStringContainsString('$replay = $this->solve($source, null, true);', $service);
-        $this->assertStringContainsString("/a4/runs/{a4Run}/processing", $routes);
+        $this->assertStringContainsString('/a4/runs/{a4Run}/processing', $routes);
         $this->assertStringContainsString('showA4Processing', $controller);
-        $this->assertStringContainsString("route('allocation.a4.processing', $a4Run)", $controller);
+        $this->assertStringContainsString("route('allocation.a4.processing', \$a4Run)", $controller);
         $this->assertStringContainsString('a4-landing-progress-wrap', $landing);
         $this->assertStringContainsString('pollA4()', $landing);
         $this->assertStringContainsString('Dedicated NM + Shifting processing screen', $processing);
-        $this->assertStringContainsString("route('allocation.a4.status', $a4Run)", $processing);
+        $this->assertStringContainsString("route('allocation.a4.status', \$a4Run)", $processing);
     }
 }

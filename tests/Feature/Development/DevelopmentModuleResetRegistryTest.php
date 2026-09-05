@@ -129,6 +129,14 @@ final class DevelopmentModuleResetRegistryTest extends TestCase
         foreach ($this->phpFiles(app_path()) as $file) {
             $contents = (string) file_get_contents($file);
 
+            // Only ImportCorrectionEntry consumers define shared correction scopes.
+            // Other models (for example generic ReportingExportRun) may also have a
+            // `module` column and must not be misclassified as correction scopes.
+            if (! str_contains($contents, 'ImportCorrectionEntry')
+                && ! str_contains($contents, 'import_correction_entries')) {
+                continue;
+            }
+
             preg_match_all(
                 '/where\(\s*[\'"]module[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]\s*\)/',
                 $contents,

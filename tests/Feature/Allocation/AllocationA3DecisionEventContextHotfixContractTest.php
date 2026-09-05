@@ -12,13 +12,20 @@ final class AllocationA3DecisionEventContextHotfixContractTest extends TestCase
     {
         $service = file_get_contents(app_path('Services/Allocation/AllocationPhaseOneService.php'));
 
-        self::assertStringContainsString("\$row['context'] = isset(\$row['context'])", $service);
-        self::assertStringContainsString("json_encode(\$row['context']", $service);
+        self::assertStringContainsString('$row[\'context\'] = isset($row[\'context\'])', $service);
+        self::assertStringContainsString('json_encode($row[\'context\']', $service);
         self::assertStringContainsString('Query Builder bulk insert() bypasses Eloquent casts', $service);
         self::assertStringContainsString("Do NOT use PHP's array-union (+)", $service);
 
-        // Regression guard: the old array-union form kept the raw context array
-        // because left-hand keys take precedence in PHP's + operator.
-        self::assertStringNotContainsString("\$row + [\n                    'allocation_run_id'", $service);
+        // Array-union is safe for ordinary result/ledger rows, but not for decision
+        // event rows because event context must be serialized before Query Builder insert.
+        $start = strpos($service, 'foreach (array_chunk($solution[\'events\'], 1000) as $chunk)');
+        $end = $start === false ? false : strpos($service, 'AllocationDecisionEvent::query()->insert($rows);', $start);
+
+        self::assertNotFalse($start);
+        self::assertNotFalse($end);
+
+        $eventBlock = substr($service, (int) $start, (int) $end - (int) $start);
+        self::assertStringNotContainsString('$row + [', $eventBlock);
     }
 }
