@@ -55,5 +55,23 @@ final class AllocationA2FrozenInputQueueContractTest extends TestCase
         self::assertStringContainsString("name('input-freeze.freeze')", $routes);
         self::assertStringContainsString('Freeze Direct Inputs & Build Queues', $view);
         self::assertStringContainsString('No allocation decision is made in this step', $view);
+
+        // A1 / Seat Breakup are direct frozen A2 inputs. Changing either must retire
+        // the current A2 authority and force a new versioned re-freeze before A3.
+        $settingsService = file_get_contents($root.'/app/Services/Allocation/AllocationSettingsService.php');
+        $seatService = file_get_contents($root.'/app/Services/Allocation/AllocationSeatBreakupService.php');
+        foreach ([$settingsService, $seatService] as $invalidator) {
+            self::assertStringContainsString("AllocationInputFreeze::query()->where('status', 'frozen')->update", $invalidator);
+            self::assertStringContainsString("'status' => 'stale'", $invalidator);
+            self::assertStringContainsString('AllocationA5Run::query()', $invalidator);
+        }
+        self::assertStringContainsString('Allocation input is STALE. Re-freeze direct inputs before starting Phase-1.', file_get_contents($root.'/app/Http/Controllers/AllocationController.php'));
+        self::assertStringContainsString('STALE / OUTDATED', $view);
+        self::assertStringContainsString('Re-Freeze Inputs & Rebuild Queues', $view);
+        $freezeService = file_get_contents($root.'/app/Services/Allocation/AllocationInputFreezeService.php');
+        self::assertStringContainsString("\$hadPriorFreeze = AllocationInputFreeze::query()->exists();", $freezeService);
+        self::assertStringContainsString("whereIn('status', ['frozen', 'stale'])", $freezeService);
+        self::assertStringContainsString("'status' => 'superseded'", $freezeService);
+
     }
 }

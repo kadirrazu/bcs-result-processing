@@ -80,7 +80,7 @@ final class AllocationInputFreezeService
         $queueHash = $this->hashQueueRows($built['queues']);
         $this->progress($progress, 'PERSISTING', 90, 'Persisting frozen snapshot and queue rows…');
 
-        $hadPriorFreeze = AllocationInputFreeze::query()->where('status', 'frozen')->exists();
+        $hadPriorFreeze = AllocationInputFreeze::query()->exists();
 
         $freeze = DB::connection('exam')->transaction(function () use ($actorId, $built, $sourceSnapshot, $fingerprint, $queueHash): AllocationInputFreeze {
             $state = AllocationProcessingState::query()->whereKey(1)->lockForUpdate()->firstOrFail();
@@ -92,7 +92,9 @@ final class AllocationInputFreezeService
                 ]);
             }
 
-            AllocationInputFreeze::query()->where('status', 'frozen')->update(['status' => 'superseded']);
+            AllocationInputFreeze::query()
+                ->whereIn('status', ['frozen', 'stale'])
+                ->update(['status' => 'superseded', 'updated_at' => now()]);
             $nextVersion = ((int) AllocationInputFreeze::query()->max('version')) + 1;
             $now = now();
 

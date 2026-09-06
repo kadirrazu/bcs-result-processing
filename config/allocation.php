@@ -31,6 +31,12 @@ return [
     | Quota breakup applies only when sanctioned total posts are 10 or more.
     | For 1-9 posts: MQ = total_post and CFF/EM/PHC = 0.
     |
+    | For 10+ posts, provisional Excel generation uses largest-remainder
+    | apportionment: floor every exact percentage share first, then assign the
+    | remaining seat(s) by largest fractional remainder. Exact remainder ties
+    | use MQ -> CFF -> EM/PHC priority; EM and PHC are equal business priority
+    | and use a fixed deterministic order only when their remainders also tie.
+    |
     | This value is exposed here for a single transparent source of truth, but
     | Allocation validation intentionally rejects any value other than 10.
     |

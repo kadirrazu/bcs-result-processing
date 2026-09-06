@@ -6,6 +6,7 @@ use App\Models\AllocationA5Run;
 use App\Models\AllocationProcessingAudit;
 use App\Models\Examination;
 use App\Services\Allocation\AllocationA5ValidityService;
+use App\Services\Allocation\AllocationRunStaleService;
 use App\Support\Examinations\ExaminationConnectionManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -26,7 +27,11 @@ final class ProcessAllocationA5 implements ShouldQueue
         $this->onQueue((string) config('allocation.queue', 'imports'));
     }
 
-    public function handle(ExaminationConnectionManager $connections, AllocationA5ValidityService $service): void
+    public function handle(
+        ExaminationConnectionManager $connections,
+        AllocationA5ValidityService $service,
+        AllocationRunStaleService $stale,
+    ): void
     {
         $exam = Examination::query()->findOrFail($this->examinationId);
         $connections->configure($exam);
@@ -43,6 +48,12 @@ final class ProcessAllocationA5 implements ShouldQueue
                     'progress_total'=>max(0,$total),'progress_message'=>$message,
                 ]);
             });
+
+            $completed = AllocationA5Run::query()->findOrFail($run->id);
+            if (in_array((string) $completed->status, ['validated_ok','validated_failed'], true)
+                && ! (bool) $completed->is_stale) {
+                $stale->supersedeEarlierA5ForNewA5($completed, $this->actorId);
+            }
         } catch (Throwable $e) {
             AllocationA5Run::query()->whereKey($this->a5RunId)->update([
                 'status'=>'failed','phase'=>'FAILED','failure_message'=>mb_substr($e->getMessage(),0,65000),

@@ -81,4 +81,31 @@ final class AllocationA55ResultDispositionPublicationControlContractTest extends
         self::assertStringContainsString("'published_active'", $summary);
         self::assertStringContainsString("'allocation_result_disposition_audits'", $reset);
     }
+    public function test_a55_is_bound_to_exact_current_a5_and_new_allocation_does_not_carry_old_dispositions_forward(): void
+    {
+        $service = file_get_contents(app_path('Services/Allocation/AllocationResultDispositionService.php'));
+        $controller = file_get_contents(app_path('Http/Controllers/AllocationDispositionController.php'));
+        $readiness = file_get_contents(app_path('Services/Allocation/AllocationA6ReadinessService.php'));
+        $stale = file_get_contents(app_path('Services/Allocation/AllocationRunStaleService.php'));
+
+        // Disposition state is always scoped by the exact A5 run. Default ACTIVE
+        // is implicit, so a newly-current A5 cannot inherit old WITHHELD/CANCELLED rows.
+        self::assertStringContainsString("['allocation_a5_run_id' => (int) \$a5->id]", $service);
+        self::assertStringContainsString("->where('allocation_a5_run_id', \$a5->id)", $service);
+        self::assertStringContainsString('?: self::ACTIVE', $service);
+
+        // A5.5 entry points consume the current A6/A5 authority rather than a
+        // historical A5 selected from old disposition data.
+        self::assertGreaterThanOrEqual(1, substr_count($controller, '$readiness->requireReady()'));
+        self::assertStringContainsString('A5 is stale and must be re-run/finalized.', $readiness);
+        self::assertStringContainsString('A5 is not bound to the latest current A4 Allocation result.', $readiness);
+
+        // Latest currentness lifecycle: new A4 invalidates older A5; a successful
+        // A5 re-run becomes the single current A5 authority. Historical
+        // disposition evidence remains bound to its original A5 run only.
+        self::assertStringContainsString('staleA5ForNewA4', $stale);
+        self::assertStringContainsString('supersedeEarlierA5ForNewA5', $stale);
+        self::assertStringContainsString('repairFalsePositiveA5ForCurrentA4', $stale);
+    }
+
 }

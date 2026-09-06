@@ -76,7 +76,9 @@ final class AllocationA3PhaseOneEngineContractTest extends TestCase
         self::assertStringContainsString('fetch(url', $index);
         self::assertStringContainsString('phase1-progress-bar', $index);
         self::assertStringContainsString("'Start Phase-1'", $index);
-        self::assertStringContainsString("window.setTimeout(() => window.location.reload(), 700);", $index);
+        self::assertStringContainsString('window.location.reload();', $index);
+        self::assertStringContainsString('window.setTimeout(pollPhaseOne, 1200);', $index);
+        self::assertStringContainsString('window.setTimeout(pollPhaseOne, 500);', $index);
         self::assertStringContainsString('Phase-1 Seat Ledger', $ledger);
         self::assertStringContainsString('A3 Phase-1 Candidate Result', $ledger);
         self::assertStringContainsString('Phase-1 Candidate Results', $candidates);

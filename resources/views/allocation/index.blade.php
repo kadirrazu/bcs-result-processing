@@ -74,17 +74,20 @@
     $a2SummaryDetail = $a2BusySummary ? ($state->progress_message ?: 'Frozen input and deterministic queues are being rebuilt.') : ((bool)$state->is_stale ? ($state->stale_reason ?: 'Allocation inputs changed; re-freeze A2.') : ($summaryFreeze ? 'Frozen input v'.$summaryFreeze->version.' · '.number_format($summaryFreeze->total_queue_entries).' deterministic queue entries.' : 'Freeze authoritative inputs and build deterministic queues.'));
 
     $a3SummaryStale = $summaryA3 && (bool)$summaryA3->is_stale;
-    $a3SummaryStatus = !$summaryA3 ? 'NOT STARTED' : ($a3SummaryStale ? 'STALE / OUTDATED' : ($summaryA3->status === 'phase1_complete' ? 'PHASE-1 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA3->status))));
+    $a3SummarySuperseded = $a3SummaryStale && str_contains((string)$summaryA3->stale_reason, 'historical/superseded');
+    $a3SummaryStatus = !$summaryA3 ? 'NOT STARTED' : ($a3SummaryStale ? ($a3SummarySuperseded ? 'SUPERSEDED' : 'STALE / OUTDATED') : ($summaryA3->status === 'phase1_complete' ? 'PHASE-1 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA3->status))));
     $a3SummaryClass = !$summaryA3 ? 'secondary' : ($a3SummaryStale ? 'warning' : ($summaryA3->status === 'phase1_complete' ? 'success' : (str_contains((string)$summaryA3->status, 'failed') ? 'danger' : 'azure')));
     $a3SummaryDetail = !$summaryA3 ? 'Run A3 after A2 is current.' : ($a3SummaryStale ? ($summaryA3->stale_reason ?: 'A1/A2/Seat Breakup changed; re-run Phase-1.') : ($summaryA3->status === 'phase1_complete' ? 'A3 v'.$summaryA3->version.' is current · '.number_format($summaryA3->allocated_count).' allocated.' : ($state->progress_message ?: 'Phase-1 processing is in progress.')));
 
     $a4SummaryStale = $summaryA4 && (bool)$summaryA4->is_stale;
-    $a4SummaryStatus = !$summaryA4 ? 'NOT STARTED' : ($a4SummaryStale ? 'STALE / OUTDATED' : ($summaryA4->status === 'a4_complete' ? 'PHASE-2 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA4->status))));
+    $a4SummarySuperseded = $a4SummaryStale && str_contains((string)$summaryA4->stale_reason, 'historical/superseded');
+    $a4SummaryStatus = !$summaryA4 ? 'NOT STARTED' : ($a4SummaryStale ? ($a4SummarySuperseded ? 'SUPERSEDED' : 'STALE / OUTDATED') : ($summaryA4->status === 'a4_complete' ? 'PHASE-2 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA4->status))));
     $a4SummaryClass = !$summaryA4 ? 'secondary' : ($a4SummaryStale ? 'warning' : ($summaryA4->status === 'a4_complete' ? 'success' : ($summaryA4->status === 'failed' ? 'danger' : 'azure')));
     $a4SummaryDetail = !$summaryA4 ? 'Run A4 after a current, completed A3 exists.' : ($a4SummaryStale ? ($summaryA4->stale_reason ?: 'A3 or Allocation inputs changed; re-run Phase-2.') : ($summaryA4->status === 'a4_complete' ? 'A4 v'.$summaryA4->version.' is current · '.number_format($summaryA4->allocated_count).' final allocated results after NM/shifting.' : ($summaryA4->progress_message ?: 'Phase-2 processing is in progress.')));
 
     $a5SummaryStale = $summaryA5 && (bool)$summaryA5->is_stale;
-    $a5SummaryStatus = !$summaryA5 ? 'NOT STARTED' : ($a5SummaryStale ? 'STALE / OUTDATED' : match((string)$summaryA5->status) {
+    $a5SummarySuperseded = $a5SummaryStale && str_contains((string)$summaryA5->stale_reason, 'historical/superseded');
+    $a5SummaryStatus = !$summaryA5 ? 'NOT STARTED' : ($a5SummaryStale ? ($a5SummarySuperseded ? 'SUPERSEDED' : 'STALE / OUTDATED') : match((string)$summaryA5->status) {
         'finalized' => 'FINALIZED / REPORTING READY',
         'validated_ok' => '100% PASS / FINALIZE REQUIRED',
         'validated_failed' => 'VALIDATION FAILED / BLOCKED',
@@ -158,6 +161,7 @@
 </div>
 @php
     $hasCurrentFreeze = $inputFreezes->contains(fn($f) => $f->status === 'frozen');
+    $hasPriorFreeze = $inputFreezes->isNotEmpty();
     $freezeBusy = in_array((string)$state->status, ['input_freeze_queued','input_freeze_running'], true);
     $freezeFailed = (string)$state->status === 'input_freeze_failed';
 @endphp
@@ -177,7 +181,7 @@
                 <form method="POST" action="{{ route('allocation.input-freeze.freeze') }}">
                     @csrf
                     <button class="btn btn-primary" {{ (($readiness['upstream_ready'] ?? false) && !$freezeBusy) ? '' : 'disabled' }}>
-                        {{ $hasCurrentFreeze ? 'Re-Freeze Inputs & Rebuild Queues' : 'Freeze Direct Inputs & Build Queues' }}
+                        {{ $hasPriorFreeze ? 'Re-Freeze Inputs & Rebuild Queues' : 'Freeze Direct Inputs & Build Queues' }}
                     </button>
                 </form>
             </div>
@@ -204,7 +208,7 @@
             @foreach($inputFreezes as $freeze)
                 <tr>
                     <td>v{{ $freeze->version }}</td>
-                    <td><span class="badge bg-{{ $freeze->status === 'frozen' ? 'success' : 'secondary' }}-lt">{{ strtoupper($freeze->status) }}</span></td>
+                    <td><span class="badge bg-{{ $freeze->status === 'frozen' ? 'success' : ($freeze->status === 'stale' ? 'warning' : 'secondary') }}-lt">{{ $freeze->status === 'stale' ? 'STALE / OUTDATED' : strtoupper($freeze->status) }}</span></td>
                     <td><code>{{ strtoupper(str_replace('_',' ', $freeze->choice_source)) }}</code></td>
                     <td>{{ number_format($freeze->total_candidates) }}</td>
                     <td>{{ number_format($freeze->choice_ready_candidates) }}</td>
@@ -280,7 +284,11 @@
                     <td>v{{ $run->version }}</td>
                     <td>
                         @if((bool)$run->is_stale)
-                            <span class="badge bg-warning-lt">STALE / OUTDATED</span>
+                            @if(str_contains((string)$run->stale_reason, 'historical/superseded'))
+                                <span class="badge bg-secondary-lt">SUPERSEDED</span>
+                            @else
+                                <span class="badge bg-warning-lt">STALE / OUTDATED</span>
+                            @endif
                         @else
                             <span class="badge bg-{{ $run->status === 'phase1_complete' ? 'success' : ($run->status === 'failed' ? 'danger' : 'azure') }}-lt">{{ strtoupper(str_replace('_',' ', $run->status)) }}</span>
                         @endif
@@ -353,7 +361,7 @@
     <div id="a4-landing-progress-wrap" class="card-body border-top {{ $a4Busy || $latestA4->status === 'failed' ? '' : 'd-none' }}" data-status-url="{{ route('allocation.a4.status', $latestA4) }}">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div><strong id="a4-landing-phase">{{ strtoupper(str_replace('_',' ', $latestA4->phase ?: $latestA4->status)) }}</strong><div class="small text-secondary" id="a4-landing-message">{{ $latestA4->progress_message }}</div></div>
-            <span id="a4-landing-percent">{{ (int)$latestA4->progress_percent }}</span>%
+            <span class="text-secondary text-nowrap"><span id="a4-landing-percent">{{ (int)$latestA4->progress_percent }}</span>%</span>
         </div>
         <div class="progress"><div id="a4-landing-progress-bar" class="progress-bar" style="width: {{ (int)$latestA4->progress_percent }}%"></div></div>
         <div id="a4-landing-counter" class="small text-secondary mt-2 {{ (int)$latestA4->progress_total > 0 ? '' : 'd-none' }}">Processed {{ number_format($latestA4->progress_current) }} / {{ number_format($latestA4->progress_total) }}</div>
@@ -371,7 +379,11 @@
                     <td>A3 v{{ $a4->phase1Run?->version ?? '—' }}</td>
                     <td>
                         @if((bool)$a4->is_stale)
-                            <span class="badge bg-warning-lt">STALE / OUTDATED</span>
+                            @if(str_contains((string)$a4->stale_reason, 'historical/superseded'))
+                                <span class="badge bg-secondary-lt">SUPERSEDED</span>
+                            @else
+                                <span class="badge bg-warning-lt">STALE / OUTDATED</span>
+                            @endif
                         @else
                             <span class="badge bg-{{ $a4->status === 'a4_complete' ? 'success' : ($a4->status === 'failed' ? 'danger' : 'azure') }}-lt">{{ strtoupper(str_replace('_',' ', $a4->status)) }}</span>
                         @endif
@@ -456,8 +468,15 @@
                     <td class="text-center">v{{ $a5->version }}</td>
                     <td class="text-center">A4 v{{ $a5->a4Run?->version ?? '—' }}</td>
                     <td>
-                        @if((bool)$a5->is_stale)<span class="badge bg-warning-lt">STALE / OUTDATED</span>
-                        @else<span class="badge bg-{{ $a5->status === 'finalized' ? 'success' : ($a5->status === 'validated_ok' ? 'azure' : (in_array($a5->status,['validated_failed','failed'],true) ? 'danger' : 'warning')) }}-lt">{{ strtoupper(str_replace('_',' ',(string)$a5->status)) }}</span>@endif
+                        @if((bool)$a5->is_stale)
+                            @if(str_contains((string)$a5->stale_reason, 'historical/superseded'))
+                                <span class="badge bg-secondary-lt">SUPERSEDED</span>
+                            @else
+                                <span class="badge bg-warning-lt">STALE / OUTDATED</span>
+                            @endif
+                        @else
+                            <span class="badge bg-{{ $a5->status === 'finalized' ? 'success' : ($a5->status === 'validated_ok' ? 'azure' : (in_array($a5->status,['validated_failed','failed'],true) ? 'danger' : 'warning')) }}-lt">{{ strtoupper(str_replace('_',' ',(string)$a5->status)) }}</span>
+                        @endif
                     </td>
                     <td class="text-center">{{ number_format($a5->total_allocated) }}</td>
                     <td class="text-center">{{ number_format($a5->candidate_failed) }}</td>

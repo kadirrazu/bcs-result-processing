@@ -103,7 +103,7 @@ final class AllocationController extends Controller
             ])->save();
 
             AllocationProcessingAudit::query()->create([
-                'event' => AllocationInputFreeze::query()->where('status', 'frozen')->exists()
+                'event' => AllocationInputFreeze::query()->exists()
                     ? 'ALLOCATION_INPUT_REFREEZE_QUEUED' : 'ALLOCATION_INPUT_FREEZE_QUEUED',
                 'actor_id' => $actorId,
                 'from_status' => null,
@@ -115,8 +115,8 @@ final class AllocationController extends Controller
 
         ProcessAllocationInputFreeze::dispatch((int) $examId, $actorId ? (int) $actorId : null);
 
-        return back()->with('success', AllocationInputFreeze::query()->where('status', 'frozen')->exists()
-            ? 'Allocation input re-freeze queued. Progress will update below.'
+        return back()->with('success', AllocationInputFreeze::query()->exists()
+            ? 'Allocation input re-freeze queued. A new frozen version and deterministic queues will be built.'
             : 'Allocation input freeze queued. Progress will update below.');
     }
 
@@ -594,11 +594,11 @@ final class AllocationController extends Controller
         abort_if($examId === null, 409, 'No examination selected.');
 
         /*
-         * A4 is a downstream result-affecting phase. Never trust a visible button
-         * or the old A3 status alone: the same strict Allocation pre-run gate must
-         * still be READY at the exact moment A4/Re-Run is requested.
+         * Keep the browser request lightweight. A4's expensive strict integrity
+         * verification is executed by ProcessAllocationA4 after the run is queued.
+         * Here we only reject obviously non-current metadata before creating a job.
          */
-        $gate = $readiness->inspectStrict();
+        $gate = $readiness->inspectDashboard();
         if (! (bool) ($gate['ready'] ?? false)) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'allocation' => 'Allocation Pre-run Gate is BLOCKED. Make all required upstream inputs current/finalized, rebuild the frozen input if required, and re-run A3 before starting A4.',

@@ -18,8 +18,25 @@ class AllocationPhaseStaleLineageContractTest extends TestCase
         self::assertStringContainsString("'is_stale'", $migration);
         self::assertStringContainsString('staleA3AndA4', $service);
         self::assertStringContainsString('staleA4ForNewA3', $service);
+        self::assertStringContainsString('supersedeEarlierA3ForNewA3', $service);
+        self::assertStringContainsString('ALLOCATION_A3_SUPERSEDED_BY_A3_RERUN', $service);
+        self::assertStringContainsString('$validA4Ids', $service);
+        self::assertStringContainsString("->whereNotIn('allocation_a4_run_id', \$validA4Ids)", $service);
+        self::assertStringContainsString('supersedeEarlierA4ForNewA4', $service);
+        self::assertStringContainsString('ALLOCATION_A4_SUPERSEDED_BY_A4_RERUN', $service);
         self::assertStringContainsString('reconcileCurrentness', $service);
         self::assertStringContainsString('staleA4ForNewA3($currentA3)', $service);
+        self::assertStringContainsString("whereIn('status', ['validated_ok','validated_failed','finalized'])", $service);
+        self::assertStringContainsString('Upstream A3/A4 Allocation result is STALE / OUTDATED', $service);
+
+        $phaseOneJob = file_get_contents(app_path('Jobs/ProcessAllocationPhaseOne.php'));
+        self::assertStringContainsString('AllocationRunStaleService $stale', $phaseOneJob);
+        self::assertStringContainsString('supersedeEarlierA3ForNewA3($completed, $this->actorId)', $phaseOneJob);
+        self::assertStringContainsString('staleA4ForNewA3($completed, $this->actorId)', $phaseOneJob);
+
+        $a4Job = file_get_contents(app_path('Jobs/ProcessAllocationA4.php'));
+        self::assertStringContainsString('supersedeEarlierA4ForNewA4($completed, $this->actorId)', $a4Job);
+        self::assertStringContainsString('staleA5ForNewA4($completed, $this->actorId)', $a4Job);
         self::assertStringContainsString('A2 Allocation Input Freeze was re-built', $freeze);
         self::assertStringContainsString('reconcileCurrentness()', $controller);
         self::assertStringContainsString('current non-stale completed A3', $controller);

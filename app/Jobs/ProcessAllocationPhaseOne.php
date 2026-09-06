@@ -7,6 +7,7 @@ use App\Models\AllocationProcessingState;
 use App\Models\AllocationRun;
 use App\Models\Examination;
 use App\Services\Allocation\AllocationPhaseOneService;
+use App\Services\Allocation\AllocationRunStaleService;
 use App\Support\Examinations\ExaminationConnectionManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -31,7 +32,7 @@ final class ProcessAllocationPhaseOne implements ShouldQueue
         $this->onQueue((string) config('allocation.queue', 'imports'));
     }
 
-    public function handle(ExaminationConnectionManager $connections, AllocationPhaseOneService $service): void
+    public function handle(ExaminationConnectionManager $connections, AllocationPhaseOneService $service, AllocationRunStaleService $stale): void
     {
         $exam = Examination::query()->findOrFail($this->examinationId);
         $connections->configure($exam);
@@ -66,6 +67,12 @@ final class ProcessAllocationPhaseOne implements ShouldQueue
                     'progress_message' => $message,
                 ]);
             });
+
+            $completed = AllocationRun::query()->findOrFail($run->id);
+            if ((string) $completed->status === 'phase1_complete' && ! (bool) $completed->is_stale) {
+                $stale->supersedeEarlierA3ForNewA3($completed, $this->actorId);
+                $stale->staleA4ForNewA3($completed, $this->actorId);
+            }
         } catch (Throwable $e) {
             AllocationRun::query()->whereKey($this->allocationRunId)->update([
                 'status' => 'failed',

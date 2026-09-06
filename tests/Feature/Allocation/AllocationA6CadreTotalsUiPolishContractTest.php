@@ -14,7 +14,12 @@ class AllocationA6CadreTotalsUiPolishContractTest extends TestCase
         $this->assertStringContainsString('Total Post', $cadresView);
         $this->assertStringNotContainsString('>Sanctioned<', $cadresView);
         $this->assertStringContainsString("\$cadres->sum", $cadresView);
-        $this->assertStringContainsString('Total Allocated:', $cadreShowView);
-        $this->assertStringContainsString("\$results->total()", $cadreShowView);
+        $this->assertStringContainsString('A5 Allocated:', $cadreShowView);
+        $this->assertStringContainsString('Withheld:', $cadreShowView);
+        $this->assertStringContainsString('Cancelled:', $cadreShowView);
+        $this->assertStringContainsString('Published Active:', $cadreShowView);
+        $this->assertStringContainsString("\$cadre['allocated']", $cadreShowView);
+        $this->assertStringContainsString("\$cadre['published']", $cadreShowView);
+        $this->assertStringContainsString('ACTIVE / Publishable', $cadreShowView);
     }
 }

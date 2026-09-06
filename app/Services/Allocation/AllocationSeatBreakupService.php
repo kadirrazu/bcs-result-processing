@@ -8,6 +8,8 @@ use App\Models\AllocationSeatBreakupRow;
 use App\Models\AllocationSeatBreakupVersion;
 use App\Models\AllocationRun;
 use App\Models\AllocationA4Run;
+use App\Models\AllocationA5Run;
+use App\Models\AllocationInputFreeze;
 use App\Services\Circular\CircularFinalizedDatasetService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -237,10 +239,20 @@ final class AllocationSeatBreakupService
             ]);
 
             if ($reason !== null) {
+                // Seat Breakup is a direct A2 input. Preserve the old immutable
+                // snapshot/queues as history, but retire it immediately.
+                AllocationInputFreeze::query()->where('status', 'frozen')->update([
+                    'status' => 'stale',
+                    'updated_at' => now(),
+                ]);
+
                 AllocationRun::query()->where('status', 'phase1_complete')->where('is_stale', false)->update([
                     'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
                 ]);
                 AllocationA4Run::query()->where('status', 'a4_complete')->where('is_stale', false)->update([
+                    'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
+                ]);
+                AllocationA5Run::query()->whereIn('status', ['validated_ok','validated_failed','finalized'])->where('is_stale', false)->update([
                     'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
                 ]);
             }
@@ -287,11 +299,57 @@ final class AllocationSeatBreakupService
     private function provisionalBreakup(int $total, $settings): array
     {
         if ($total < 10) return [$total, 0, 0, 0];
-        $cff = (int) floor($total * ((int)$settings->cff_percent / 100));
-        $em = (int) floor($total * ((int)$settings->em_percent / 100));
-        $phc = (int) floor($total * ((int)$settings->phc_percent / 100));
-        $mq = $total - $cff - $em - $phc;
-        return [$mq, $cff, $em, $phc];
+
+        // Hamilton/largest-remainder apportionment.
+        //
+        // 1) Give every bucket its whole-number (floor) share.
+        // 2) Distribute the still-unassigned seats by the largest fractional
+        //    remainder, so seat conservation is exact and no bucket is rounded
+        //    independently beyond the sanctioned total.
+        // 3) For an exact remainder tie the locked business priority is:
+        //       MQ -> CFF -> EM/PHC
+        //    EM and PHC are the same business priority (both 1% by default);
+        //    EM-before-PHC below is only a deterministic final tie-break.
+        //
+        // Integer numerators avoid floating-point boundary ambiguity.
+        $percentages = [
+            'mq' => (int) $settings->mq_percent,
+            'cff' => (int) $settings->cff_percent,
+            'em' => (int) $settings->em_percent,
+            'phc' => (int) $settings->phc_percent,
+        ];
+
+        $bucketOrder = ['mq', 'cff', 'em', 'phc'];
+        $tiePriority = ['mq' => 0, 'cff' => 1, 'em' => 2, 'phc' => 2];
+        $stableOrder = array_flip($bucketOrder);
+
+        $seats = [];
+        $remainders = [];
+        foreach ($bucketOrder as $bucket) {
+            $numerator = $total * $percentages[$bucket];
+            $seats[$bucket] = intdiv($numerator, 100);
+            $remainders[$bucket] = $numerator % 100;
+        }
+
+        $remaining = $total - array_sum($seats);
+        if ($remaining > 0) {
+            $ranked = $bucketOrder;
+            usort($ranked, function (string $a, string $b) use ($remainders, $tiePriority, $stableOrder): int {
+                $byRemainder = $remainders[$b] <=> $remainders[$a];
+                if ($byRemainder !== 0) return $byRemainder;
+
+                $byPriority = $tiePriority[$a] <=> $tiePriority[$b];
+                if ($byPriority !== 0) return $byPriority;
+
+                return $stableOrder[$a] <=> $stableOrder[$b];
+            });
+
+            for ($i = 0; $i < $remaining; $i++) {
+                $seats[$ranked[$i]]++;
+            }
+        }
+
+        return [$seats['mq'], $seats['cff'], $seats['em'], $seats['phc']];
     }
 
     private function totals(AllocationSeatBreakupVersion $version): array

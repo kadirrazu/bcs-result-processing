@@ -7,6 +7,8 @@ use App\Models\AllocationProcessingState;
 use App\Models\AllocationSetting;
 use App\Models\AllocationRun;
 use App\Models\AllocationA4Run;
+use App\Models\AllocationA5Run;
+use App\Models\AllocationInputFreeze;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -166,11 +168,22 @@ final class AllocationSettingsService
                     ])->save();
                 }
 
+                // A2 is an immutable snapshot of A1 + Seat Breakup + upstream result inputs.
+                // Do not delete the historical snapshot/queues; explicitly retire it so it
+                // can never be reused as the current Phase-1 authority.
+                AllocationInputFreeze::query()->where('status', 'frozen')->update([
+                    'status' => 'stale',
+                    'updated_at' => now(),
+                ]);
+
                 // Result evidence remains immutable; only currentness metadata changes.
                 AllocationRun::query()->where('status', 'phase1_complete')->where('is_stale', false)->update([
                     'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
                 ]);
                 AllocationA4Run::query()->where('status', 'a4_complete')->where('is_stale', false)->update([
+                    'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
+                ]);
+                AllocationA5Run::query()->whereIn('status', ['validated_ok','validated_failed','finalized'])->where('is_stale', false)->update([
                     'is_stale' => true, 'stale_reason' => $reason, 'staled_at' => now(), 'updated_at' => now(),
                 ]);
             }
