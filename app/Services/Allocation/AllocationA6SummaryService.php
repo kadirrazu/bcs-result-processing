@@ -4,6 +4,7 @@ namespace App\Services\Allocation;
 
 use App\Models\AllocationA4SeatLedger;
 use App\Models\AllocationA5Run;
+use App\Models\AllocationResultDisposition;
 use App\Models\CircularEntry;
 use Illuminate\Support\Collection;
 use RuntimeException;
@@ -34,8 +35,13 @@ final class AllocationA6SummaryService
             ->keyBy('circular_entry_id');
 
         $abbreviations = $this->reports->abbreviations($capacities->pluck('cadre_code'));
+        $dispositionCounts = AllocationResultDisposition::query()
+            ->where('allocation_a5_run_id', (int) $a5->id)
+            ->whereIn('status', ['WITHHELD','CANCELLED'])
+            ->selectRaw('cadre_code, status, COUNT(*) as aggregate')
+            ->groupBy('cadre_code','status')->get()->groupBy('cadre_code');
 
-        return $capacities->map(function ($capacity) use ($entries, $ledgers, $abbreviations): array {
+        return $capacities->map(function ($capacity) use ($entries, $ledgers, $abbreviations, $dispositionCounts): array {
             $entryId = (int) $capacity->circular_entry_id;
             $entry = $entries->get($entryId);
             $ledger = $ledgers->get($entryId);
@@ -62,6 +68,8 @@ final class AllocationA6SummaryService
 
             $meritCapacity = (int) $ledger->merit_capacity;
             $meritAllocated = (int) $ledger->mq_occupied;
+            $withheld = (int) optional($dispositionCounts->get((int) $capacity->cadre_code, collect())->firstWhere('status','WITHHELD'))->aggregate;
+            $cancelled = (int) optional($dispositionCounts->get((int) $capacity->cadre_code, collect())->firstWhere('status','CANCELLED'))->aggregate;
 
             return [
                 'group_rank' => $groupRank,
@@ -77,6 +85,9 @@ final class AllocationA6SummaryService
                 'total_post' => (int) $capacity->sanctioned_posts,
                 'total_allocated' => (int) $capacity->allocated_count,
                 'total_vacant' => (int) $capacity->remaining_posts,
+                'withheld_count' => $withheld,
+                'cancelled_count' => $cancelled,
+                'published_active' => max(0, (int) $capacity->allocated_count - $withheld - $cancelled),
 
                 'mq_post' => $mqPost,
                 'converted_in' => $convertedIn,
@@ -116,7 +127,7 @@ final class AllocationA6SummaryService
     public function totals(Collection $rows): array
     {
         $numeric = [
-            'total_post','total_allocated','total_vacant',
+            'total_post','total_allocated','total_vacant','withheld_count','cancelled_count','published_active',
             'mq_post','converted_in','merit_capacity','merit_allocated','merit_rest',
             'cff_post','cff_allocated','cff_converted','cff_rest',
             'em_post','em_allocated','em_converted','em_rest',
@@ -135,7 +146,7 @@ final class AllocationA6SummaryService
     {
         return [
             'Category','SL','Cadre Code','Cadre Abbreviation','Cadre Name','Post Name',
-            'Total Post','Total Allocated','Total Vacant',
+            'Total Post','Total Allocated','Withheld','Cancelled','Published Active','Total Vacant',
         ];
     }
 
@@ -144,7 +155,7 @@ final class AllocationA6SummaryService
     {
         return [
             $row['category'], $row['serial_label'], $row['cadre_code'], $row['cadre_abbr'], $row['cadre_name'], $row['post_name'],
-            $row['total_post'], $row['total_allocated'], $row['total_vacant'],
+            $row['total_post'], $row['total_allocated'], $row['withheld_count'], $row['cancelled_count'], $row['published_active'], $row['total_vacant'],
         ];
     }
 
@@ -153,7 +164,7 @@ final class AllocationA6SummaryService
     {
         return [
             'Category','SL','Cadre Code','Cadre Abbreviation','Cadre Name','Post Name',
-            'Total Post','Total Allocated','Total Vacant',
+            'Total Post','Total Allocated','Withheld','Cancelled','Published Active','Total Vacant',
             'Merit Pool - Original MQ Post','Merit Pool - NM Converted In','Merit Pool - Capacity','Merit Pool - Allocated','Merit Pool - Rest',
             'CFF - Post','CFF - Allocated','CFF - NM Converted','CFF - Rest',
             'EM - Post','EM - Allocated','EM - NM Converted','EM - Rest',
@@ -167,7 +178,7 @@ final class AllocationA6SummaryService
     {
         return [
             $row['category'], $row['serial_label'], $row['cadre_code'], $row['cadre_abbr'], $row['cadre_name'], $row['post_name'],
-            $row['total_post'], $row['total_allocated'], $row['total_vacant'],
+            $row['total_post'], $row['total_allocated'], $row['withheld_count'], $row['cancelled_count'], $row['published_active'], $row['total_vacant'],
             $row['mq_post'], $row['converted_in'], $row['merit_capacity'], $row['merit_allocated'], $row['merit_rest'],
             $row['cff_post'], $row['cff_allocated'], $row['cff_converted'], $row['cff_rest'],
             $row['em_post'], $row['em_allocated'], $row['em_converted'], $row['em_rest'],

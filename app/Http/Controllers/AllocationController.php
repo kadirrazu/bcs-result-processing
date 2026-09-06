@@ -42,10 +42,15 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class AllocationController extends Controller
 {
-    public function index(AllocationReadinessService $readiness, AllocationSettingsService $settings, \App\Services\Allocation\AllocationRunStaleService $runStale, \App\Services\Allocation\AllocationA6ReadinessService $a6Readiness): View
+    public function index(AllocationReadinessService $readiness, AllocationSettingsService $settings, \App\Services\Allocation\AllocationRunStaleService $runStale, \App\Services\Allocation\AllocationA6ReadinessService $a6Readiness, \App\Services\Allocation\AllocationResultDispositionService $dispositions): View
     {
         // Defensive metadata reconciliation keeps A3/A4 currentness visible even if an upstream change occurred outside a normal UI path.
         $runStale->reconcileCurrentness();
+
+        $a6Gate = $a6Readiness->inspect();
+        $a55Snapshot = ($a6Gate['ready'] ?? false) && $a6Gate['a5']
+            ? $dispositions->snapshot($a6Gate['a5'])
+            : null;
 
         return view('allocation.index', [
             // Landing page must stay fast. Strict/expensive re-hashing is reserved
@@ -62,7 +67,8 @@ final class AllocationController extends Controller
             // visible without mutating or hiding the exact Phase-1 evidence.
             'a4Runs' => AllocationA4Run::query()->with('phase1Run')->latest('version')->limit(5)->get(),
             'a5Runs' => AllocationA5Run::query()->with('a4Run')->latest('version')->limit(5)->get(),
-            'a6Gate' => $a6Readiness->inspect(),
+            'a6Gate' => $a6Gate,
+            'a55Snapshot' => $a55Snapshot,
         ]);
     }
 

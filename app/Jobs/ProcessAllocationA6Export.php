@@ -8,6 +8,7 @@ use App\Models\ReportingExportRun;
 use App\Reports\Pdf\AllocationA6SummaryPdfReport;
 use App\Services\Allocation\AllocationA6ExportService;
 use App\Services\Allocation\AllocationA6ReadinessService;
+use App\Services\Allocation\AllocationResultDispositionService;
 use App\Services\Documents\DocxPlaceholderTemplateService;
 use App\Services\Reporting\ReportExportFileStore;
 use App\Support\Examinations\ExaminationConnectionManager;
@@ -44,6 +45,7 @@ final class ProcessAllocationA6Export implements ShouldQueue
     public function handle(
         ExaminationConnectionManager $connections,
         AllocationA6ReadinessService $readiness,
+        AllocationResultDispositionService $dispositions,
         AllocationA6ExportService $exports,
         AllocationA6SummaryPdfReport $summaryPdf,
         DocxPlaceholderTemplateService $documents,
@@ -59,7 +61,7 @@ final class ProcessAllocationA6Export implements ShouldQueue
 
             $this->update($run, 'running', 'VERIFYING_SOURCE', 3, 'Confirming latest finalized A4/A5 report source.');
             $a5 = $readiness->requireReadyStrict();
-            $this->assertFrozenSource($run, $a5);
+            $this->assertFrozenSource($run, $a5, $dispositions);
 
             $parameters = (array) $run->parameters;
             $progress = function (int $current, int $total, string $message) use ($run): void {
@@ -222,7 +224,7 @@ final class ProcessAllocationA6Export implements ShouldQueue
         return [$path, $name, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
     }
 
-    private function assertFrozenSource(ReportingExportRun $run, AllocationA5Run $a5): void
+    private function assertFrozenSource(ReportingExportRun $run, AllocationA5Run $a5, AllocationResultDispositionService $dispositions): void
     {
         $snapshot = (array) $run->source_snapshot;
         if ((int) ($snapshot['allocation_a5_run_id'] ?? 0) !== (int) $a5->id || (int) $a5->id !== $this->a5RunId) {
@@ -238,6 +240,12 @@ final class ProcessAllocationA6Export implements ShouldQueue
             if ($stored === '' || $actual === '' || ! hash_equals($stored, $actual)) {
                 throw new RuntimeException('A6_EXPORT_SOURCE_HASH_MISMATCH: '.$key.' changed after export was queued.');
             }
+        }
+
+        $disposition = $dispositions->snapshot($a5);
+        $storedDispositionHash = (string) ($snapshot['disposition_hash'] ?? '');
+        if ($storedDispositionHash === '' || ! hash_equals($storedDispositionHash, (string) $disposition['hash'])) {
+            throw new RuntimeException('A6_EXPORT_SOURCE_CHANGED: A5.5 publication disposition changed after export was queued. Regenerate the report.');
         }
     }
 

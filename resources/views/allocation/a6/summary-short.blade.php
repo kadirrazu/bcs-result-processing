@@ -62,7 +62,7 @@
                 <thead><tr class="text-center align-middle">
                     <th>Category</th><th>SL</th><th>Code / Abbr</th>
                     <th class="text-start">Cadre Name</th><th class="text-start">Post Name</th>
-                    <th>Total Post</th><th>Total Allocated</th><th>Total Vacant</th>
+                    <th>Total Post</th><th>Total Allocated</th><th>Withheld</th><th>Cancelled</th><th>Published Active</th><th>Total Vacant</th>
                 </tr></thead>
                 <tbody>
                 @php($lastCategory = null)
@@ -75,6 +75,9 @@
                         <td>{{ $row['post_name'] ?: '—' }}</td>
                         <td class="text-end">{{ number_format($row['total_post']) }}</td>
                         <td class="text-end">{{ number_format($row['total_allocated']) }}</td>
+                        <td class="text-end">{{ number_format($row['withheld_count']) }}</td>
+                        <td class="text-end">{{ number_format($row['cancelled_count']) }}</td>
+                        <td class="text-end fw-bold">{{ number_format($row['published_active']) }}</td>
                         <td class="text-end">{{ number_format($row['total_vacant']) }}</td>
                     </tr>
                     @php($lastCategory = $row['category'])
@@ -84,6 +87,9 @@
                     <td colspan="5" class="text-end">TOTAL</td>
                     <td class="text-end">{{ number_format($totals['total_post']) }}</td>
                     <td class="text-end">{{ number_format($totals['total_allocated']) }}</td>
+                    <td class="text-end">{{ number_format($totals['withheld_count']) }}</td>
+                    <td class="text-end">{{ number_format($totals['cancelled_count']) }}</td>
+                    <td class="text-end">{{ number_format($totals['published_active']) }}</td>
                     <td class="text-end">{{ number_format($totals['total_vacant']) }}</td>
                 </tr></tfoot>
             </table>

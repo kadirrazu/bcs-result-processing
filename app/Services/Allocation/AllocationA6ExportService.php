@@ -42,6 +42,7 @@ final class AllocationA6ExportService
         private readonly AllocationA6ReportService $reports,
         private readonly AllocationA6ExcelFieldCatalog $fieldCatalog,
         private readonly AllocationA6SummaryService $summary,
+        private readonly AllocationResultDispositionService $dispositions,
         private readonly ReportExportFileStore $files,
         private readonly SpreadsheetReportWriter $spreadsheets,
         private readonly ExaminationContext $context,
@@ -106,8 +107,10 @@ final class AllocationA6ExportService
         ?callable $progress = null,
     ): string {
         $exam = $examName ?: (string) ($this->context->current()?->name ?? 'Selected Examination');
-        $totalAllocated = AllocationA4Result::query()
-            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
+        $publishedTotalQuery = AllocationA4Result::query()
+            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id);
+        $totalAllocated = $this->dispositions
+            ->applyPublishedOnly($publishedTotalQuery, $a5, 'allocation_a4_results.registration_id')
             ->count();
 
         $lines = [
@@ -124,9 +127,10 @@ final class AllocationA6ExportService
 
         foreach ($cadres as $index => $row) {
             $code = (int) $row['code'];
-            $regs = AllocationA4Result::query()
+            $regQuery = AllocationA4Result::query()
                 ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
-                ->where('cadre_code', $code)
+                ->where('cadre_code', $code);
+            $regs = $this->dispositions->applyPublishedOnly($regQuery, $a5, 'allocation_a4_results.registration_id')
                 ->orderBy('merit_position')->orderBy('reg')->pluck('reg');
 
             $entry = $row['entry'] ?? null;
@@ -368,6 +372,7 @@ final class AllocationA6ExportService
             'effective_choice' => ChoiceOptimizationEffectiveChoice::query()->whereIn('registration_id', $registrationIds)->get()->keyBy('registration_id'),
             'optimized' => ChoiceOptimizationHistoricalChoice::query()->whereIn('registration_id', $registrationIds)->orderBy('id')->get()->keyBy('registration_id'),
             'allocation' => AllocationA4Result::query()->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)->whereIn('registration_id', $registrationIds)->get()->keyBy('registration_id'),
+            'disposition' => $this->dispositions->dispositionMap($a5, $registrationIds),
             'a5' => $a5->candidateResults()->whereIn('registration_id', $registrationIds)->get()->keyBy('registration_id'),
         ];
     }
@@ -385,6 +390,8 @@ final class AllocationA6ExportService
         $effectiveChoice = $data['effective_choice']->get($registrationId);
         $optimized = $data['optimized']->get($registrationId);
         $allocation = $data['allocation']->get($registrationId);
+        $disposition = $data['disposition']->get($registrationId);
+        $allocationStatus = $allocation ? strtoupper((string) ($disposition?->status ?: 'ACTIVE')) : '';
         $a5 = $data['a5']->get($registrationId);
 
         return match ($field) {
@@ -430,6 +437,11 @@ final class AllocationA6ExportService
             'merit.technical' => $merit?->technical_merit_position,
             'allocation.cadre' => $allocation?->cadre_code,
             'allocation.cadre_abbr' => (string) ($data['abbreviations']->get((int) ($allocation?->cadre_code ?? 0)) ?? ''),
+            'allocation.status' => $allocationStatus,
+            'allocation.withheld' => $allocationStatus === 'WITHHELD' ? 'TRUE' : '',
+            'allocation.withheld_reason' => $allocationStatus === 'WITHHELD' ? (string) ($disposition?->reason ?? '') : '',
+            'allocation.cancelled' => $allocationStatus === 'CANCELLED' ? 'TRUE' : '',
+            'allocation.cancelled_reason' => $allocationStatus === 'CANCELLED' ? (string) ($disposition?->reason ?? '') : '',
             'allocation.basis' => $this->uppercaseText($allocation?->allocation_basis),
             'allocation.choice_position' => $allocation?->choice_position,
             'allocation.movement' => $this->uppercaseText($allocation?->movement_type),
@@ -461,9 +473,11 @@ final class AllocationA6ExportService
         $total = max(1, $cadres->count());
 
         foreach ($cadres as $row) {
+            $query = AllocationA4Result::query()->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
+                ->where('cadre_code', (int) $row['code']);
             $allRegs = $allRegs->concat(
-                AllocationA4Result::query()->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
-                    ->where('cadre_code', (int) $row['code'])->orderBy('merit_position')->orderBy('reg')->pluck('reg')
+                $this->dispositions->applyPublishedOnly($query, $a5, 'allocation_a4_results.registration_id')
+                    ->orderBy('merit_position')->orderBy('reg')->pluck('reg')
             );
         }
 
@@ -471,8 +485,10 @@ final class AllocationA6ExportService
             $code = (int) $row['code'];
             $abbr = strtoupper((string) $row['abbr']);
             $key = $code.'_'.$abbr;
-            $regs = AllocationA4Result::query()->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
-                ->where('cadre_code', $code)->orderBy('merit_position')->orderBy('reg')->pluck('reg');
+            $query = AllocationA4Result::query()->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
+                ->where('cadre_code', $code);
+            $regs = $this->dispositions->applyPublishedOnly($query, $a5, 'allocation_a4_results.registration_id')
+                ->orderBy('merit_position')->orderBy('reg')->pluck('reg');
             $replacements[$key] = $regs->isEmpty()
                 ? 'NO ALLOCATABLE CANDIDATE WAS LEFT FOR THIS POST'
                 : $this->registrationLines($regs->all(), $perLine, $separator);

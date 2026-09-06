@@ -174,6 +174,9 @@ return [
             'label' => 'Allocation',
             'tables' => [
                 'allocation_a6_export_audits',
+                'allocation_result_disposition_audits',
+                'allocation_result_dispositions',
+                'allocation_result_disposition_states',
                 'allocation_a5_candidate_results',
                 'allocation_a5_capacity_results',
                 'allocation_a5_runs',

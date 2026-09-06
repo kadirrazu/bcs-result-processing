@@ -14,6 +14,7 @@ use App\Services\Allocation\AllocationA6ExcelFieldCatalog;
 use App\Services\Allocation\AllocationA6ReadinessService;
 use App\Services\Allocation\AllocationA6ReportService;
 use App\Services\Allocation\AllocationA6SummaryService;
+use App\Services\Allocation\AllocationResultDispositionService;
 use App\Services\Reporting\ReportExportFileStore;
 use App\Support\Examinations\ExaminationContext;
 use Illuminate\Http\JsonResponse;
@@ -25,14 +26,16 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class AllocationA6Controller extends Controller
 {
+    public function __construct(private readonly AllocationResultDispositionService $dispositions) {}
     public function index(AllocationA6ReadinessService $readiness, AllocationA6ReportService $reports): View
     {
         $gate = $readiness->inspect();
         $cadres = $gate['ready'] ? $reports->cadres($gate['a5']) : collect();
+        $dispositionSnapshot = $gate['ready'] ? $this->dispositions->snapshot($gate['a5']) : null;
         $audits = AllocationA6ExportAudit::query()->latest('id')->limit(10)->get();
         $exportRuns = ReportingExportRun::query()->where('module', 'allocation_a6')->latest('id')->limit(10)->get();
 
-        return view('allocation.a6.index', compact('gate', 'cadres', 'audits', 'exportRuns'));
+        return view('allocation.a6.index', compact('gate', 'cadres', 'audits', 'exportRuns', 'dispositionSnapshot'));
     }
 
     public function candidates(Request $request, AllocationA6ReadinessService $readiness, AllocationA6ReportService $reports): View
@@ -76,18 +79,31 @@ final class AllocationA6Controller extends Controller
         return view('allocation.a6.cadres', compact('a5', 'cadres'));
     }
 
-    public function cadre(int $cadreCode, AllocationA6ReadinessService $readiness, AllocationA6ReportService $reports): View
+    public function cadre(Request $request, int $cadreCode, AllocationA6ReadinessService $readiness, AllocationA6ReportService $reports): View
     {
         $a5 = $readiness->requireReady();
         $cadre = $reports->cadres($a5)->firstWhere('code', $cadreCode);
         abort_if($cadre === null, 404);
-        $results = AllocationA4Result::query()
-            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
-            ->where('cadre_code', $cadreCode)
-            ->orderBy('merit_position')->orderBy('reg')->paginate(100);
-        $names = Registration::query()->whereIn('id', $results->pluck('registration_id'))->pluck('name', 'id');
+        $status = strtoupper(trim((string) $request->query('status', 'ACTIVE')));
+        if (! in_array($status, ['ACTIVE','WITHHELD','CANCELLED','ALL_INTERNAL'], true)) $status = 'ACTIVE';
 
-        return view('allocation.a6.cadre-show', compact('a5', 'cadre', 'results', 'names'));
+        $query = AllocationA4Result::query()
+            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
+            ->where('cadre_code', $cadreCode);
+        if ($status === 'ACTIVE') {
+            $this->dispositions->applyPublishedOnly($query, $a5, 'allocation_a4_results.registration_id');
+        } elseif (in_array($status, ['WITHHELD','CANCELLED'], true)) {
+            $query->whereExists(function ($sub) use ($a5, $status): void {
+                $sub->selectRaw('1')->from('allocation_result_dispositions as ard')
+                    ->whereColumn('ard.registration_id', 'allocation_a4_results.registration_id')
+                    ->where('ard.allocation_a5_run_id', $a5->id)->where('ard.status', $status);
+            });
+        }
+        $results = $query->orderBy('merit_position')->orderBy('reg')->paginate(100)->withQueryString();
+        $names = Registration::query()->whereIn('id', $results->pluck('registration_id'))->pluck('name', 'id');
+        $dispositionMap = $this->dispositions->dispositionMap($a5, $results->pluck('registration_id'));
+
+        return view('allocation.a6.cadre-show', compact('a5', 'cadre', 'results', 'names', 'status', 'dispositionMap'));
     }
 
     public function summary(
@@ -321,8 +337,9 @@ final class AllocationA6Controller extends Controller
         $this->assertA6Run($exportRun);
 
         $generatedByUser = $exportRun->generated_by ? User::query()->find((int) $exportRun->generated_by) : null;
+        $outdated = $exportRun->status === 'completed' && ! $this->isDispositionSnapshotCurrent($exportRun);
 
-        return view('allocation.a6.export-show', ['run' => $exportRun, 'generatedByUser' => $generatedByUser]);
+        return view('allocation.a6.export-show', ['run' => $exportRun, 'generatedByUser' => $generatedByUser, 'outdated' => $outdated]);
     }
 
     public function exportStatus(ReportingExportRun $exportRun): JsonResponse
@@ -330,8 +347,9 @@ final class AllocationA6Controller extends Controller
         $this->assertA6Run($exportRun);
         $exportRun->refresh();
 
+        $outdated = $exportRun->status === 'completed' && ! $this->isDispositionSnapshotCurrent($exportRun);
         return response()->json([
-            'status' => $exportRun->status,
+            'status' => $outdated ? 'outdated' : $exportRun->status,
             'phase' => $exportRun->phase,
             'progress_percent' => (int) $exportRun->progress_percent,
             'progress_current' => (int) $exportRun->progress_current,
@@ -339,7 +357,7 @@ final class AllocationA6Controller extends Controller
             'progress_message' => $exportRun->progress_message,
             'failure_message' => $exportRun->failure_message,
             'finished' => $exportRun->isFinished(),
-            'download_url' => $exportRun->status === 'completed' ? route('allocation.a6.exports.download', $exportRun) : null,
+            'download_url' => $exportRun->status === 'completed' && ! $outdated ? route('allocation.a6.exports.download', $exportRun) : null,
         ]);
     }
 
@@ -347,6 +365,15 @@ final class AllocationA6Controller extends Controller
     {
         $this->assertA6Run($exportRun);
         abort_unless($exportRun->status === 'completed', 409, 'Export is not ready for download.');
+        $snapshot = (array) $exportRun->source_snapshot;
+        $a5 = AllocationA5Run::query()->find((int) ($snapshot['allocation_a5_run_id'] ?? 0));
+        abort_unless($a5, 409, 'Export source A5 is unavailable.');
+        $currentDisposition = $this->dispositions->snapshot($a5);
+        abort_if(
+            (string) ($snapshot['disposition_hash'] ?? '') === '' || ! hash_equals((string) $snapshot['disposition_hash'], (string) $currentDisposition['hash']),
+            409,
+            'This A6 export is OUTDATED because A5.5 publication status changed. Regenerate the report before download.'
+        );
         abort_unless($exportRun->file_path && File::isFile($exportRun->file_path), 404, 'Generated export file is missing.');
 
         return response()->download(
@@ -377,6 +404,7 @@ final class AllocationA6Controller extends Controller
         array $parameters,
         ?int $actorId,
     ): ReportingExportRun {
+        $disposition = $this->dispositions->snapshot($a5);
         return ReportingExportRun::query()->create([
             'module' => 'allocation_a6',
             'export_type' => $type,
@@ -395,6 +423,8 @@ final class AllocationA6Controller extends Controller
                 'a5_candidate_hash' => (string) $a5->candidate_result_hash,
                 'a5_capacity_hash' => (string) $a5->capacity_result_hash,
                 'a5_finalized_at' => $a5->finalized_at?->toIso8601String(),
+                'disposition_revision' => $disposition['revision'],
+                'disposition_hash' => $disposition['hash'],
             ],
             'generated_by' => $actorId,
             'queued_at' => now(),
@@ -406,6 +436,18 @@ final class AllocationA6Controller extends Controller
         $examinationId = $context->currentId();
         abort_if($examinationId === null, 409, 'No examination is selected.');
         ProcessAllocationA6Export::dispatch($examinationId, $run->id, $a5->id, $run->generated_by);
+    }
+
+    private function isDispositionSnapshotCurrent(ReportingExportRun $run): bool
+    {
+        $snapshot = (array) $run->source_snapshot;
+        $hash = (string) ($snapshot['disposition_hash'] ?? '');
+        $a5Id = (int) ($snapshot['allocation_a5_run_id'] ?? 0);
+        if ($hash === '' || $a5Id < 1) return false;
+        $a5 = AllocationA5Run::query()->find($a5Id);
+        if (! $a5) return false;
+        $current = $this->dispositions->snapshot($a5);
+        return hash_equals($hash, (string) $current['hash']);
     }
 
     private function assertA6Run(ReportingExportRun $run): void

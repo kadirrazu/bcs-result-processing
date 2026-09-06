@@ -24,7 +24,7 @@ tfoot td { font-weight:bold; background:#f3f5f8; }
             <th rowspan="2" style="width:15mm">Code / Abbr</th>
             <th rowspan="2" style="width:29mm">Cadre Name</th>
             <th rowspan="2" style="width:33mm">Post Name</th>
-            <th colspan="3">Overall</th>
+            <th colspan="6">Overall</th>
             <th colspan="5">Merit Pool</th>
             <th colspan="4">CFF</th>
             <th colspan="4">EM</th>
@@ -32,7 +32,7 @@ tfoot td { font-weight:bold; background:#f3f5f8; }
             <th colspan="3">Phase-2 Movement</th>
         </tr>
         <tr>
-            <th>Post</th><th>Allocated</th><th>Vacant</th>
+            <th>Post</th><th>Allocated</th><th>Withheld</th><th>Cancelled</th><th>Published Active</th><th>Vacant</th>
             <th>Original MQ</th><th>NM Converted In</th><th>Capacity</th><th>Allocated</th><th>Rest</th>
             <th>Post</th><th>Allocated</th><th>NM Converted</th><th>Rest</th>
             <th>Post</th><th>Allocated</th><th>NM Converted</th><th>Rest</th>
@@ -51,6 +51,9 @@ tfoot td { font-weight:bold; background:#f3f5f8; }
             <td class="name">{{ $row['post_name'] ?: '—' }}</td>
             <td class="num">{{ number_format($row['total_post']) }}</td>
             <td class="num">{{ number_format($row['total_allocated']) }}</td>
+            <td class="num">{{ number_format($row['withheld_count']) }}</td>
+            <td class="num">{{ number_format($row['cancelled_count']) }}</td>
+            <td class="num">{{ number_format($row['published_active']) }}</td>
             <td class="num">{{ number_format($row['total_vacant']) }}</td>
             <td class="num">{{ number_format($row['mq_post']) }}</td>
             <td class="num">{{ number_format($row['converted_in']) }}</td>
@@ -81,6 +84,9 @@ tfoot td { font-weight:bold; background:#f3f5f8; }
             <td colspan="5" style="text-align:right">TOTAL</td>
             <td class="num">{{ number_format($totals['total_post']) }}</td>
             <td class="num">{{ number_format($totals['total_allocated']) }}</td>
+            <td class="num">{{ number_format($totals['withheld_count']) }}</td>
+            <td class="num">{{ number_format($totals['cancelled_count']) }}</td>
+            <td class="num">{{ number_format($totals['published_active']) }}</td>
             <td class="num">{{ number_format($totals['total_vacant']) }}</td>
             <td class="num">{{ number_format($totals['mq_post']) }}</td>
             <td class="num">{{ number_format($totals['converted_in']) }}</td>

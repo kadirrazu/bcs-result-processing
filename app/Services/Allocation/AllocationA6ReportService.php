@@ -3,6 +3,7 @@
 namespace App\Services\Allocation;
 
 use App\Models\AllocationA4Result;
+use App\Models\AllocationResultDisposition;
 use App\Models\AllocationA5Run;
 use App\Models\BachelorSubject;
 use App\Models\CadreMaster;
@@ -60,8 +61,14 @@ final class AllocationA6ReportService
         $capacities = $a5->capacityResults()->get();
         $entries = CircularEntry::query()->whereIn('id', $capacities->pluck('circular_entry_id'))->get()->keyBy('id');
         $abbr = $this->abbreviations($capacities->pluck('cadre_code'));
+        $dispositionCounts = AllocationResultDisposition::query()
+            ->where('allocation_a5_run_id', (int) $a5->id)
+            ->whereIn('status', ['WITHHELD','CANCELLED'])
+            ->selectRaw('cadre_code, status, COUNT(*) as aggregate')
+            ->groupBy('cadre_code','status')->get()
+            ->groupBy('cadre_code');
 
-        return $capacities->map(function ($capacity) use ($entries, $abbr): array {
+        return $capacities->map(function ($capacity) use ($entries, $abbr, $dispositionCounts): array {
             $entry = $entries->get((int) $capacity->circular_entry_id);
             return [
                 'capacity' => $capacity,
@@ -69,6 +76,11 @@ final class AllocationA6ReportService
                 'code' => (int) $capacity->cadre_code,
                 'abbr' => (string) $abbr->get((int) $capacity->cadre_code, '—'),
                 'allocated' => (int) $capacity->allocated_count,
+                'withheld' => (int) optional($dispositionCounts->get((int) $capacity->cadre_code, collect())->firstWhere('status','WITHHELD'))->aggregate,
+                'cancelled' => (int) optional($dispositionCounts->get((int) $capacity->cadre_code, collect())->firstWhere('status','CANCELLED'))->aggregate,
+                'published' => max(0, (int) $capacity->allocated_count
+                    - (int) optional($dispositionCounts->get((int) $capacity->cadre_code, collect())->firstWhere('status','WITHHELD'))->aggregate
+                    - (int) optional($dispositionCounts->get((int) $capacity->cadre_code, collect())->firstWhere('status','CANCELLED'))->aggregate),
                 'group_rank' => $this->groupRank((string) ($entry?->cadre_type?->value ?? $entry?->cadre_type ?? '')),
                 'serial' => (int) ($entry?->cadre_serial ?? PHP_INT_MAX),
                 'sub_serial' => $entry?->sub_serial === null ? -1 : (int) $entry->sub_serial,
@@ -138,6 +150,9 @@ final class AllocationA6ReportService
         }
 
         $allocationAbbr = $a4 ? (string) $this->abbreviations(collect([(int) $a4->cadre_code]))->get((int) $a4->cadre_code, '—') : null;
+        $disposition = AllocationResultDisposition::query()
+            ->where('allocation_a5_run_id', (int) $a5->id)
+            ->where('registration_id', (int) $registration->id)->first();
 
         return [
             'registration' => $registration,
@@ -164,6 +179,8 @@ final class AllocationA6ReportService
             'merit' => $meritRunId ? MeritResult::query()->where('processing_run_id', $meritRunId)->where('registration_id', $registration->id)->first() : null,
             'allocation' => $a4,
             'allocation_abbr' => $allocationAbbr,
+            'allocation_status' => (string) ($disposition?->status ?: ($a4 ? 'ACTIVE' : '')),
+            'disposition' => $disposition,
             'a5' => $a5Result,
         ];
     }

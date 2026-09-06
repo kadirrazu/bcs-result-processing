@@ -42,7 +42,9 @@ final class AllocationA6ExcelFieldCatalog
                 'merit.common'=>'Common Merit Position','merit.general'=>'General Merit Position','merit.technical'=>'Technical Merit Position',
             ]],
             'allocation' => ['label' => 'Allocation', 'fields' => [
-                'allocation.cadre'=>'Allocated Cadre Code','allocation.basis'=>'Allocation Basis','allocation.choice_position'=>'Choice Position',
+                'allocation.cadre'=>'Allocated Cadre Code','allocation.status'=>'Allocation Status','allocation.withheld'=>'Withheld',
+                'allocation.withheld_reason'=>'Withheld Reason','allocation.cancelled'=>'Cancelled','allocation.cancelled_reason'=>'Cancelled Reason',
+                'allocation.basis'=>'Allocation Basis','allocation.choice_position'=>'Choice Position',
                 'allocation.movement'=>'Movement','allocation.merit_position'=>'Cadre Merit Position',
             ]],
             'a5' => ['label' => 'A5 Validity', 'fields' => [
@@ -104,20 +106,20 @@ final class AllocationA6ExcelFieldCatalog
     private function expandSelection(array $fields): array
     {
         $companions = [
-            'registration.sex_code' => 'registration.sex',
-            'registration.district_code' => 'registration.district_name',
-            'choice.registration' => 'choice.registration_abbr',
-            'choice.validated' => 'choice.validated_abbr',
-            'choice.omr' => 'choice.omr_abbr',
-            'choice.effective' => 'choice.effective_abbr',
-            'allocation.cadre' => 'allocation.cadre_abbr',
+            'registration.sex_code' => ['registration.sex'],
+            'registration.district_code' => ['registration.district_name'],
+            'choice.registration' => ['choice.registration_abbr'],
+            'choice.validated' => ['choice.validated_abbr'],
+            'choice.omr' => ['choice.omr_abbr'],
+            'choice.effective' => ['choice.effective_abbr'],
+            'allocation.cadre' => ['allocation.cadre_abbr','allocation.status','allocation.withheld','allocation.withheld_reason','allocation.cancelled','allocation.cancelled_reason'],
         ];
 
         $expanded = [];
         foreach ($fields as $field) {
             $expanded[] = $field;
-            if (isset($companions[$field])) {
-                $expanded[] = $companions[$field];
+            foreach (($companions[$field] ?? []) as $companion) {
+                $expanded[] = $companion;
             }
         }
         return array_values(array_unique($expanded));

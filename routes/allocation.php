@@ -1,6 +1,7 @@
 <?php
 use App\Http\Controllers\AllocationController;
 use App\Http\Controllers\AllocationA6Controller;
+use App\Http\Controllers\AllocationDispositionController;
 use App\Http\Middleware\ConfigureExaminationConnection;
 use App\Http\Middleware\EnsureExaminationSelected;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,9 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     Route::get('/a5/runs/{a5Run}/candidates',[AllocationController::class,'showA5Candidates'])->name('a5.candidates');
     Route::get('/a5/runs/{a5Run}/cadre/{circularEntry}',[AllocationController::class,'showA5CadreResults'])->name('a5.cadre-results');
     Route::post('/a5/runs/{a5Run}/finalize',[AllocationController::class,'finalizeA5'])->name('a5.finalize');
+    Route::get('/a5-5',[AllocationDispositionController::class,'index'])->name('disposition.index');
+    Route::get('/a5-5/candidates/{registrationId}',[AllocationDispositionController::class,'show'])->name('disposition.show');
+    Route::put('/a5-5/candidates/{registrationId}',[AllocationDispositionController::class,'update'])->name('disposition.update');
     Route::get('/a6',[AllocationA6Controller::class,'index'])->name('a6.index');
     Route::get('/a6/candidates',[AllocationA6Controller::class,'candidates'])->name('a6.candidates');
     Route::get('/a6/candidates/{reg}',[AllocationA6Controller::class,'candidate'])->name('a6.candidate');

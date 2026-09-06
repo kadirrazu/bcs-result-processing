@@ -24,9 +24,12 @@
         @if (session('success'))
             <div class="alert alert-success">{{ session('success') }}</div>
         @endif
+        @if($outdated)
+            <div class="alert alert-warning"><strong>OUTDATED:</strong> A5.5 publication status changed after this export was generated. Download is blocked; regenerate the report from the current publication state.</div>
+        @endif
 
         @php
-            $statusBadge = match ($run->status) {
+            $statusBadge = $outdated ? 'warning' : match ($run->status) {
                 'completed' => 'success',
                 'failed' => 'danger',
                 default => 'azure',
@@ -45,7 +48,7 @@
                 <h3 class="card-title">Export Progress</h3>
                 <div class="ms-auto">
                     <span id="a6-export-status" class="badge bg-{{ $statusBadge }}-lt">
-                        {{ strtoupper($run->status) }}
+                        {{ $outdated ? 'OUTDATED' : strtoupper($run->status) }}
                     </span>
                 </div>
             </div>
@@ -91,7 +94,7 @@
                 </div>
 
                 <div class="mt-3" id="a6-export-download-wrap">
-                    @if ($run->status === 'completed')
+                    @if ($run->status === 'completed' && !$outdated)
                         <a
                             id="a6-export-download"
                             class="btn btn-success"

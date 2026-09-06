@@ -29,6 +29,10 @@
             <div class="col-md-3"><div class="text-secondary">Circular Version</div><div class="fw-bold">v{{ $gate['circular_version'] }}</div></div>
             <div class="col-md-3"><div class="text-secondary">A5 Finalized</div><div class="fw-bold">{{ $gate['a5_finalized_at']?->format('d-m-Y h:i A') }}</div></div>
         </div>
+        @if($dispositionSnapshot)
+        <hr class="my-3"><div class="row g-3 align-items-center"><div class="col-md-8"><strong>A5.5 Publication State</strong><div class="text-secondary small">ACTIVE {{ number_format($dispositionSnapshot['active']) }} · WITHHELD {{ number_format($dispositionSnapshot['withheld']) }} · CANCELLED {{ number_format($dispositionSnapshot['cancelled']) }} · Revision {{ number_format($dispositionSnapshot['revision']) }}</div></div><div class="col-md-4 text-md-end"><a class="btn btn-outline-primary" href="{{ route('allocation.disposition.index') }}">Open A5.5 Control</a></div></div>
+        <div class="alert alert-warning mt-3 mb-0 py-2"><strong>Publication safety:</strong> public TXT/DOCX and default cadre publication views contain ACTIVE candidates only. WITHHELD/CANCELLED remain internal allocation evidence and are exposed only through explicit internal reporting/status fields.</div>
+        @endif
         @else
         <div class="alert alert-warning mb-0"><strong>Reporting/Export is locked.</strong> {{ $gate['reason'] }}</div>
         @endif

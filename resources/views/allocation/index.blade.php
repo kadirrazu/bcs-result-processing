@@ -562,9 +562,6 @@
             if (data.status === 'phase1_failed') {
                 error.textContent = data.error || 'Allocation Phase-1 failed.';
                 error.classList.remove('d-none');
-                // Refresh the server-rendered controls so a failed queued attempt
-                // does not leave the Start Phase-1 button visually disabled.
-                window.setTimeout(() => window.location.reload(), 700);
                 return;
             }
             if (!busyStatuses.includes(data.status)) {
@@ -652,6 +649,26 @@
     setTimeout(pollA5,500);
 })();
 </script>
+
+{{-- A5.5 is a publication-control layer over finalized A5. It never releases seats or mutates Allocation evidence. --}}
+<div class="container-xl">
+<div class="card mt-3 mb-3" id="allocation-a55-card">
+    <div class="card-header">
+        <div><h3 class="card-title">A5.5 — Result Disposition / Publication Control</h3><div class="card-subtitle">Operator-controlled ACTIVE / WITHHELD / CANCELLED publication status after final Allocation. No seat release and no reallocation.</div></div>
+        <div class="ms-auto"><span class="badge bg-{{ ($a6Gate['ready'] ?? false) ? 'success' : 'secondary' }}-lt">{{ ($a6Gate['ready'] ?? false) ? 'ACTIVE / READY' : 'INACTIVE / BLOCKED' }}</span></div>
+    </div>
+    <div class="card-body d-flex align-items-center justify-content-between gap-3 flex-wrap">
+        <div class="text-secondary">
+            @if($a55Snapshot)
+                A5 allocated {{ number_format($a6Gate['a5']?->total_allocated ?? 0) }} · ACTIVE {{ number_format($a55Snapshot['active']) }} · WITHHELD {{ number_format($a55Snapshot['withheld']) }} · CANCELLED {{ number_format($a55Snapshot['cancelled']) }}
+            @else
+                Finalize a current 100% PASS A5 result before publication disposition control.
+            @endif
+        </div>
+        <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.disposition.index') : '#' }}">Open A5.5 Publication Control</a>
+    </div>
+</div>
+</div>
 
 {{-- A6 is a read-only downstream publishing layer. It stays visibly locked until A1-A5 are current and A5 is finalized at 100% PASS. --}}
 <div class="container-xl">
