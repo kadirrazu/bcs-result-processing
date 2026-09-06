@@ -562,6 +562,9 @@
             if (data.status === 'phase1_failed') {
                 error.textContent = data.error || 'Allocation Phase-1 failed.';
                 error.classList.remove('d-none');
+                // Refresh the server-rendered controls so a failed queued attempt
+                // does not leave the Start Phase-1 button visually disabled.
+                window.setTimeout(() => window.location.reload(), 700);
                 return;
             }
             if (!busyStatuses.includes(data.status)) {

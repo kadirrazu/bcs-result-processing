@@ -36,8 +36,24 @@
 </div>
 <div class="card mb-3">
     <div class="card-header"><div><h3 class="card-title">Recent A4 Movement Audit</h3><div class="card-subtitle">Persistent movement evidence; this review shows the latest 100 candidate events.</div></div></div>
-    <div class="table-responsive"><table class="table table-vcenter mb-0 a4-movement-table"><thead><tr><th>Seq</th><th>Iteration</th><th>Actor</th><th>Reg ID</th><th>Event</th><th>From</th><th>To</th><th>Merit</th><th>Movement</th><th>Reason</th><th>Converted From</th></tr></thead><tbody>
-    @forelse($movements as $event)<tr><td>{{ $event->sequence_no }}</td><td>{{ $event->iteration_no }}</td><td>{{ $event->actor_id ?: '—' }}</td><td>{{ $event->registration_id }}</td><td>{{ $event->event }}</td><td>{{ $event->from_cadre_code ?: '—' }}@if($event->from_basis) / {{ $event->from_basis }}@endif</td><td>{{ $event->to_cadre_code ?: '—' }}@if($event->to_basis) / {{ $event->to_basis }}@endif</td><td>{{ $event->target_merit_position ? number_format($event->target_merit_position) : '—' }}</td><td>{{ $event->movement_type ?: '—' }}</td><td><code>{{ $event->reason }}</code></td><td>{{ $event->converted_from ?: '—' }}</td></tr>
+    <div class="table-responsive"><table class="table table-vcenter mb-0 a4-movement-table"><thead><tr><th>Seq</th><th>Iteration</th><th>Operator</th><th>Reg</th><th>Event</th><th>From</th><th>To</th><th>Merit</th><th>Movement</th><th>Reason</th><th>Converted From</th></tr></thead><tbody>
+    @forelse($movements as $event)
+        @php($operator = $movementOperators->get((int) $event->actor_id))
+        @php($fromAbbr = $event->from_cadre_code ? $abbreviationByCode->get((int) $event->from_cadre_code, '') : '')
+        @php($toAbbr = $event->to_cadre_code ? $abbreviationByCode->get((int) $event->to_cadre_code, '') : '')
+        <tr>
+            <td>{{ $event->sequence_no }}</td>
+            <td>{{ $event->iteration_no }}</td>
+            <td>@if($operator){{ $event->actor_id }} - {{ $operator->name }}@elseif($event->actor_id){{ $event->actor_id }} - Unknown Operator @else System @endif</td>
+            <td><strong>{{ $movementRegistrationNumbers->get((int) $event->registration_id, '—') }}</strong></td>
+            <td>{{ $event->event }}</td>
+            <td>{{ $event->from_cadre_code ?: '—' }}@if($fromAbbr !== '') - {{ $fromAbbr }}@endif @if($event->from_basis)/ {{ $event->from_basis }}@endif</td>
+            <td>{{ $event->to_cadre_code ?: '—' }}@if($toAbbr !== '') - {{ $toAbbr }}@endif @if($event->to_basis)/ {{ $event->to_basis }}@endif</td>
+            <td>{{ $event->target_merit_position ? number_format($event->target_merit_position) : '—' }}</td>
+            <td>{{ $event->movement_type ?: '—' }}</td>
+            <td><code>{{ $event->reason }}</code></td>
+            <td>{{ $event->converted_from ?: '—' }}</td>
+        </tr>
     @empty<tr><td colspan="11" class="text-center text-secondary py-4">No candidate movement event.</td></tr>@endforelse
     </tbody></table></div>
 </div>

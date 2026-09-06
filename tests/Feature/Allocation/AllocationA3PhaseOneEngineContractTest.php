@@ -34,6 +34,7 @@ final class AllocationA3PhaseOneEngineContractTest extends TestCase
         self::assertStringContainsString('higher-choice quota beats lower-choice MQ', $service);
         self::assertStringContainsString('DOES NOT convert vacant quota seats to merit/NM', $service);
         self::assertStringContainsString('AWAITING_A4_NM_SHIFTING', $service);
+        self::assertStringContainsString('return $completed;', $service);
     }
 
     #[Test]
@@ -75,6 +76,7 @@ final class AllocationA3PhaseOneEngineContractTest extends TestCase
         self::assertStringContainsString('fetch(url', $index);
         self::assertStringContainsString('phase1-progress-bar', $index);
         self::assertStringContainsString("'Start Phase-1'", $index);
+        self::assertStringContainsString("window.setTimeout(() => window.location.reload(), 700);", $index);
         self::assertStringContainsString('Phase-1 Seat Ledger', $ledger);
         self::assertStringContainsString('A3 Phase-1 Candidate Result', $ledger);
         self::assertStringContainsString('Phase-1 Candidate Results', $candidates);

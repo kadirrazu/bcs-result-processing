@@ -213,6 +213,8 @@ final class AllocationPhaseOneService
 
             return $lockedRun->refresh();
         });
+
+        return $completed;
     }
 
     /**

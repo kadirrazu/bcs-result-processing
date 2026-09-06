@@ -18,6 +18,8 @@ use App\Models\AllocationA5Run;
 use App\Models\AllocationA5CandidateResult;
 use App\Models\AllocationA5CapacityResult;
 use App\Models\CircularEntry;
+use App\Models\Registration;
+use App\Models\User;
 use App\Jobs\ProcessAllocationInputFreeze;
 use App\Jobs\ProcessAllocationPhaseOne;
 use App\Jobs\ProcessAllocationA4;
@@ -757,9 +759,22 @@ final class AllocationController extends Controller
             ->limit(100)
             ->get();
 
+        // Movement audit stores immutable internal IDs. Resolve operator-facing identity
+        // in bulk for review only; do not duplicate mutable names/registration values
+        // into the allocation evidence rows.
+        $movementRegistrationNumbers = Registration::query()
+            ->whereIn('id', $movements->pluck('registration_id')->filter()->unique()->values())
+            ->pluck('reg', 'id');
+
+        $movementOperators = User::query()
+            ->whereIn('id', $movements->pluck('actor_id')->filter()->unique()->values())
+            ->get(['id', 'name'])
+            ->keyBy('id');
+
         return view('allocation.a4-candidates', compact(
             'a4Run', 'results', 'reg', 'cadreCode', 'basis', 'movement',
-            'cadreOptions', 'abbreviationByCode', 'movements'
+            'cadreOptions', 'abbreviationByCode', 'movements',
+            'movementRegistrationNumbers', 'movementOperators'
         ));
     }
 

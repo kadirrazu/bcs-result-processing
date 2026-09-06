@@ -38,5 +38,14 @@ final class AllocationA4ReviewUiGatePolishContractTest extends TestCase
         $this->assertStringContainsString('name="ledger_cadre_code"', $ledger);
         $this->assertStringContainsString("route('allocation.a4.cadre-results',[\$a4Run,\$entry])", $ledger);
         $this->assertStringContainsString('Filtered candidates:', $cadre);
+
+        // Recent A4 movement review shows operator-facing identities, not internal registration IDs.
+        $this->assertStringContainsString('<th>Operator</th><th>Reg</th>', $candidates);
+        $this->assertStringNotContainsString('<th>Actor</th><th>Reg ID</th>', $candidates);
+        $this->assertStringContainsString('$movementRegistrationNumbers->get((int) $event->registration_id', $candidates);
+        $this->assertStringContainsString('$event->actor_id }} - {{ $operator->name', $candidates);
+        $this->assertStringContainsString('$abbreviationByCode->get((int) $event->from_cadre_code', $candidates);
+        $this->assertStringContainsString('$abbreviationByCode->get((int) $event->to_cadre_code', $candidates);
+        $this->assertStringContainsString("'movementRegistrationNumbers', 'movementOperators'", $controller);
     }
 }
