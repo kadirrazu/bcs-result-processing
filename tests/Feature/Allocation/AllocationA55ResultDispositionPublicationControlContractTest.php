@@ -25,7 +25,20 @@ final class AllocationA55ResultDispositionPublicationControlContractTest extends
         self::assertStringNotContainsString('AllocationSeatLedger', $service);
         self::assertStringContainsString("Route::get('/a5-5'", $routes);
         self::assertStringContainsString('A5.5 — Result Disposition / Publication Control', $view);
+        self::assertStringContainsString('name="cadre_code"', $view);
+        self::assertStringContainsString('All Cadres', $view);
+        self::assertStringContainsString('text-warning', $view);
         self::assertStringContainsString('No seat release / no reallocation.', $show);
+
+        $controller = file_get_contents(app_path('Http/Controllers/AllocationDispositionController.php'));
+        $landing = file_get_contents(resource_path('views/allocation/index.blade.php'));
+        self::assertStringContainsString("request->query('cadre_code', 0)", $controller);
+        self::assertStringContainsString("where('allocation_a4_results.cadre_code', \$cadreCode)", $controller);
+        self::assertStringContainsString('A5 Allocated', $landing);
+        self::assertStringContainsString('text-blue', $landing);
+        self::assertStringContainsString('text-success', $landing);
+        self::assertStringContainsString('text-warning', $landing);
+        self::assertStringContainsString('text-danger', $landing);
     }
 
     public function test_a6_publication_outputs_hard_exclude_withheld_and_cancelled_but_internal_excel_keeps_flags_and_reasons(): void

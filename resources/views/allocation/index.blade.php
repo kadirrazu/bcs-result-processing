@@ -657,15 +657,32 @@
         <div><h3 class="card-title">A5.5 — Result Disposition / Publication Control</h3><div class="card-subtitle">Operator-controlled ACTIVE / WITHHELD / CANCELLED publication status after final Allocation. No seat release and no reallocation.</div></div>
         <div class="ms-auto"><span class="badge bg-{{ ($a6Gate['ready'] ?? false) ? 'success' : 'secondary' }}-lt">{{ ($a6Gate['ready'] ?? false) ? 'ACTIVE / READY' : 'INACTIVE / BLOCKED' }}</span></div>
     </div>
-    <div class="card-body d-flex align-items-center justify-content-between gap-3 flex-wrap">
-        <div class="text-secondary">
-            @if($a55Snapshot)
-                A5 allocated {{ number_format($a6Gate['a5']?->total_allocated ?? 0) }} · ACTIVE {{ number_format($a55Snapshot['active']) }} · WITHHELD {{ number_format($a55Snapshot['withheld']) }} · CANCELLED {{ number_format($a55Snapshot['cancelled']) }}
-            @else
-                Finalize a current 100% PASS A5 result before publication disposition control.
-            @endif
-        </div>
-        <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.disposition.index') : '#' }}">Open A5.5 Publication Control</a>
+    <div class="card-body">
+        @if($a55Snapshot)
+            <div class="row align-items-center g-3">
+                <div class="col-lg">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-vcenter text-center mb-0">
+                            <thead><tr><th>A5 Allocated</th><th>Active</th><th>Withheld</th><th>Cancelled</th></tr></thead>
+                            <tbody><tr>
+                                <td><span class="fw-bold text-blue">{{ number_format($a6Gate['a5']?->total_allocated ?? 0) }}</span></td>
+                                <td><span class="fw-bold text-success">{{ number_format($a55Snapshot['active']) }}</span></td>
+                                <td><span class="fw-bold text-warning">{{ number_format($a55Snapshot['withheld']) }}</span></td>
+                                <td><span class="fw-bold text-danger">{{ number_format($a55Snapshot['cancelled']) }}</span></td>
+                            </tr></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-lg-auto">
+                    <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.disposition.index') : '#' }}">Open A5.5 Publication Control</a>
+                </div>
+            </div>
+        @else
+            <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+                <div class="text-secondary">Finalize a current 100% PASS A5 result before publication disposition control.</div>
+                <a class="btn btn-primary disabled" href="#">Open A5.5 Publication Control</a>
+            </div>
+        @endif
     </div>
 </div>
 </div>

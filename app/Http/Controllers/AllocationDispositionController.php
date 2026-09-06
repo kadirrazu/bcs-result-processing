@@ -28,6 +28,19 @@ final class AllocationDispositionController extends Controller
         $status = strtoupper(trim((string) $request->query('status', 'ALL')));
         if (! in_array($status, ['ALL','ACTIVE','WITHHELD','CANCELLED'], true)) $status = 'ALL';
 
+        $cadreOptions = $reports->cadres($a5)
+            ->filter(fn (array $row): bool => (int) ($row['allocated'] ?? 0) > 0)
+            ->map(fn (array $row): array => [
+                'code' => (int) $row['code'],
+                'abbr' => (string) $row['abbr'],
+            ])
+            ->unique('code')
+            ->values();
+        $cadreCode = (int) $request->query('cadre_code', 0);
+        if ($cadreCode > 0 && ! $cadreOptions->contains(fn (array $row): bool => (int) $row['code'] === $cadreCode)) {
+            $cadreCode = 0;
+        }
+
         $query = AllocationA4Result::query()
             ->where('allocation_a4_results.allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
             ->join('registrations as r', 'r.id', '=', 'allocation_a4_results.registration_id')
@@ -54,12 +67,13 @@ final class AllocationDispositionController extends Controller
         if ($status === 'ACTIVE') $query->where(fn ($q) => $q->whereNull('d.status')->orWhere('d.status', 'ACTIVE'));
         if ($status === 'WITHHELD') $query->where('d.status', 'WITHHELD');
         if ($status === 'CANCELLED') $query->where('d.status', 'CANCELLED');
+        if ($cadreCode > 0) $query->where('allocation_a4_results.cadre_code', $cadreCode);
 
         $rows = $query->orderBy('allocation_a4_results.cadre_code')->orderBy('allocation_a4_results.merit_position')->orderBy('allocation_a4_results.reg')->paginate(100)->withQueryString();
         $abbr = $reports->abbreviations($rows->pluck('cadre_code'));
         $operators = User::query()->whereIn('id', $rows->pluck('disposition_changed_by')->filter())->pluck('name', 'id');
 
-        return view('allocation.disposition.index', compact('a5','snapshot','rows','search','status','abbr','operators'));
+        return view('allocation.disposition.index', compact('a5','snapshot','rows','search','status','cadreCode','cadreOptions','abbr','operators'));
     }
 
     public function show(
