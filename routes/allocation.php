@@ -45,6 +45,7 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     Route::post('/a6/summary/short/export',[AllocationA6Controller::class,'startShortSummaryExport'])->name('a6.summary.short.export');
     Route::post('/a6/exports/txt',[AllocationA6Controller::class,'startTxt'])->name('a6.exports.txt');
     Route::post('/a6/exports/xlsx',[AllocationA6Controller::class,'startXlsx'])->name('a6.exports.xlsx');
+    Route::post('/a6/exports/dbf',[AllocationA6Controller::class,'startDbf'])->name('a6.exports.dbf');
     Route::get('/a6/exports/excel-builder',[AllocationA6Controller::class,'excelBuilder'])->name('a6.exports.excel-builder');
     Route::post('/a6/exports/excel-builder',[AllocationA6Controller::class,'startDynamicXlsx'])->name('a6.exports.excel-builder.start');
     Route::get('/a6/exports/runs/{exportRun}',[AllocationA6Controller::class,'exportRun'])->name('a6.exports.show');

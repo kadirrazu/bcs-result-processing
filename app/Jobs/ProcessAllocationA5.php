@@ -6,6 +6,7 @@ use App\Models\AllocationA5Run;
 use App\Models\AllocationProcessingAudit;
 use App\Models\Examination;
 use App\Services\Allocation\AllocationA5ValidityService;
+use App\Services\Allocation\AllocationReadinessService;
 use App\Services\Allocation\AllocationRunStaleService;
 use App\Support\Examinations\ExaminationConnectionManager;
 use Illuminate\Bus\Queueable;
@@ -30,6 +31,7 @@ final class ProcessAllocationA5 implements ShouldQueue
     public function handle(
         ExaminationConnectionManager $connections,
         AllocationA5ValidityService $service,
+        AllocationReadinessService $readiness,
         AllocationRunStaleService $stale,
     ): void
     {
@@ -38,10 +40,25 @@ final class ProcessAllocationA5 implements ShouldQueue
         try {
             $run = AllocationA5Run::query()->findOrFail($this->a5RunId);
             $run->forceFill([
-                'status'=>'running','phase'=>'VERIFYING_SOURCES','progress_percent'=>2,
-                'progress_message'=>'Verifying current A4, Circular and Registration authority.','started_at'=>$run->started_at ?: now(),
+                'status'=>'running','phase'=>'STRICT_PRE_RUN_GATE','progress_percent'=>1,
+                'progress_message'=>'Strictly verifying current finalized Allocation inputs.','started_at'=>$run->started_at ?: now(),
                 'failure_message'=>null,
             ])->save();
+
+            // Expensive full hash verification belongs in the queue worker, not
+            // in the browser request that creates/dispatches the A5 run.
+            $gate = $readiness->inspectStrict();
+            if (! (bool) ($gate['ready'] ?? false)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'allocation_a5' => 'Allocation strict pre-run gate failed inside the A5 worker. Refresh Allocation and resolve the stale/hash-mismatch input before re-running A5.',
+                ]);
+            }
+
+            $run->forceFill([
+                'phase'=>'VERIFYING_SOURCES','progress_percent'=>2,
+                'progress_message'=>'Verifying current A4, Circular and Registration authority.',
+            ])->save();
+
             $service->process($run, function (string $phase, int $percent, string $message, int $current = 0, int $total = 0) use ($run): void {
                 AllocationA5Run::query()->whereKey($run->id)->update([
                     'phase'=>$phase,'progress_percent'=>max(0,min(99,$percent)),'progress_current'=>max(0,$current),

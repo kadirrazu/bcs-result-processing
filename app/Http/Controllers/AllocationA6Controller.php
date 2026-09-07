@@ -198,6 +198,35 @@ final class AllocationA6Controller extends Controller
         return redirect()->route('allocation.a6.exports.show', $run)->with('success', 'TXT export queued. Progress will update automatically.');
     }
 
+    public function startDbf(
+        Request $request,
+        AllocationA6ReadinessService $readiness,
+        ExaminationContext $context,
+    ): RedirectResponse {
+        $a5 = $readiness->requireReadyStrict();
+        $validated = $request->validate([
+            'scope' => ['required', 'in:tabulated,allocated'],
+        ]);
+
+        $scope = (string) $validated['scope'];
+        $run = $this->queueRun(
+            $a5,
+            'DBF',
+            $scope,
+            [
+                'preset' => 'legacy_visual_foxpro',
+                'dataset' => $scope,
+                'field_count' => $scope === 'tabulated' ? 19 : 17,
+            ],
+            $request,
+            $context,
+        );
+
+        $label = $scope === 'tabulated' ? 'Tabulated' : 'Allocated';
+        return redirect()->route('allocation.a6.exports.show', $run)
+            ->with('success', $label.' DBF export queued. Progress will update automatically.');
+    }
+
     public function startXlsx(
         Request $request,
         AllocationA6ReadinessService $readiness,

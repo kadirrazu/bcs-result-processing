@@ -6,6 +6,7 @@ use App\Models\AllocationA5Run;
 use App\Models\Examination;
 use App\Models\ReportingExportRun;
 use App\Reports\Pdf\AllocationA6SummaryPdfReport;
+use App\Services\Allocation\AllocationA6DbfExportService;
 use App\Services\Allocation\AllocationA6ExportService;
 use App\Services\Allocation\AllocationA6ReadinessService;
 use App\Services\Allocation\AllocationResultDispositionService;
@@ -47,6 +48,7 @@ final class ProcessAllocationA6Export implements ShouldQueue
         AllocationA6ReadinessService $readiness,
         AllocationResultDispositionService $dispositions,
         AllocationA6ExportService $exports,
+        AllocationA6DbfExportService $dbfExports,
         AllocationA6SummaryPdfReport $summaryPdf,
         DocxPlaceholderTemplateService $documents,
         ReportExportFileStore $files,
@@ -82,6 +84,7 @@ final class ProcessAllocationA6Export implements ShouldQueue
                 'XLSX' => $this->generateXlsx($run, $a5, $exports, (string) $exam->name, $parameters, $progress),
                 'PDF' => $this->generatePdf($run, $a5, $exports, $summaryPdf, (string) $exam->name),
                 'DOCX' => $this->generateDocx($run, $a5, $exports, $documents, (string) $exam->name, $parameters, $progress),
+                'DBF' => $this->generateDbf($run, $a5, $exports, $dbfExports, (string) $exam->name, $progress),
                 default => throw new RuntimeException('Unsupported A6 export type.'),
             };
 
@@ -222,6 +225,26 @@ final class ProcessAllocationA6Export implements ShouldQueue
         );
 
         return [$path, $name, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    }
+
+
+    private function generateDbf(
+        ReportingExportRun $run,
+        AllocationA5Run $a5,
+        AllocationA6ExportService $exports,
+        AllocationA6DbfExportService $dbfExports,
+        string $examName,
+        callable $progress,
+    ): array {
+        $scope = (string) $run->scope;
+        if (! in_array($scope, ['tabulated', 'allocated'], true)) {
+            throw new RuntimeException('Unsupported A6 DBF export scope.');
+        }
+
+        $path = $exports->queuedOutputPath($run->id, 'dbf');
+        [$path, $name] = $dbfExports->export($a5, $scope, $path, $examName, $progress);
+
+        return [$path, $name, 'application/x-dbf'];
     }
 
     private function assertFrozenSource(ReportingExportRun $run, AllocationA5Run $a5, AllocationResultDispositionService $dispositions): void

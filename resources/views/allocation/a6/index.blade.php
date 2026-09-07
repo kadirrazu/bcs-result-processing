@@ -103,6 +103,40 @@
     </div>
 </div>
 
+<div class="card mb-3">
+    <div class="card-header">
+        <h3 class="card-title">Legacy Visual FoxPro / DBF Export</h3>
+        <div class="ms-auto text-secondary small">Tabulated 19 fields · Allocated 17 fields · queued generation</div>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="border rounded p-3 h-100 d-flex flex-column">
+                    <div class="fw-bold mb-1">Tabulated DBF</div>
+                    <div class="text-secondary small mb-3">All current finalized Tabulation-eligible candidates. WITHHELD/CANCELLED is TRUE only when applicable and blank otherwise; allocation cadre/basis fields remain blank for withheld/cancelled candidates.</div>
+                    <form method="POST" action="{{ route('allocation.a6.exports.dbf') }}" class="mt-auto">
+                        @csrf
+                        <input type="hidden" name="scope" value="tabulated">
+                        <button class="btn btn-primary" @disabled(!$gate['ready'])>Generate Tabulated DBF</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="border rounded p-3 h-100 d-flex flex-column">
+                    <div class="fw-bold mb-1">Allocated DBF</div>
+                    <div class="text-secondary small mb-3">Only final ACTIVE / published allocated candidates from the current A5/A5.5 state.</div>
+                    <form method="POST" action="{{ route('allocation.a6.exports.dbf') }}" class="mt-auto">
+                        @csrf
+                        <input type="hidden" name="scope" value="allocated">
+                        <button class="btn btn-primary" @disabled(!$gate['ready'])>Generate Allocated DBF</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="text-secondary small mt-3">Common fields: REG, USER_ID, CATEGORY, TRACK, CFF, EM, PHC, GEN_TOTAL, TECH_TOTAL, COM_MERIT, GEN_MERIT, TECH_MERIT, ALOC_CH_CD, ALOC_CH_AB, CADRE_CODE, CADRE_ABBR, ALOC_BASIS. Tabulated DBF additionally includes WITHHELD and CANCELLED.</div>
+    </div>
+</div>
+
 @if($exportRuns->isNotEmpty())
 <div class="card mb-3">
     <div class="card-header"><h3 class="card-title">Recent Export Jobs</h3></div>

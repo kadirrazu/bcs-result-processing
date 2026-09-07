@@ -948,9 +948,10 @@ final class AllocationController extends Controller
         abort_if($examId === null, 409, 'No examination selected.');
         $actorId = $request->user()?->id;
 
-        // A5 is a downstream assurance gate, so source readiness is re-verified
-        // server-side; a visible/current A4 card alone is never sufficient.
-        $gate = $readiness->inspectStrict();
+        // Keep the browser request lightweight. A5's expensive strict integrity
+        // verification is executed by ProcessAllocationA5 after the run is queued.
+        // Here we only reject obviously non-current/stale metadata before dispatch.
+        $gate = $readiness->inspectDashboard();
         if (! (bool) ($gate['ready'] ?? false)) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'allocation_a5' => 'A5 start blocked: Allocation upstream readiness/integrity gate is not READY.',

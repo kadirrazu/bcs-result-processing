@@ -52,7 +52,7 @@ final class Registration extends ExaminationModel
                 });
             })
             ->when($filters['cadre_category'] ?? null, fn (Builder $q, mixed $v) => $q->where('cadre_category', (int) $v))
-            ->when(array_key_exists('has_quota', $filters) && $filters['has_quota'] !== '', fn (Builder $q) => $q->where('has_quota', (bool) (int) $filters['has_quota']))
+            ->when(isset($filters['has_quota']) && $filters['has_quota'] !== '', fn (Builder $q) => $q->where('has_quota', (bool) (int) $filters['has_quota']))
             ->when($filters['status'] ?? null, fn (Builder $q, mixed $v) => $q->where('status', $v))
             ->when($filters['sex_code'] ?? null, fn (Builder $q, mixed $v) => $q->where('sex_code', $v))
             ->when($filters['district_code'] ?? null, fn (Builder $q, mixed $v) => $q->where('district_code', $v))
