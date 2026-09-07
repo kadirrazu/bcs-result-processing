@@ -79,17 +79,7 @@ final class AllocationReadinessService
         $this->stored($checks, 'tabulation', 'Tabulation', fn () => $this->tabulation->storedFinalizedSummary());
         $this->stored($checks, 'merit', 'Merit Generation', fn () => $this->storedMeritSummary());
 
-        $coSetting = ChoiceOptimizationSetting::query()->first();
-        if (! $coSetting || !(bool) $coSetting->optimization_enabled) {
-            $checks['choice_optimization'] = [
-                'ready' => true,
-                'label' => 'Choice Optimization',
-                'status' => 'BYPASSED',
-                'hash_verified' => null,
-                'stored_hash_present' => true,
-                'detail' => 'Optimization is disabled; finalized Validated Choice is authoritative.',
-            ];
-        } else {
+        {
             $state = ChoiceOptimizationProcessingState::query()->first();
             $cvReady = (bool) ($checks['choice_validation']['ready'] ?? false);
             $cvHash = (string) ($checks['choice_validation']['dataset_hash'] ?? '');
@@ -159,10 +149,7 @@ final class AllocationReadinessService
         $this->verified($checks, 'tabulation', 'Tabulation', fn()=> $this->tabulation->verifiedSummary());
         $this->verified($checks, 'merit', 'Merit Generation', fn()=> $this->merit->verifiedSummary());
 
-        $coSetting = ChoiceOptimizationSetting::query()->first();
-        if (!$coSetting || !(bool)$coSetting->optimization_enabled) {
-            $checks['choice_optimization'] = ['ready'=>true,'label'=>'Choice Optimization','status'=>'BYPASSED','hash_verified'=>true,'detail'=>'Optimization is disabled; finalized Validated Choice is authoritative.'];
-        } else {
+        {
             $state = ChoiceOptimizationProcessingState::query()->first();
             try {
                 if (!$state || $state->status !== 'finalized' || $state->is_stale || !$state->dataset_hash) throw new \RuntimeException('Choice Optimization is not current/finalized.');

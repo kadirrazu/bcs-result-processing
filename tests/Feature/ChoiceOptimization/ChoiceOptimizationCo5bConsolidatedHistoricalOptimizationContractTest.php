@@ -28,19 +28,19 @@ class ChoiceOptimizationCo5bConsolidatedHistoricalOptimizationContractTest exten
         $this->assertStringContainsString("'source' => 'google_form'", $consolidated);
         $this->assertStringContainsString('ChoiceOptimizationGoogleFormRecommendation::query()', $consolidated);
         $this->assertStringContainsString("where('match_status', 'matched')", $consolidated);
-        $this->assertStringContainsString('$consolidationSummary = $this->consolidated->rebuild()', $optimizer);
+        $this->assertStringContainsString('rebuild($includePreviousBcs, $includeGoogleForm, $previousBcsSourceIds, $googleFormBatchId)', $optimizer);
         $this->assertStringContainsString('ChoiceOptimizationConsolidatedHistoricalRecommendation::query()', $optimizer);
     }
 
-    public function test_google_form_no_bypasses_and_undecided_or_running_processing_blocks_snapshot(): void
+    public function test_google_form_is_run_selectable_only_when_exam_setting_allows_it(): void
     {
         $service = file_get_contents(app_path('Services/ChoiceOptimization/ChoiceOptimizationConsolidatedHistoricalRecommendationService.php'));
         $controller = file_get_contents(app_path('Http/Controllers/ChoiceOptimizationController.php'));
 
-        $this->assertStringContainsString('google_form_enabled === null', $service);
-        $this->assertStringContainsString('if ($setting->google_form_enabled)', $service);
+        $this->assertStringContainsString('if ($includeGoogleForm)', $service);
+        $this->assertStringContainsString('google_form_enabled !== true', $service);
         $this->assertStringContainsString('A Google Form batch is still processing', $service);
-        $this->assertStringContainsString('Decide Google Form YES or NO before Consolidated Historical Choice Optimization.', $controller);
+        $this->assertStringContainsString('Google Form is not enabled for this examination and cannot be selected for this run.', $controller);
     }
 
     public function test_source_disagreement_is_non_blocking_and_any_unique_cadre_can_define_earliest_cutoff(): void
@@ -84,8 +84,8 @@ class ChoiceOptimizationCo5bConsolidatedHistoricalOptimizationContractTest exten
         $list = file_get_contents(resource_path('views/choice-optimization/historical-choices-index.blade.php'));
         $detail = file_get_contents(resource_path('views/choice-optimization/historical-choice-show.blade.php'));
 
-        $this->assertStringContainsString('Consolidated Historical Choice Optimization', $landing);
-        $this->assertStringContainsString('any matching cadre may define the cutoff', $landing);
+        $this->assertStringContainsString('Choice Optimization Run', $landing);
+        $this->assertStringContainsString('earliest/highest-preference exact match defines one historical cutoff', $landing);
         $this->assertStringContainsString('GOOGLE FORM', $list);
         $this->assertStringContainsString('PREVIOUS BCS REPOSITORY', $list);
         $this->assertStringNotContainsString('SOURCE CONFLICT', $list);

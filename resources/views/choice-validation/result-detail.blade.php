@@ -95,6 +95,10 @@
     </div>
 </div>
 
+<div class="alert alert-info mb-3">
+    <strong>Written-track handling:</strong> Choice Validation no longer removes an otherwise-valid choice only because its cadre type is outside the candidate's surviving Written track. The surviving track is preserved above for audit; Merit Generation and the final Allocation-ready Choice projection enforce track compatibility later.
+</div>
+
 <div class="card mb-3">
     <div class="card-header">
         <div>

@@ -125,7 +125,7 @@ final class ChoiceValidationEngine
                 if ($subRows !== []) {
                     $eligibleRows = array_values(array_filter(
                         $subRows,
-                        fn (CircularEntry $entry): bool => $this->eligibleEntry($entry, $registration, $track['track'])
+                        fn (CircularEntry $entry): bool => $this->eligibleEntry($entry, $registration)
                     ));
 
                     if ($eligibleRows === []) {
@@ -158,14 +158,14 @@ final class ChoiceValidationEngine
 
             $eligible = null;
             foreach ($matches as $match) {
-                if ($this->eligibleEntry($match, $registration, $track['track'])) {
+                if ($this->eligibleEntry($match, $registration)) {
                     $eligible = $match;
                     break;
                 }
             }
 
             if (! $eligible) {
-                $reason = $this->reasonForIneligible($matches, $registration, $track['track']);
+                $reason = $this->reasonForIneligible($matches, $registration);
                 $first = $matches[0] ?? null;
                 $details[] = $this->detail($item, $resolvedType, 'removed', $reason, 'Choice is not eligible for the candidate under the finalized Circular.', $main, $sub, null, null, null, $first, $this->eligibilitySnapshot($first, $registration));
                 $removed++;
@@ -189,15 +189,20 @@ final class ChoiceValidationEngine
         ];
     }
 
-    private function eligibleEntry(CircularEntry $entry, Registration $registration, string $track): bool
+    private function eligibleEntry(CircularEntry $entry, Registration $registration): bool
     {
         $type = $entry->cadre_type instanceof CadreType ? $entry->cadre_type->value : (string) $entry->cadre_type;
 
+        // Revised workflow: Written surviving-track mismatch is NOT a Choice Validation
+        // removal rule. Choice Validation preserves the otherwise-valid preference so
+        // Historical Optimization can match against the current validated lineup.
+        // Written-track compatibility is enforced explicitly by Merit Generation and
+        // by the final Allocation-ready Choice projection.
         if ($type === 'GG') {
-            return in_array($track, ['general', 'both'], true);
+            return true;
         }
 
-        if ($type !== 'TT' || ! in_array($track, ['technical', 'both'], true)) {
+        if ($type !== 'TT') {
             return false;
         }
 
@@ -209,16 +214,8 @@ final class ChoiceValidationEngine
     }
 
     /** @param list<CircularEntry> $matches */
-    private function reasonForIneligible(array $matches, Registration $registration, string $track): string
+    private function reasonForIneligible(array $matches, Registration $registration): string
     {
-        $first = $matches[0];
-        $type = $first->cadre_type instanceof CadreType ? $first->cadre_type->value : (string) $first->cadre_type;
-
-        if (($type === 'GG' && ! in_array($track, ['general', 'both'], true))
-            || ($type === 'TT' && ! in_array($track, ['technical', 'both'], true))) {
-            return ChoiceValidationReason::TrackNotAllowed->value;
-        }
-
         $bOk = false;
         $pOk = false;
         foreach ($matches as $entry) {

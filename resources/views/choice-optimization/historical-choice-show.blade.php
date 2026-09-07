@@ -43,6 +43,24 @@
                 ])
             </div>
 
+            <div class="mb-4">
+                <div class="fw-semibold mb-2">Choice After Historical Cutoff / Before Written-track Filter</div>
+                @include('choice-optimization.partials.choice-code-lane', [
+                    'codes' => (array)$choice->post_historical_choice_codes,
+                    'badgeClass' => 'bg-azure-lt',
+                    'emptyText' => 'EMPTY',
+                ])
+            </div>
+
+            <div class="mb-4">
+                <div class="fw-semibold mb-2 text-warning">Removed by Final Written-track Filter</div>
+                @include('choice-optimization.partials.choice-code-lane', [
+                    'codes' => (array)$choice->track_removed_choice_codes,
+                    'badgeClass' => 'bg-yellow-lt',
+                    'emptyText' => 'None',
+                ])
+            </div>
+
             <div>
                 <div class="fw-semibold mb-2">Final Allocation-ready Choice</div>
                 @include('choice-optimization.partials.choice-code-lane', [
@@ -148,6 +166,53 @@
             </div>
         </div>
     </div>
+
+    @if($choice->removed_choice_codes)
+        <div class="card mb-3">
+            <div class="card-header"><div><h3 class="card-title">Historical Cutoff Removal Trail</h3><div class="card-subtitle">Each code below was removed because it is the matched historical cutoff itself or a lower preference. Historical cutoff is applied once after consolidating all selected historical sources.</div></div></div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead><tr><th>Code</th><th>Reason</th><th>Cutoff Evidence</th></tr></thead>
+                    <tbody>
+                    @foreach((array)$choice->removed_choice_codes as $removedCode)
+                        <tr class="table-danger">
+                            <td><code>{{ $removedCode }}</code></td>
+                            <td><strong>HISTORICAL_PREFERENCE_CUTOFF</strong><div class="small text-secondary">Removed at or below the earliest/highest-preference matched historical recommendation.</div></td>
+                            <td>
+                                @if($choice->matched_cutoff)
+                                    #{{ $choice->matched_cutoff['choice_position'] ?? '—' }} · <code>{{ $choice->matched_cutoff['choice_code'] ?? '—' }}</code>
+                                    · BCS {{ $choice->matched_cutoff['historical_bcs_number'] ?? '—' }} · {{ $choice->matched_cutoff['historical_cadre'] ?? '—' }}
+                                @else — @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
+
+    @if($choice->track_filter_details)
+        <div class="card mb-3">
+            <div class="card-header"><div><h3 class="card-title">Written-track Removal Trail</h3><div class="card-subtitle">Historical cutoff is completed first. These removals occur only in the final Allocation-ready projection.</div></div></div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead><tr><th>Choice Pos.</th><th>Code</th><th>Cadre Type</th><th>Written Track</th><th>Reason</th></tr></thead>
+                    <tbody>
+                    @foreach((array)$choice->track_filter_details as $detail)
+                        <tr class="table-warning">
+                            <td>#{{ str_pad((string)($detail['choice_position'] ?? 0),2,'0',STR_PAD_LEFT) }}</td>
+                            <td><code>{{ $detail['choice_code'] ?? '—' }}</code></td>
+                            <td><span class="badge bg-secondary-lt">{{ $detail['cadre_type'] ?? '—' }}</span></td>
+                            <td><span class="badge bg-azure-lt">{{ $detail['written_qualified_track'] ?? '—' }}</span></td>
+                            <td><strong>{{ $detail['reason_code'] ?? 'WRITTEN_TRACK_NOT_ALLOWED_FOR_ALLOCATION' }}</strong><div class="small text-secondary">{{ $detail['reason_message'] ?? '' }}</div></td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
 
     @if($choice->warnings)
         <div class="card mb-3">

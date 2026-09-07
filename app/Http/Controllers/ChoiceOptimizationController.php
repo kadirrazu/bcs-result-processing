@@ -52,24 +52,15 @@ final class ChoiceOptimizationController extends Controller
     ): View
     {
         $setting = $settings->setting();
-        if ($setting->optimization_enabled) {
-            $upstreamStale->synchronize();
-        }
+        $upstreamStale->synchronize();
 
         // Show the exact current Choice Validation authority and the input-binding
         // status that a new Optimization run would consume. This provenance is
         // operator-visible because using an older finalized Choice source is result-affecting.
         $state = $settings->state();
-        $choiceValidationAuthority = $setting->optimization_enabled
-            ? $finalizedChoices->summary()
-            : ['ready' => false];
-        $optimizationInputBinding = $setting->optimization_enabled
-            ? $historicalInput->bindingSummary()
-            : ['can_process' => false, 'status_label' => 'OPTIMIZATION DISABLED'];
-
-        $latestOmrBatch = $setting->optimization_enabled
-            ? ChoiceOptimizationOmrBatch::query()->latest('id')->first()
-            : null;
+        $choiceValidationAuthority = $finalizedChoices->summary();
+        $optimizationInputBinding = $historicalInput->bindingSummary();
+        $latestOmrBatch = ChoiceOptimizationOmrBatch::query()->latest('id')->first();
 
         $historicalRepositories = collect();
         $historicalSourceMap = collect();
@@ -116,6 +107,14 @@ final class ChoiceOptimizationController extends Controller
             $consolidatedHistoricalCount = ChoiceOptimizationConsolidatedHistoricalRecommendation::query()->count();
         }
 
+        $previousBcsRunAvailable = ChoiceOptimizationHistoricalSource::query()
+            ->where('included_in_optimization', true)
+            ->exists();
+        $googleFormRunAvailable = $setting->google_form_enabled === true
+            && $latestGoogleFormBatch
+            && in_array((string) $latestGoogleFormBatch->status, ['merged', 'partially_merged'], true)
+            && $googleFormAcceptedCount > 0;
+
         /*
          * The persisted processing status records the last completed stage, while the
          * operator needs the CURRENT actionable authority state. For example, a row can
@@ -146,6 +145,8 @@ final class ChoiceOptimizationController extends Controller
             'googleFormAcceptedCount' => $googleFormAcceptedCount,
             'consolidatedHistoricalCount' => $consolidatedHistoricalCount,
             'processingBoardState' => $processingBoardState,
+            'previousBcsRunAvailable' => $previousBcsRunAvailable,
+            'googleFormRunAvailable' => $googleFormRunAvailable,
         ]);
     }
 
@@ -155,14 +156,11 @@ final class ChoiceOptimizationController extends Controller
             'optimization_enabled' => ['required', 'in:0,1'],
         ]);
 
-        $enabled = $validated['optimization_enabled'] === '1';
-        $settings->updateEnabled($enabled, $request->user()?->getAuthIdentifier());
+        $settings->updateEnabled(true, $request->user()?->getAuthIdentifier());
 
         return redirect()->route('choice-optimization.index')->with(
             'success',
-            $enabled
-                ? 'Choice Optimization enabled. Allocation will require finalized optimized choices.'
-                : 'Choice Optimization disabled. Allocation will use finalized Validated Choices directly.'
+            'Choice Optimization is mandatory. Historical sources are selected per run; Written-track Filter always runs last.'
         );
     }
 
@@ -529,7 +527,7 @@ final class ChoiceOptimizationController extends Controller
         $staleness->markIfProduced(
             'Historical source Pull/Re-pull changed the Historical Recommendation snapshot.',
             (int) $request->user()->getAuthIdentifier(),
-            ['bcs_numbers' => $bcsNumbers->all()],
+            ['dependency' => 'previous_bcs', 'bcs_numbers' => $bcsNumbers->all()],
         );
 
         $queued = 0;
@@ -865,6 +863,7 @@ final class ChoiceOptimizationController extends Controller
             'Historical Previous BCS source selection changed. Re-process Historical Choice Optimization.',
             $actorId,
             [
+                'dependency' => 'previous_bcs',
                 'action' => $validated['action'],
                 'included_previous_bcs_numbers' => $includedBcs,
                 'excluded_previous_bcs_numbers' => $excludedBcs,
@@ -925,14 +924,20 @@ final class ChoiceOptimizationController extends Controller
         );
         $historicalInput->assertReadyForOptimization();
 
-        $googleFormSetting = $settings->setting();
-        abort_if(
-            $googleFormSetting->google_form_enabled === null,
-            409,
-            'Decide Google Form YES or NO before Consolidated Historical Choice Optimization.'
-        );
+        $validatedRun = $request->validate([
+            'include_previous_bcs' => ['nullable', 'boolean'],
+            'include_google_form' => ['nullable', 'boolean'],
+        ]);
+        $includePreviousBcs = (bool) ($validatedRun['include_previous_bcs'] ?? false);
+        $includeGoogleForm = (bool) ($validatedRun['include_google_form'] ?? false);
 
-        if ($googleFormSetting->google_form_enabled) {
+        $googleFormSetting = $settings->setting();
+        if ($includeGoogleForm) {
+            abort_unless(
+                $googleFormSetting->google_form_enabled === true,
+                409,
+                'Google Form is not enabled for this examination and cannot be selected for this run.'
+            );
             $googleFormRunning = ChoiceOptimizationGoogleFormBatch::query()
                 ->whereIn('status', ['queued', 'processing', 'validation_queued', 'validating', 'merge_queued', 'merging'])
                 ->exists();
@@ -946,21 +951,22 @@ final class ChoiceOptimizationController extends Controller
             // Do not silently fall back to an older approved batch while the latest one is incomplete/failed.
             $latestGoogleFormBatch = ChoiceOptimizationGoogleFormBatch::query()->latest('id')->first();
             abort_if(
-                $latestGoogleFormBatch
-                    && ! in_array((string) $latestGoogleFormBatch->status, ['merged', 'partially_merged'], true),
+                ! $latestGoogleFormBatch
+                    || ! in_array((string) $latestGoogleFormBatch->status, ['merged', 'partially_merged'], true)
+                    || ! ChoiceOptimizationGoogleFormRecommendation::query()->where('source_batch_id', (int) $latestGoogleFormBatch->id)->exists(),
                 409,
-                'The latest Google Form batch must be merged/approved before Historical Choice Optimization. Older batches are history only.'
+                'Google Form was selected, but no latest valid/accepted Google Form dataset is available.'
             );
         }
 
         $examId = $context->currentId();
         abort_if($examId === null, 409, 'No examination is selected.');
 
-        $pendingReview = ChoiceOptimizationHistoricalMatch::query()
+        $pendingReview = $includePreviousBcs ? ChoiceOptimizationHistoricalMatch::query()
             ->whereHas('source', fn ($q) => $q->where('included_in_optimization', true))
             ->where('match_status', 'review')
             ->where('resolution_status', 'pending')
-            ->count();
+            ->count() : 0;
 
         abort_if(
             $pendingReview > 0,
@@ -968,16 +974,21 @@ final class ChoiceOptimizationController extends Controller
             "Resolve all {$pendingReview} pending Historical Match REVIEW item(s) before Historical Choice Optimization."
         );
 
-        $sourcesNotReady = ChoiceOptimizationHistoricalSource::query()
+        $sourcesNotReady = $includePreviousBcs ? ChoiceOptimizationHistoricalSource::query()
             ->where('included_in_optimization', true)
             ->where('status', '<>', 'pulled')
-            ->count();
+            ->count() : 0;
 
         abort_if(
             $sourcesNotReady > 0,
             409,
             'Every Historical source INCLUDED in optimization must be fully PULLED before Historical Choice Optimization.'
         );
+
+        $previousBcsSourceIds = $includePreviousBcs
+            ? ChoiceOptimizationHistoricalSource::query()->where('included_in_optimization', true)->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : [];
+        $googleFormBatchId = $includeGoogleForm ? (int) $latestGoogleFormBatch->id : null;
 
         $state = $settings->state();
         abort_if(
@@ -1002,6 +1013,14 @@ final class ChoiceOptimizationController extends Controller
             'to_status' => 'historical_optimization_queued',
             'context' => [
                 'pending_historical_reviews' => $pendingReview,
+                'optimization_components' => [
+                    'previous_bcs' => $includePreviousBcs,
+                    'google_form' => $includeGoogleForm,
+                    'written_track_filter' => true,
+                    'written_track_filter_order' => 'LAST',
+                    'previous_bcs_source_ids' => $previousBcsSourceIds,
+                    'google_form_batch_id' => $googleFormBatchId,
+                ],
             ],
             'created_at' => now(),
         ]);
@@ -1009,11 +1028,15 @@ final class ChoiceOptimizationController extends Controller
         ProcessChoiceOptimizationHistoricalChoice::dispatch(
             (int) $examId,
             (int) $request->user()->getAuthIdentifier(),
+            $includePreviousBcs,
+            $includeGoogleForm,
+            $previousBcsSourceIds,
+            $googleFormBatchId,
         );
 
         return redirect()
             ->route('choice-optimization.historical-choices.index')
-            ->with('success', 'Historical Choice Optimization queued.');
+            ->with('success', 'Choice Optimization queued. Selected historical sources will be consolidated once; Written-track Filter will run last.');
     }
 
     public function historicalChoices(

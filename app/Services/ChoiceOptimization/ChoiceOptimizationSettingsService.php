@@ -11,10 +11,14 @@ final class ChoiceOptimizationSettingsService
 {
     public function setting(): ChoiceOptimizationSetting
     {
-        return ChoiceOptimizationSetting::query()->firstOrCreate(
+        $setting = ChoiceOptimizationSetting::query()->firstOrCreate(
             ['id' => 1],
-            ['optimization_enabled' => (bool) config('choice-optimization.default_enabled', false)]
+            ['optimization_enabled' => true]
         );
+        if (! (bool) $setting->optimization_enabled) {
+            $setting->forceFill(['optimization_enabled' => true])->save();
+        }
+        return $setting->refresh();
     }
 
     public function state(): ChoiceOptimizationProcessingState
@@ -24,41 +28,14 @@ final class ChoiceOptimizationSettingsService
 
     public function updateEnabled(bool $enabled, ?int $actorId): ChoiceOptimizationSetting
     {
-        return DB::connection('exam')->transaction(function () use ($enabled, $actorId): ChoiceOptimizationSetting {
+        // Choice Optimization is now mandatory because the final Written-track Filter
+        // is the authoritative Allocation-ready Choice projection. The legacy global
+        // YES/NO bypass is intentionally retired.
+        return DB::connection('exam')->transaction(function () use ($actorId): ChoiceOptimizationSetting {
             $setting = ChoiceOptimizationSetting::query()->whereKey(1)->lockForUpdate()->firstOrFail();
-            $before = (bool) $setting->optimization_enabled;
-
-            if ($before === $enabled) {
-                return $setting;
+            if (! (bool) $setting->optimization_enabled) {
+                $setting->forceFill(['optimization_enabled' => true, 'updated_by' => $actorId])->save();
             }
-
-            $setting->forceFill(['optimization_enabled' => $enabled, 'updated_by' => $actorId])->save();
-
-            $state = $this->state();
-            $from = $state->status;
-            $state->forceFill([
-                'status' => $enabled ? 'not_started' : 'bypassed',
-                'is_stale' => false,
-                'stale_reason' => null,
-                'dataset_hash' => null,
-                'summary' => null,
-                'finalized_by' => null,
-                'finalized_at' => null,
-            ])->save();
-
-            ChoiceOptimizationProcessingAudit::query()->create([
-                'event' => $enabled ? 'OPTIMIZATION_ENABLED' : 'OPTIMIZATION_DISABLED',
-                'actor_id' => $actorId,
-                'from_status' => $from,
-                'to_status' => $state->status,
-                'context' => [
-                    'before' => $before,
-                    'after' => $enabled,
-                    'allocation_choice_source' => $enabled ? 'OPTIMIZED_CHOICE' : 'FINALIZED_VALIDATED_CHOICE',
-                ],
-                'created_at' => now(),
-            ]);
-
             return $setting->refresh();
         });
     }

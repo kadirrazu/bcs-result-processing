@@ -50,7 +50,7 @@ final class ChoiceOptimizationGoogleFormDecisionService
             $this->staleness->markIfProduced(
                 'Google Form historical recommendation decision changed. Historical Choice Optimization must be re-processed.',
                 $actorId,
-                ['google_form_enabled' => $enabled]
+                ['dependency' => 'google_form', 'google_form_enabled' => $enabled]
             );
 
             return $setting->refresh();

@@ -38,6 +38,8 @@
 <div class="mt-3 d-flex flex-wrap gap-2"><span class="text-secondary me-1">Qualified Track Population:</span>@foreach(['GG','GN','TT','T','GT'] as $tc)<span class="badge {{ $trackBadge($tc) }}">{{ $tc }} = {{ number_format($reviewSummary['track_'.strtolower($tc)]) }}</span>@endforeach</div>
 </div></div>
 
+@if($run->status==='completed'&&!$state->is_stale&&$state->status!=='finalized')<div class="card"><div class="card-header"><h3 class="card-title">Finalize Merit</h3></div><div class="card-body"><div class="alert alert-info">Finalization performs fresh Circular, Tabulation and Choice Validation hash verification and verifies the generated Merit dataset hash.</div><form method="POST" action="{{ route('merit.finalize') }}">@csrf<div class="row g-2"><div class="col-md-3"><input class="form-control" name="confirmation" placeholder="Type FINALIZE"></div><div class="col-md-6"><input class="form-control" name="notes" placeholder="Optional notes"></div><div class="col-auto"><button class="btn btn-success">Finalize</button></div></div></form></div></div>@endif
+
 @if($latestFinalization?->dataset_hash)
 <div class="card mb-3"><div class="card-header"><h3 class="card-title">Finalized Dataset Integrity</h3></div><div class="card-body"><div class="row g-3"><div class="col-md-3"><div class="text-secondary">Status</div><span class="badge bg-success-lt">HASH_VERIFIED_AT_FINALIZATION</span></div><div class="col-md-3"><div class="text-secondary">Version</div><div class="fw-semibold">v{{ $latestFinalization->processing_version }}</div></div><div class="col-md-6"><div class="text-secondary">Merit Dataset Hash (SHA-256)</div><code class="small text-break user-select-all">{{ $latestFinalization->dataset_hash }}</code></div></div></div></div>
 @endif
@@ -145,6 +147,5 @@
 </table>
 </div><div class="card-footer d-flex justify-content-between align-items-center"><div class="text-secondary">Displaying {{ $rows->firstItem() ?? 0 }} to {{ $rows->lastItem() ?? 0 }} of {{ number_format($rows->total()) }} records</div><div>{{ $rows->links() }}</div></div></div>
 
-@if($run->status==='completed'&&!$state->is_stale&&$state->status!=='finalized')<div class="card"><div class="card-header"><h3 class="card-title">Finalize Merit</h3></div><div class="card-body"><div class="alert alert-info">Finalization performs fresh Circular, Tabulation and Choice Validation hash verification and verifies the generated Merit dataset hash.</div><form method="POST" action="{{ route('merit.finalize') }}">@csrf<div class="row g-2"><div class="col-md-3"><input class="form-control" name="confirmation" placeholder="Type FINALIZE"></div><div class="col-md-6"><input class="form-control" name="notes" placeholder="Optional notes"></div><div class="col-auto"><button class="btn btn-success">Finalize</button></div></div></form></div></div>@endif
 </div></div>
 @endsection

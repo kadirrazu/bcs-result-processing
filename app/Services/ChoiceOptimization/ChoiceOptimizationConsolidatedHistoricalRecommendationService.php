@@ -18,15 +18,15 @@ final class ChoiceOptimizationConsolidatedHistoricalRecommendationService
      * Previous BCS confirmed matches and accepted Google Form recommendations are
      * consolidated BEFORE choice trimming so optimization runs exactly once.
      */
-    public function rebuild(): array
+    public function rebuild(bool $includePreviousBcs = true, bool $includeGoogleForm = true, array $previousBcsSourceIds = [], ?int $googleFormBatchId = null): array
     {
         $setting = ChoiceOptimizationSetting::query()->whereKey(1)->firstOrFail();
 
-        if ($setting->google_form_enabled === null) {
-            throw new RuntimeException('Decide Google Form YES or NO before Consolidated Historical Choice Optimization.');
+        if ($includeGoogleForm && $setting->google_form_enabled !== true) {
+            throw new RuntimeException('Google Form cannot be selected for this run unless the examination Google Form decision is YES.');
         }
 
-        if ($setting->google_form_enabled) {
+        if ($includeGoogleForm) {
             $running = ChoiceOptimizationGoogleFormBatch::query()
                 ->whereIn('status', [
                     'queued', 'processing', 'validation_queued', 'validating',
@@ -38,8 +38,11 @@ final class ChoiceOptimizationConsolidatedHistoricalRecommendationService
                 throw new RuntimeException('A Google Form batch is still processing. Complete the current batch before Consolidated Historical Choice Optimization.');
             }
 
-            $latestBatch = $this->latestGoogleFormAuthorityBatch();
+            $latestBatch = $googleFormBatchId ? ChoiceOptimizationGoogleFormBatch::query()->find($googleFormBatchId) : $this->latestGoogleFormAuthorityBatch();
             $latestUploaded = ChoiceOptimizationGoogleFormBatch::query()->latest('id')->first();
+            if ($googleFormBatchId && (! $latestUploaded || (int) $latestUploaded->id !== (int) $googleFormBatchId)) {
+                throw new RuntimeException('A newer Google Form dataset exists than the dataset selected when this run was queued. Start a new Choice Optimization run.');
+            }
             if ($latestUploaded && ! $latestBatch) {
                 throw new RuntimeException('The latest Google Form batch must be merged/approved before Consolidated Historical Choice Optimization. Older batches are history only.');
             }
@@ -48,9 +51,10 @@ final class ChoiceOptimizationConsolidatedHistoricalRecommendationService
         /** @var array<string,array<string,mixed>> $grouped */
         $grouped = [];
 
-        ChoiceOptimizationHistoricalMatch::query()
+        if ($includePreviousBcs) {
+            ChoiceOptimizationHistoricalMatch::query()
             ->with('source')
-            ->whereHas('source', fn ($q) => $q->where('included_in_optimization', true))
+            ->whereIn('historical_source_id', array_values(array_map('intval', $previousBcsSourceIds)))
             ->where('match_status', 'matched')
             ->orderBy('registration_id')
             ->orderBy('previous_bcs_number')
@@ -82,9 +86,10 @@ final class ChoiceOptimizationConsolidatedHistoricalRecommendationService
                     'resolution_status' => (string) ($match->resolution_status ?? ''),
                 ];
             });
+        }
 
-        if ($setting->google_form_enabled) {
-            $latestBatch = $this->latestGoogleFormAuthorityBatch();
+        if ($includeGoogleForm) {
+            $latestBatch = $googleFormBatchId ? ChoiceOptimizationGoogleFormBatch::query()->find($googleFormBatchId) : $this->latestGoogleFormAuthorityBatch();
 
             ChoiceOptimizationGoogleFormRecommendation::query()
                 ->when($latestBatch, fn ($q) => $q->where('source_batch_id', (int) $latestBatch->id))
@@ -181,6 +186,8 @@ final class ChoiceOptimizationConsolidatedHistoricalRecommendationService
             'multi_cadre_keys' => $multiCadreKeys,
             'previous_bcs_source_rows' => $repositorySourceRows,
             'google_form_source_rows' => $googleFormSourceRows,
+            'previous_bcs_selected' => $includePreviousBcs,
+            'google_form_selected' => $includeGoogleForm,
             'google_form_enabled' => (bool) $setting->google_form_enabled,
             'hash' => $this->snapshotHash(),
         ];
@@ -229,7 +236,7 @@ final class ChoiceOptimizationConsolidatedHistoricalRecommendationService
         return hash_final($context);
     }
 
-    public function googleFormSnapshotHash(): string
+    public function googleFormSnapshotHash(?int $batchId = null): string
     {
         $setting = ChoiceOptimizationSetting::query()->whereKey(1)->firstOrFail();
         $context = hash_init('sha256');
@@ -237,7 +244,7 @@ final class ChoiceOptimizationConsolidatedHistoricalRecommendationService
         hash_update($context, 'google_form_enabled='.(is_null($setting->google_form_enabled) ? 'null' : ((bool) $setting->google_form_enabled ? '1' : '0'))."\n");
 
         if ($setting->google_form_enabled) {
-            $latestBatch = $this->latestGoogleFormAuthorityBatch();
+            $latestBatch = $batchId ? ChoiceOptimizationGoogleFormBatch::query()->find($batchId) : $this->latestGoogleFormAuthorityBatch();
             hash_update($context, 'latest_google_form_batch_id='.($latestBatch?->id ?? 'none')."\n");
 
             ChoiceOptimizationGoogleFormRecommendation::query()

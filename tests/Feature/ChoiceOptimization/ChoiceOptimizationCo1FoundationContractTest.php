@@ -23,7 +23,7 @@ final class ChoiceOptimizationCo1FoundationContractTest extends TestCase
         $this->assertStringContainsString('choice_optimization_processing_audits', $migration);
 
         $config = require $root.'/config/choice-optimization.php';
-        $this->assertFalse($config['default_enabled']);
+        $this->assertTrue($config['default_enabled']);
         $this->assertSame([
             'bcs_number', 'reg', 'name', 'fname', 'mname', 'b_date', 'district_name',
             'ssc_roll', 'ssc_year', 'hsc_roll', 'hsc_year', 'nid', 'cadre',

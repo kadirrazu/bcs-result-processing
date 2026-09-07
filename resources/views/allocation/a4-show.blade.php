@@ -66,7 +66,20 @@
     </div>
 
     <div class="table-responsive"><table class="table table-vcenter mb-0 a4-seat-ledger"><tbody>
-    @php $lastGroup = null; @endphp
+    @php
+        $lastGroup = null;
+        $groupTotals = [
+            'total_capacity' => 0,
+            'total_occupied' => 0,
+            'total_remaining' => 0,
+            'mq_capacity' => 0, 'mq_occupied' => 0, 'mq_converted' => 0,
+            'cff_capacity' => 0, 'cff_occupied' => 0, 'cff_converted' => 0,
+            'em_capacity' => 0, 'em_occupied' => 0, 'em_converted' => 0,
+            'phc_capacity' => 0, 'phc_occupied' => 0, 'phc_converted' => 0,
+            'nm_count' => 0,
+            'shifted_count' => 0,
+        ];
+    @endphp
     @forelse($ledgers as $ledger)
         @php
             $entry=$ledger->circularEntry;
@@ -79,6 +92,31 @@
             $abbr=(string)$abbreviationByCode->get((int)$ledger->cadre_code,'—');
         @endphp
         @if($lastGroup !== $groupLabel)
+            @if($lastGroup !== null)
+                <tr class="fw-bold bg-light">
+                    <td></td>
+                    <td class="text-start">{{ $lastGroup }} Total</td>
+                    <td>{{ number_format($groupTotals['total_capacity']) }}</td>
+                    <td>{{ number_format($groupTotals['total_occupied']) }}</td>
+                    <td>{{ number_format($groupTotals['total_remaining']) }}</td>
+                    @foreach(['mq','cff','em','phc'] as $bucketKey)
+                        @php
+                            $bucketTotal = (int)$groupTotals[$bucketKey.'_capacity'];
+                            $bucketAllocated = (int)$groupTotals[$bucketKey.'_occupied'];
+                            $bucketConverted = (int)$groupTotals[$bucketKey.'_converted'];
+                            $bucketRemain = $bucketTotal - $bucketAllocated - $bucketConverted;
+                        @endphp
+                        <td class="a4-bucket-cell">
+                            <div class="a4-bucket-line text-body">Total: {{ number_format($bucketTotal) }}</div>
+                            <div class="a4-bucket-line">Allocated: {{ number_format($bucketAllocated) }}</div>
+                            @if($bucketConverted > 0)<div class="a4-bucket-line text-azure">Converted: {{ number_format($bucketConverted) }}</div>@endif
+                            <div class="a4-bucket-line">Remain: {{ number_format($bucketRemain) }}</div>
+                        </td>
+                    @endforeach
+                    <td>{{ number_format($groupTotals['nm_count']) }}</td>
+                    <td>{{ number_format($groupTotals['shifted_count']) }}</td>
+                </tr>
+            @endif
             {{-- Repeat the column heading after every Circular group tagline so the
                  Technical section never starts without its own heading. --}}
             <tr class="a4-group-row"><td colspan="11">{{ $groupLabel }}</td></tr>
@@ -86,8 +124,29 @@
                 <th>SL</th><th class="text-start">Cadre</th><th>Total Post</th><th>Allocated Post</th><th>Remain Post</th>
                 <th>MQ</th><th>CFF</th><th>EM</th><th>PHC</th><th>NM</th><th>SHIFTED</th>
             </tr>
-            @php $lastGroup = $groupLabel; @endphp
+            @php
+                $lastGroup = $groupLabel;
+                $groupTotals = array_fill_keys(array_keys($groupTotals), 0);
+            @endphp
         @endif
+        @php
+            $groupTotals['total_capacity'] += (int)$ledger->total_capacity;
+            $groupTotals['total_occupied'] += (int)$ledger->total_occupied;
+            $groupTotals['total_remaining'] += (int)$ledger->total_remaining;
+            $groupTotals['mq_capacity'] += (int)$ledger->mq_capacity;
+            $groupTotals['mq_occupied'] += (int)$ledger->mq_occupied;
+            $groupTotals['cff_capacity'] += (int)$ledger->cff_capacity;
+            $groupTotals['cff_occupied'] += (int)$ledger->cff_occupied;
+            $groupTotals['cff_converted'] += (int)$ledger->converted_cff;
+            $groupTotals['em_capacity'] += (int)$ledger->em_capacity;
+            $groupTotals['em_occupied'] += (int)$ledger->em_occupied;
+            $groupTotals['em_converted'] += (int)$ledger->converted_em;
+            $groupTotals['phc_capacity'] += (int)$ledger->phc_capacity;
+            $groupTotals['phc_occupied'] += (int)$ledger->phc_occupied;
+            $groupTotals['phc_converted'] += (int)$ledger->converted_phc;
+            $groupTotals['nm_count'] += (int)$ledger->nm_count;
+            $groupTotals['shifted_count'] += (int)$ledger->shifted_count;
+        @endphp
         <tr>
             <td>{{ $serial }}</td>
             <td class="a4-cadre-cell"><a class="fw-bold text-decoration-none" href="{{ route('allocation.a4.cadre-results',[$a4Run,$entry]) }}">{{ $ledger->cadre_code }} - {{ $abbr }}</a></td>
@@ -118,6 +177,31 @@
     @empty
         <tr><td colspan="11" class="text-center text-secondary py-4">No matching A4 Seat Ledger row.</td></tr>
     @endforelse
+    @if($lastGroup !== null)
+        <tr class="fw-bold bg-light">
+            <td></td>
+            <td class="text-start">{{ $lastGroup }} Total</td>
+            <td>{{ number_format($groupTotals['total_capacity']) }}</td>
+            <td>{{ number_format($groupTotals['total_occupied']) }}</td>
+            <td>{{ number_format($groupTotals['total_remaining']) }}</td>
+            @foreach(['mq','cff','em','phc'] as $bucketKey)
+                @php
+                    $bucketTotal = (int)$groupTotals[$bucketKey.'_capacity'];
+                    $bucketAllocated = (int)$groupTotals[$bucketKey.'_occupied'];
+                    $bucketConverted = (int)$groupTotals[$bucketKey.'_converted'];
+                    $bucketRemain = $bucketTotal - $bucketAllocated - $bucketConverted;
+                @endphp
+                <td class="a4-bucket-cell">
+                    <div class="a4-bucket-line text-body">Total: {{ number_format($bucketTotal) }}</div>
+                    <div class="a4-bucket-line">Allocated: {{ number_format($bucketAllocated) }}</div>
+                    @if($bucketConverted > 0)<div class="a4-bucket-line text-azure">Converted: {{ number_format($bucketConverted) }}</div>@endif
+                    <div class="a4-bucket-line">Remain: {{ number_format($bucketRemain) }}</div>
+                </td>
+            @endforeach
+            <td>{{ number_format($groupTotals['nm_count']) }}</td>
+            <td>{{ number_format($groupTotals['shifted_count']) }}</td>
+        </tr>
+    @endif
     </tbody></table></div>
 </div>
 </div></div>

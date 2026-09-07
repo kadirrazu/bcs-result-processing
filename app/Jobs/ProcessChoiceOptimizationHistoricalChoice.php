@@ -22,6 +22,10 @@ final class ProcessChoiceOptimizationHistoricalChoice implements ShouldQueue
     public function __construct(
         public readonly int $examinationId,
         public readonly int $actorId,
+        public readonly bool $includePreviousBcs = true,
+        public readonly bool $includeGoogleForm = false,
+        public readonly array $previousBcsSourceIds = [],
+        public readonly ?int $googleFormBatchId = null,
     ) {
         $this->onQueue((string) config('choice-optimization.queue', 'imports'));
     }
@@ -34,7 +38,7 @@ final class ProcessChoiceOptimizationHistoricalChoice implements ShouldQueue
         $connections->configure($exam);
 
         try {
-            $service->process($this->actorId);
+            $service->process($this->actorId, $this->includePreviousBcs, $this->includeGoogleForm, $this->previousBcsSourceIds, $this->googleFormBatchId);
         } finally {
             $connections->disconnect();
         }

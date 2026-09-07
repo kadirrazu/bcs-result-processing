@@ -214,13 +214,8 @@ final class AllocationInputFreezeService
         $merit = $this->storedMeritSummary();
         $setting = $this->settings->storedFinalizedSummary();
         $seat = $this->storedSeatSummary();
-        $co = ChoiceOptimizationSetting::query()->first();
-
-        $optimizationEnabled = (bool) ($co?->optimization_enabled);
-        $expectedChoiceSource = $optimizationEnabled ? 'choice_optimization' : 'choice_validation';
-        $expectedChoiceHash = $optimizationEnabled
-            ? (string) (ChoiceOptimizationProcessingState::query()->first()?->dataset_hash ?? '')
-            : (string) $choice['dataset_hash'];
+        $expectedChoiceSource = 'choice_optimization';
+        $expectedChoiceHash = (string) (ChoiceOptimizationProcessingState::query()->first()?->dataset_hash ?? '');
 
         if ((string) $freeze->choice_source !== $expectedChoiceSource) {
             throw new RuntimeException('Allocation-ready Choice source changed after input freeze. Re-freeze direct inputs.');
@@ -307,24 +302,16 @@ final class AllocationInputFreezeService
         $setting = $this->settings->verified();
         $seat = $this->seatBreakup->verifiedFinalized();
 
-        $optimization = ChoiceOptimizationSetting::query()->first();
-        $optimizationEnabled = (bool) ($optimization?->optimization_enabled);
-
-        if ($optimizationEnabled) {
-            $state = ChoiceOptimizationProcessingState::query()->first();
-            if (! $state || (string) $state->status !== 'finalized' || (bool) $state->is_stale || ! $state->dataset_hash) {
-                throw ValidationException::withMessages(['choice_optimization' => 'Choice Optimization is enabled but is not current/finalized.']);
-            }
-            $actual = $this->optimizedChoices->outputHashFromDatabase();
-            if (! hash_equals((string) $state->dataset_hash, $actual)) {
-                throw ValidationException::withMessages(['choice_optimization' => 'CHOICE_OPTIMIZATION_HASH_MISMATCH. Reprocess/finalize Choice Optimization.']);
-            }
-            $choiceSource = 'choice_optimization';
-            $choiceHash = $actual;
-        } else {
-            $choiceSource = 'choice_validation';
-            $choiceHash = (string) $validated['dataset_hash'];
+        $state = ChoiceOptimizationProcessingState::query()->first();
+        if (! $state || (string) $state->status !== 'finalized' || (bool) $state->is_stale || ! $state->dataset_hash) {
+            throw ValidationException::withMessages(['choice_optimization' => 'Choice Optimization is mandatory and must be current/finalized before Allocation input freeze.']);
         }
+        $actual = $this->optimizedChoices->outputHashFromDatabase();
+        if (! hash_equals((string) $state->dataset_hash, $actual)) {
+            throw ValidationException::withMessages(['choice_optimization' => 'CHOICE_OPTIMIZATION_HASH_MISMATCH. Reprocess/finalize Choice Optimization.']);
+        }
+        $choiceSource = 'choice_optimization';
+        $choiceHash = $actual;
 
         return [
             'circular' => [
@@ -337,7 +324,7 @@ final class AllocationInputFreezeService
             ],
             'choice' => [
                 'source' => $choiceSource,
-                'optimization_enabled' => $optimizationEnabled,
+                'optimization_mandatory' => true,
                 'dataset_hash' => $choiceHash,
             ],
             'tabulation' => [

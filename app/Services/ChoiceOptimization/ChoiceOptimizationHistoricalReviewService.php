@@ -97,7 +97,8 @@ final class ChoiceOptimizationHistoricalReviewService
                 'from_status' => 'review',
                 'to_status' => $decision === 'confirm' ? 'matched' : 'rejected',
                 'context' => [
-                    'historical_source_id' => (int) $source->id,
+                    'dependency' => 'previous_bcs',
+                'historical_source_id' => (int) $source->id,
                     'historical_match_id' => (int) $locked->id,
                     'current_registration_id' => (int) $locked->registration_id,
                     'current_reg' => (string) $locked->current_reg,
@@ -119,6 +120,7 @@ final class ChoiceOptimizationHistoricalReviewService
             'Confirmed Historical Recommendation set changed after operator review.',
             $actorId,
             [
+                'dependency' => 'previous_bcs',
                 'historical_source_id' => (int) $source->id,
                 'historical_match_id' => (int) $match->id,
                 'decision' => $decision,

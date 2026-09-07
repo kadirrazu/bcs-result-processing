@@ -112,7 +112,7 @@ final class AllocationA6ExcelFieldCatalog
             'choice.validated' => ['choice.validated_abbr'],
             'choice.omr' => ['choice.omr_abbr'],
             'choice.effective' => ['choice.effective_abbr'],
-            'allocation.cadre' => ['allocation.cadre_abbr','allocation.status','allocation.withheld','allocation.withheld_reason','allocation.cancelled','allocation.cancelled_reason'],
+            'allocation.cadre' => ['allocation.cadre_abbr'],
         ];
 
         $expanded = [];

@@ -45,8 +45,19 @@ final class ChoiceOptimizationHistoricalChoiceFinalizationService
                 'finalized_at' => null,
             ]);
 
+            $snapshot = (array) $state->source_snapshot;
+            $components = (array) ($snapshot['optimization_components'] ?? []);
+            $includePreviousBcs = (bool) ($components['previous_bcs'] ?? false);
+            $includeGoogleForm = (bool) ($components['google_form'] ?? false);
+            $previousBcsSourceIds = array_values(array_map('intval', (array) ($components['previous_bcs_source_ids'] ?? [])));
+            $googleFormBatchId = isset($components['google_form_batch_id']) ? (int) $components['google_form_batch_id'] : null;
+            if (($components['written_track_filter'] ?? null) !== true || ($components['written_track_filter_order'] ?? null) !== 'LAST') {
+                throw new RuntimeException('Mandatory final Written-track Filter component is missing or not configured LAST. Re-process Choice Optimization.');
+            }
+
             if (
-                ChoiceOptimizationHistoricalMatch::query()
+                $includePreviousBcs && ChoiceOptimizationHistoricalMatch::query()
+                    ->whereIn('historical_source_id', $previousBcsSourceIds)
                     ->where('match_status', 'review')
                     ->where('resolution_status', 'pending')
                     ->exists()
@@ -62,11 +73,10 @@ final class ChoiceOptimizationHistoricalChoiceFinalizationService
                 throw new RuntimeException('Resolve every blocking historical cadre mapping issue before finalization.');
             }
 
-            $snapshot = (array) $state->source_snapshot;
             $input = $this->input->snapshot();
             $circular = $this->circular->verifiedSummary();
-            $historicalHash = $this->historical->historicalSnapshotHash();
-            $googleFormHash = $this->consolidated->googleFormSnapshotHash();
+            $historicalHash = $includePreviousBcs ? $this->historical->historicalSnapshotHash($previousBcsSourceIds) : hash('sha256', 'PREVIOUS_BCS_NOT_SELECTED');
+            $googleFormHash = $includeGoogleForm ? $this->consolidated->googleFormSnapshotHash($googleFormBatchId) : hash('sha256', 'GOOGLE_FORM_NOT_SELECTED');
             $consolidatedHash = $this->consolidated->snapshotHash();
             $outputHash = $this->historical->outputHashFromDatabase();
             $actualOutputHash = $outputHash;

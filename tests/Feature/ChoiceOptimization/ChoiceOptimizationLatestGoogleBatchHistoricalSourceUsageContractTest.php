@@ -35,8 +35,9 @@ final class ChoiceOptimizationLatestGoogleBatchHistoricalSourceUsageContractTest
 
         $this->assertStringContainsString("boolean('included_in_optimization')", $migration);
         $this->assertStringContainsString('updateHistoricalSourceUsage', $controller);
-        $this->assertStringContainsString("where('included_in_optimization', true)", $service);
-        $this->assertStringContainsString("where('included_in_optimization', true)", $consolidated);
+        $this->assertStringContainsString('previousBcsSourceIds', $service);
+        $this->assertStringContainsString('previousBcsSourceIds', $consolidated);
+        $this->assertStringContainsString("where('included_in_optimization', true)", $controller);
         $this->assertStringContainsString('historical.source-usage', $routes);
         $this->assertStringContainsString('Include Selected', $view);
         $this->assertStringContainsString('Exclude Selected', $view);

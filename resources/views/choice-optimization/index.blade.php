@@ -6,7 +6,7 @@
         <div class="row align-items-center">
             <div class="col">
                 <h2 class="page-title">Choice Optimization</h2>
-                <div class="text-secondary">Optional transformation layer between finalized Choice Validation and Allocation.</div>
+                <div class="text-secondary">Mandatory Allocation-ready Choice generation layer. Historical sources are optional per run; Written-track Filter always runs last.</div>
             </div>
         </div>
     </div>
@@ -16,22 +16,12 @@
         <div class="row row-cards mb-3">
             <div class="col-lg-5">
                 <div class="card h-100">
-                    <div class="card-header"><h3 class="card-title">Optimization Setting</h3></div>
+                    <div class="card-header"><h3 class="card-title">Optimization Authority</h3></div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <span class="badge {{ $setting->optimization_enabled ? 'bg-green-lt' : 'bg-secondary-lt' }}">
-                                {{ $setting->optimization_enabled ? 'YES — ENABLED' : 'NO — BYPASS' }}
-                            </span>
-                        </div>
-                        <p class="text-secondary">
-                            YES: Viva OMR override and previous-BCS optimization must be completed before Allocation.<br>
-                            NO: Allocation consumes finalized Validated Choice directly; this module performs no transformation.
-                        </p>
-                        <form method="POST" action="{{ route('choice-optimization.setting.update') }}" class="d-flex gap-2">
-                            @csrf
-                            <button class="btn {{ $setting->optimization_enabled ? 'btn-primary' : 'btn-outline-primary' }}" name="optimization_enabled" value="1" type="submit">YES</button>
-                            <button class="btn {{ ! $setting->optimization_enabled ? 'btn-secondary' : 'btn-outline-secondary' }}" name="optimization_enabled" value="0" type="submit">NO</button>
-                        </form>
+                        <div class="mb-3"><span class="badge bg-green-lt">MANDATORY</span></div>
+                        <p class="text-secondary mb-2">Choice Optimization always produces the finalized Allocation-ready Choice.</p>
+                        <div class="small"><strong>Written-track Filter:</strong> mandatory, cannot be disabled, and always runs after all selected historical optimization.</div>
+                        <div class="small mt-2"><strong>Historical sources:</strong> selected independently for each run.</div>
                     </div>
                 </div>
             </div>
@@ -51,15 +41,14 @@
                                     @endif
                                 </div>
                             </div>
-                            <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Allocation choice source</div><div class="fw-semibold">{{ $setting->optimization_enabled ? 'Finalized Optimized Choice' : 'Finalized Validated Choice' }}</div><div class="small text-secondary mt-2">Allocation can consume this source only when the effective state is FINALIZED / ALLOCATION READY.</div></div></div>
-                            <div class="col-12"><div class="alert alert-info mb-0">Viva OMR establishes the effective choice. INCLUDED Previous BCS Repository recommendations and only the latest approved Google Form batch are consolidated first, then Choice Optimization runs once.</div></div>
+                            <div class="col-md-6"><div class="border rounded p-3 h-100"><div class="text-secondary small">Allocation choice source</div><div class="fw-semibold">Finalized Allocation-ready Choice</div><div class="small text-secondary mt-2">Allocation can consume this source only when the effective state is FINALIZED / ALLOCATION READY.</div></div></div>
+                            <div class="col-12"><div class="alert alert-info mb-0">Viva OMR establishes the effective choice. For each run, selected Previous BCS Repository and available Google Form recommendations are consolidated once; the mandatory Written-track Filter runs last.</div></div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        @if($setting->optimization_enabled)
         <div class="card mb-3">
             <div class="card-header"><div><h3 class="card-title">Google Form Historical Recommendation</h3><div class="card-subtitle">Optional YES/NO step. reg = current BCS registration; bcs + cadre = previous BCS recommendation.</div></div></div>
             <div class="card-body">
@@ -283,9 +272,9 @@
         <div class="card mt-3">
             <div class="card-header">
                 <div>
-                    <h3 class="card-title">Consolidated Historical Choice Optimization</h3>
+                    <h3 class="card-title">Choice Optimization Run</h3>
                     <div class="card-subtitle">
-                        INCLUDED Previous BCS recommendations + the latest approved Google Form batch are consolidated, then the current effective choice is trimmed once into the Allocation-ready sequence.
+                        Selected historical sources are consolidated into one recommendation set and one cutoff is applied. The mandatory Written-track Filter then runs LAST.
                     </div>
                 </div>
                 <div class="ms-auto d-flex gap-2">
@@ -294,10 +283,26 @@
                     @endif
                     <form method="POST" action="{{ route('choice-optimization.historical-choices.process') }}" class="mb-0">
                         @csrf
+                        <div class="d-flex flex-column gap-1 mb-2">
+                            <label class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" name="include_previous_bcs" value="1" @checked($previousBcsRunAvailable) @disabled(!$previousBcsRunAvailable)>
+                                <span class="form-check-label">Previous BCS Repository <span class="text-secondary">{{ $previousBcsRunAvailable ? '(all INCLUDED sources)' : '(no INCLUDED source available)' }}</span></span>
+                            </label>
+                            @if($googleFormRunAvailable)
+                                <label class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" name="include_google_form" value="1" checked>
+                                    <span class="form-check-label">Latest valid Google Form dataset</span>
+                                </label>
+                            @endif
+                            <label class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" checked disabled>
+                                <span class="form-check-label fw-semibold">Written-track Filter — mandatory / runs last</span>
+                            </label>
+                        </div>
                         <button
                             class="btn btn-primary"
                             type="submit"
-                            @disabled($setting->google_form_enabled === null || $historicalPendingReviewCount > 0 || !($optimizationInputBinding['can_process'] ?? false) || in_array((string)$state->status, ['historical_optimization_queued','historical_optimizing'], true))
+                            @disabled(!($optimizationInputBinding['can_process'] ?? false) || in_array((string)$state->status, ['historical_optimization_queued','historical_optimizing'], true))
                         >
                             {{ $historicalOptimizationRows > 0 ? 'Re-process Optimization' : 'Process Optimization' }}
                         </button>
@@ -403,13 +408,11 @@
 
                 <div class="alert alert-info mt-3 mb-0">
                     <strong>Consolidated snapshot:</strong> {{ number_format($consolidatedHistoricalCount) }} candidate + previous BCS key(s).
-                    Multiple cadre values from different sources are retained and evaluated independently; any matching cadre may define the cutoff.
+                    All selected Previous BCS + Google Form recommendations are de-duplicated with provenance preserved; the earliest/highest-preference exact match defines one historical cutoff. Written-track filtering is applied only afterward.
                     @if($setting->google_form_enabled === false) Google Form = NO, so only confirmed Previous BCS Repository recommendations participate. @endif
                 </div>
 
-                @if($setting->google_form_enabled === null)
-                    <div class="alert alert-warning mt-3 mb-0">Decide Google Form YES or NO before starting Consolidated Historical Choice Optimization.</div>
-                @elseif($historicalPendingReviewCount > 0)
+                @if($historicalPendingReviewCount > 0)
                     <div class="alert alert-warning mt-3 mb-0">
                         Resolve all Historical Match REVIEW items before starting Consolidated Historical Choice Optimization.
                     </div>
@@ -567,7 +570,6 @@
             }
         })();
         </script>
-        @endif
     </div>
 </div>
 @endsection

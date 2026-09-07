@@ -2,6 +2,8 @@
 
 namespace App\Services\ChoiceOptimization;
 
+use App\Services\Choice\ChoiceWrittenTrackProjectionService;
+
 use App\Models\CadreMaster;
 use App\Models\CadreSubMaster;
 use App\Models\ChoiceOptimizationConsolidatedHistoricalRecommendation;
@@ -23,17 +25,22 @@ final class ChoiceOptimizationHistoricalChoiceService
         private readonly ChoiceOptimizationHistoricalInputService $input,
         private readonly CircularFinalizedDatasetService $circular,
         private readonly ChoiceOptimizationConsolidatedHistoricalRecommendationService $consolidated,
+        private readonly ChoiceWrittenTrackProjectionService $trackProjection,
     ) {}
 
-    public function process(int $actorId): ChoiceOptimizationProcessingState
+    public function process(int $actorId, bool $includePreviousBcs = true, bool $includeGoogleForm = false, array $previousBcsSourceIds = [], ?int $googleFormBatchId = null): ChoiceOptimizationProcessingState
     {
-        $this->assertHistoricalSourcesReady();
+        if ($includePreviousBcs) {
+            $this->assertHistoricalSourcesReady($previousBcsSourceIds);
+        }
 
-        $pendingReview = ChoiceOptimizationHistoricalMatch::query()
-            ->whereHas('source', fn ($q) => $q->where('included_in_optimization', true))
-            ->where('match_status', 'review')
-            ->where('resolution_status', 'pending')
-            ->count();
+        $pendingReview = $includePreviousBcs
+            ? ChoiceOptimizationHistoricalMatch::query()
+                ->whereIn('historical_source_id', array_values(array_map('intval', $previousBcsSourceIds)))
+                ->where('match_status', 'review')
+                ->where('resolution_status', 'pending')
+                ->count()
+            : 0;
 
         if ($pendingReview > 0) {
             throw new RuntimeException(
@@ -41,7 +48,7 @@ final class ChoiceOptimizationHistoricalChoiceService
             );
         }
 
-        $consolidationSummary = $this->consolidated->rebuild();
+        $consolidationSummary = $this->consolidated->rebuild($includePreviousBcs, $includeGoogleForm, $previousBcsSourceIds, $googleFormBatchId);
         $inputSnapshot = $this->input->snapshot();
         $circularSummary = $this->circular->verifiedSummary();
         $circularEntries = $this->circular->entries()
@@ -84,6 +91,8 @@ final class ChoiceOptimizationHistoricalChoiceService
             $emptyCount = 0;
             $blockingCount = 0;
             $warningCount = 0;
+            $trackFilteredCount = 0;
+            $trackEmptyCount = 0;
             $now = now();
 
             foreach ($inputSnapshot['rows'] as $inputRow) {
@@ -97,6 +106,25 @@ final class ChoiceOptimizationHistoricalChoiceService
                     $masterMap,
                     $circularCodes,
                 );
+
+                // Historical cutoff is applied against the current validated/effective
+                // lineup first. Written-track compatibility is deliberately deferred to
+                // this final Allocation-ready projection so historical matching can see
+                // otherwise-valid preferences from a non-surviving Written side.
+                $postHistoricalCodes = array_values($result['final']);
+                $trackProjection = $this->trackProjection->project(
+                    $postHistoricalCodes,
+                    $inputRow['written_track'] ?? null,
+                    $circularEntries,
+                );
+                $result['final'] = $trackProjection['final'];
+
+                if ($trackProjection['removed'] !== []) {
+                    $trackFilteredCount++;
+                }
+                if ($postHistoricalCodes !== [] && $trackProjection['final'] === []) {
+                    $trackEmptyCount++;
+                }
 
                 match ($result['status']) {
                     'OPTIMIZED' => $optimizedCount++,
@@ -119,6 +147,10 @@ final class ChoiceOptimizationHistoricalChoiceService
                     'historical_recommendations' => $result['recommendations'] === [] ? null : json_encode($result['recommendations'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
                     'matched_cutoff' => $result['cutoff'] === null ? null : json_encode($result['cutoff'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
                     'removed_choice_codes' => $result['removed'] === [] ? null : json_encode($result['removed'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                    'post_historical_choice_codes' => json_encode($postHistoricalCodes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                    'track_removed_choice_codes' => $trackProjection['removed'] === [] ? null : json_encode($trackProjection['removed'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                    'track_filter_details' => $trackProjection['details'] === [] ? null : json_encode($trackProjection['details'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                    'track_filter_status' => $trackProjection['removed'] === [] ? 'UNCHANGED' : ($trackProjection['final'] === [] ? 'NO_CHOICE_AFTER_WRITTEN_TRACK_FILTER' : 'WRITTEN_TRACK_FILTERED'),
                     'final_choice_codes' => json_encode($result['final'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
                     'optimization_status' => $result['status'],
                     'warnings' => $result['warnings'] === [] ? null : json_encode($result['warnings'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
@@ -130,8 +162,8 @@ final class ChoiceOptimizationHistoricalChoiceService
                 ];
             }
 
-            $historicalHash = $this->historicalSnapshotHash();
-            $googleFormHash = $this->consolidated->googleFormSnapshotHash();
+            $historicalHash = $includePreviousBcs ? $this->historicalSnapshotHash($previousBcsSourceIds) : hash('sha256', 'PREVIOUS_BCS_NOT_SELECTED');
+            $googleFormHash = $includeGoogleForm ? $this->consolidated->googleFormSnapshotHash($googleFormBatchId) : hash('sha256', 'GOOGLE_FORM_NOT_SELECTED');
             $consolidatedHash = $this->consolidated->snapshotHash();
             $outputHash = $this->hashOutputRows($rows);
             $sourceSnapshot = [
@@ -144,6 +176,14 @@ final class ChoiceOptimizationHistoricalChoiceService
                 'historical_snapshot_hash' => $historicalHash,
                 'google_form_snapshot_hash' => $googleFormHash,
                 'consolidated_historical_hash' => $consolidatedHash,
+                'optimization_components' => [
+                    'previous_bcs' => $includePreviousBcs,
+                    'google_form' => $includeGoogleForm,
+                    'written_track_filter' => true,
+                    'written_track_filter_order' => 'LAST',
+                    'previous_bcs_source_ids' => array_values(array_map('intval', $previousBcsSourceIds)),
+                    'google_form_batch_id' => $googleFormBatchId,
+                ],
             ];
 
             DB::connection('exam')->transaction(function () use (
@@ -156,6 +196,10 @@ final class ChoiceOptimizationHistoricalChoiceService
                 $emptyCount,
                 $blockingCount,
                 $warningCount,
+                $includePreviousBcs,
+                $includeGoogleForm,
+                $trackFilteredCount,
+                $trackEmptyCount,
                 $consolidationSummary,
                 $sourceSnapshot,
                 $outputHash,
@@ -187,10 +231,15 @@ final class ChoiceOptimizationHistoricalChoiceService
                             'no_higher_choice_candidates' => $emptyCount,
                             'blocking_candidates' => $blockingCount,
                             'warning_candidates' => $warningCount,
+                            'written_track_filtered_candidates' => $trackFilteredCount,
+                            'no_choice_after_written_track_filter_candidates' => $trackEmptyCount,
                             'consolidated_recommendations' => (int) $consolidationSummary['total'],
                             'consolidated_multi_cadre_keys' => (int) ($consolidationSummary['multi_cadre_keys'] ?? 0),
                             'previous_bcs_source_rows' => (int) $consolidationSummary['previous_bcs_source_rows'],
                             'google_form_source_rows' => (int) $consolidationSummary['google_form_source_rows'],
+                            'previous_bcs_selected' => $includePreviousBcs,
+                            'google_form_selected' => $includeGoogleForm,
+                            'written_track_filter' => true,
                             'google_form_enabled' => (bool) $consolidationSummary['google_form_enabled'],
                             'processed_at' => $now->toIso8601String(),
                         ],
@@ -211,6 +260,11 @@ final class ChoiceOptimizationHistoricalChoiceService
                         'no_higher_choice_candidates' => $emptyCount,
                         'blocking_candidates' => $blockingCount,
                         'warning_candidates' => $warningCount,
+                        'previous_bcs_selected' => $includePreviousBcs,
+                        'google_form_selected' => $includeGoogleForm,
+                        'written_track_filter' => true,
+                        'written_track_filtered_candidates' => $trackFilteredCount,
+                        'no_choice_after_written_track_filter_candidates' => $trackEmptyCount,
                         'consolidated_recommendations' => (int) $consolidationSummary['total'],
                         'consolidated_multi_cadre_keys' => (int) ($consolidationSummary['multi_cadre_keys'] ?? 0),
                         'dataset_hash' => $outputHash,
@@ -432,12 +486,13 @@ final class ChoiceOptimizationHistoricalChoiceService
         return $map;
     }
 
-    public function historicalSnapshotHash(): string
+    public function historicalSnapshotHash(?array $sourceIds = null): string
     {
         $context = hash_init('sha256');
 
         ChoiceOptimizationHistoricalSource::query()
-            ->where('included_in_optimization', true)
+            ->when($sourceIds !== null, fn ($q) => $q->whereIn('id', array_values(array_map('intval', $sourceIds))))
+            ->when($sourceIds === null, fn ($q) => $q->where('included_in_optimization', true))
             ->orderBy('previous_bcs_number')
             ->get()
             ->each(function (ChoiceOptimizationHistoricalSource $source) use ($context): void {
@@ -452,7 +507,8 @@ final class ChoiceOptimizationHistoricalChoiceService
             });
 
         ChoiceOptimizationHistoricalMatch::query()
-            ->whereHas('source', fn ($q) => $q->where('included_in_optimization', true))
+            ->when($sourceIds !== null, fn ($q) => $q->whereIn('historical_source_id', array_values(array_map('intval', $sourceIds))))
+            ->when($sourceIds === null, fn ($q) => $q->whereHas('source', fn ($sq) => $sq->where('included_in_optimization', true)))
             ->whereIn('match_status', ['matched', 'review', 'rejected'])
             ->orderBy('historical_source_id')
             ->orderBy('registration_id')
@@ -494,6 +550,10 @@ final class ChoiceOptimizationHistoricalChoiceService
                             'historical_recommendations' => $row->historical_recommendations,
                             'matched_cutoff' => $row->matched_cutoff,
                             'removed_choice_codes' => $row->removed_choice_codes,
+                            'post_historical_choice_codes' => $row->post_historical_choice_codes,
+                            'track_removed_choice_codes' => $row->track_removed_choice_codes,
+                            'track_filter_details' => $row->track_filter_details,
+                            'track_filter_status' => $row->track_filter_status,
                             'final_choice_codes' => $row->final_choice_codes,
                             'optimization_status' => $row->optimization_status,
                             'warnings' => $row->warnings,
@@ -530,6 +590,10 @@ final class ChoiceOptimizationHistoricalChoiceService
                         'historical_recommendations' => $this->decodeJsonValue($row['historical_recommendations']),
                         'matched_cutoff' => $this->decodeJsonValue($row['matched_cutoff']),
                         'removed_choice_codes' => $this->decodeJsonValue($row['removed_choice_codes']),
+                        'post_historical_choice_codes' => $this->decodeJsonValue($row['post_historical_choice_codes']),
+                        'track_removed_choice_codes' => $this->decodeJsonValue($row['track_removed_choice_codes']),
+                        'track_filter_details' => $this->decodeJsonValue($row['track_filter_details']),
+                        'track_filter_status' => $row['track_filter_status'],
                         'final_choice_codes' => $this->decodeJsonValue($row['final_choice_codes']),
                         'optimization_status' => $row['optimization_status'],
                         'warnings' => $this->decodeJsonValue($row['warnings']),
@@ -554,6 +618,10 @@ final class ChoiceOptimizationHistoricalChoiceService
             'historical_recommendations' => array_values((array) ($row['historical_recommendations'] ?? [])),
             'matched_cutoff' => $row['matched_cutoff'] ?: null,
             'removed_choice_codes' => array_values((array) ($row['removed_choice_codes'] ?? [])),
+            'post_historical_choice_codes' => array_values((array) ($row['post_historical_choice_codes'] ?? [])),
+            'track_removed_choice_codes' => array_values((array) ($row['track_removed_choice_codes'] ?? [])),
+            'track_filter_details' => array_values((array) ($row['track_filter_details'] ?? [])),
+            'track_filter_status' => (string) ($row['track_filter_status'] ?? ''),
             'final_choice_codes' => array_values((array) ($row['final_choice_codes'] ?? [])),
             'optimization_status' => (string) ($row['optimization_status'] ?? ''),
             'warnings' => array_values((array) ($row['warnings'] ?? [])),
@@ -611,10 +679,10 @@ final class ChoiceOptimizationHistoricalChoiceService
         return json_decode((string) $value, true, 512, JSON_THROW_ON_ERROR);
     }
 
-    private function assertHistoricalSourcesReady(): void
+    private function assertHistoricalSourcesReady(array $sourceIds): void
     {
         $sources = ChoiceOptimizationHistoricalSource::query()
-            ->where('included_in_optimization', true)
+            ->whereIn('id', array_values(array_map('intval', $sourceIds)))
             ->orderBy('previous_bcs_number')
             ->get();
 

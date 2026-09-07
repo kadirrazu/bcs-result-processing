@@ -12,6 +12,15 @@ final class ChoiceOptimizationHistoricalStalenessService
         $state = ChoiceOptimizationProcessingState::query()
             ->firstOrCreate(['id' => 1], ['status' => 'not_started']);
 
+        $dependency = (string) ($context['dependency'] ?? '');
+        $components = (array) data_get($state->source_snapshot, 'optimization_components', []);
+        if ($dependency === 'previous_bcs' && ($components['previous_bcs'] ?? null) === false) {
+            return;
+        }
+        if ($dependency === 'google_form' && ($components['google_form'] ?? null) === false) {
+            return;
+        }
+
         if (
             ! in_array((string) $state->status, [
                 'historical_optimized',

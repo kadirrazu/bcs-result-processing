@@ -79,7 +79,7 @@ final class ChoiceOptimizationHistoricalInputService
 
     /**
      * @return array{
-     *   rows: array<int,array{registration_id:int,reg:string,source:string,codes:array<int,string>}>,
+     *   rows: array<int,array{registration_id:int,reg:string,source:string,written_track:?string,codes:array<int,string>}>,
      *   source:string,
      *   source_hash:string,
      *   choice_validation_version:int,
@@ -151,6 +151,7 @@ final class ChoiceOptimizationHistoricalInputService
                 'registration_id' => $registrationId,
                 'reg' => (string) $choiceRow->reg,
                 'source' => $source,
+                'written_track' => filled($choiceRow->written_qualified_track) ? strtoupper(trim((string) $choiceRow->written_qualified_track)) : null,
                 'codes' => $codes,
             ];
         }
@@ -262,7 +263,7 @@ final class ChoiceOptimizationHistoricalInputService
         ];
     }
 
-    /** @param array<int,array{registration_id:int,reg:string,source:string,codes:array<int,string>}> $rows */
+    /** @param array<int,array{registration_id:int,reg:string,source:string,written_track:?string,codes:array<int,string>}> $rows */
     public function hashRows(array $rows): string
     {
         $context = hash_init('sha256');
@@ -272,6 +273,7 @@ final class ChoiceOptimizationHistoricalInputService
                 'registration_id' => $row['registration_id'],
                 'reg' => $row['reg'],
                 'source' => $row['source'],
+                'written_track' => $row['written_track'] ?? null,
                 'codes' => array_values($row['codes']),
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n");
         }

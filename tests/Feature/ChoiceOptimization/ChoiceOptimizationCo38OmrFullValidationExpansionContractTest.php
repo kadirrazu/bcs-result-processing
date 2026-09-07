@@ -18,7 +18,8 @@ final class ChoiceOptimizationCo38OmrFullValidationExpansionContractTest extends
         $this->assertStringContainsString('$this->engine->validate', $service);
         $this->assertStringContainsString('DuplicateChoice', $engine);
         $this->assertStringContainsString('NotInFinalizedCircular', $engine);
-        $this->assertStringContainsString('TrackNotAllowed', $engine);
+        $this->assertStringNotContainsString('ChoiceValidationReason::TrackNotAllowed', $engine);
+        $this->assertStringContainsString('Written surviving-track mismatch is NOT a Choice Validation', $engine);
         $this->assertStringContainsString('BachelorSubjectMismatch', $engine);
         $this->assertStringContainsString('PrsMismatch', $engine);
     }

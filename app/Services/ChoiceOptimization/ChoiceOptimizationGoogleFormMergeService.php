@@ -117,6 +117,7 @@ final class ChoiceOptimizationGoogleFormMergeService
                 'Accepted Google Form historical recommendations changed. Historical Choice Optimization must be re-processed.',
                 $actorId,
                 [
+                    'dependency' => 'google_form',
                     'google_form_batch_id' => $batchId,
                     'merged_rows' => $mergedThisRun,
                     'superseded_old_recommendations' => $supersededOldRecommendations,

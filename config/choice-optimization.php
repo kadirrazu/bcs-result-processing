@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'default_enabled' => false,
+    'default_enabled' => true,
     'previous_bcs_columns' => [
         'bcs_number', 'reg', 'name', 'fname', 'mname', 'b_date', 'district_name',
         'ssc_roll', 'ssc_year', 'hsc_roll', 'hsc_year', 'nid', 'cadre',

@@ -11,17 +11,12 @@
     <div class="container-xl">
         <div class="row align-items-center g-2">
             <div class="col">
-                <h2 class="page-title">Consolidated Historical Choice Optimization</h2>
-                <div class="text-secondary mt-1">Confirmed Previous BCS recommendations → Allocation-ready Choice</div>
+                <h2 class="page-title">Choice Optimization Results</h2>
+                <div class="text-secondary mt-1">Selected historical sources are consolidated once; mandatory Written-track Filter runs last → Allocation-ready Choice</div>
             </div>
             <div class="col-auto ms-auto d-flex gap-2">
                 @if(!$running)
-                    <form method="POST" action="{{ route('choice-optimization.historical-choices.process') }}" class="mb-0">
-                        @csrf
-                        <button class="btn btn-outline-primary" type="submit" @disabled(!($optimizationInputBinding['can_process'] ?? false))>
-                            {{ $rows->total() > 0 ? 'Re-process' : 'Process' }}
-                        </button>
-                    </form>
+                    <a class="btn btn-outline-primary" href="{{ route('choice-optimization.index') }}">Configure New / Re-process Run</a>
                 @endif
                 @if($canFinalize)
                     <form method="POST" action="{{ route('choice-optimization.historical-choices.finalize') }}" class="mb-0">
@@ -43,6 +38,17 @@
         $lastOptimizationCvHash = (string) data_get($state->source_snapshot, 'choice_validation_hash', '');
         $currentCvVersion = (int) ($choiceValidationAuthority['validation_version'] ?? 0);
     @endphp
+
+    <div class="card mb-3">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="text-secondary small me-1">Run components:</span>
+                <span class="badge {{ data_get($state->source_snapshot, 'optimization_components.previous_bcs', false) ? 'bg-blue-lt' : 'bg-secondary-lt' }}">Previous BCS {{ data_get($state->source_snapshot, 'optimization_components.previous_bcs', false) ? 'SELECTED' : 'NOT SELECTED' }}</span>
+                <span class="badge {{ data_get($state->source_snapshot, 'optimization_components.google_form', false) ? 'bg-purple-lt' : 'bg-secondary-lt' }}">Google Form {{ data_get($state->source_snapshot, 'optimization_components.google_form', false) ? 'SELECTED' : 'NOT SELECTED' }}</span>
+                <span class="badge bg-green-lt">Written-track Filter MANDATORY / LAST</span>
+            </div>
+        </div>
+    </div>
 
     <div class="card mb-3">
         <div class="card-body py-3">
@@ -240,8 +246,13 @@
                                         - {{ $row->matched_cutoff['historical_cadre'] ?? '—' }}
                                     </div>
                                     <div class="small text-secondary">
-                                        Removed: {{ implode(', ', (array)$row->removed_choice_codes) ?: '—' }}
+                                        Removed by historical cutoff: {{ implode(', ', (array)$row->removed_choice_codes) ?: '—' }}
                                     </div>
+                                    @if($row->track_removed_choice_codes)
+                                        <div class="small text-warning mt-1">
+                                            Removed by Written-track filter: {{ implode(', ', (array)$row->track_removed_choice_codes) }}
+                                        </div>
+                                    @endif
                                 @elseif(empty($recommendations))
                                     <span class="text-secondary small">No cutoff</span>
                                 @else
