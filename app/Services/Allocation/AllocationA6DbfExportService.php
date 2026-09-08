@@ -156,6 +156,7 @@ final class AllocationA6DbfExportService
             'COM_MERIT' => $merit?->common_merit_position,
             'GEN_MERIT' => $merit?->general_merit_position,
             'TECH_MERIT' => $merit?->technical_merit_position,
+            'ALLM_TECH' => MeritResult::allMeritTechJson($merit?->all_merit_tech),
             'ALOC_CH_CD' => implode(' ', array_map('strval', $choices)),
             'ALOC_CH_AB' => collect($choices)
                 ->map(fn ($code) => (string) ($data['abbreviations']->get((int) $code) ?? 'UNMAPPED'))
@@ -184,6 +185,7 @@ final class AllocationA6DbfExportService
             ['name' => 'COM_MERIT', 'type' => 'N', 'length' => 8],
             ['name' => 'GEN_MERIT', 'type' => 'N', 'length' => 8],
             ['name' => 'TECH_MERIT', 'type' => 'N', 'length' => 8],
+            ['name' => 'ALLM_TECH', 'type' => 'C', 'length' => 254],
             ['name' => 'ALOC_CH_CD', 'type' => 'C', 'length' => 254],
             ['name' => 'ALOC_CH_AB', 'type' => 'C', 'length' => 254],
             ['name' => 'CADRE_CODE', 'type' => 'N', 'length' => 8],

@@ -216,7 +216,7 @@ final class AllocationA6Controller extends Controller
             [
                 'preset' => 'legacy_visual_foxpro',
                 'dataset' => $scope,
-                'field_count' => $scope === 'tabulated' ? 19 : 17,
+                'field_count' => $scope === 'tabulated' ? 20 : 18,
             ],
             $request,
             $context,

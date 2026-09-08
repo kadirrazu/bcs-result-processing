@@ -17,13 +17,13 @@ final class AllocationA6LegacyDbfExportContractTest extends TestCase
         self::assertStringContainsString('/a6/exports/dbf', $routes);
         self::assertStringContainsString('startDbf', $routes);
         self::assertStringContainsString("'scope' => ['required', 'in:tabulated,allocated']", $controller);
-        self::assertStringContainsString("'field_count' => \$scope === 'tabulated' ? 19 : 17", $controller);
+        self::assertStringContainsString("'field_count' => \$scope === 'tabulated' ? 20 : 18", $controller);
         self::assertStringContainsString("'DBF' => \$this->generateDbf", $job);
         self::assertStringContainsString("'application/x-dbf'", $job);
 
         foreach ([
             'REG', 'USER_ID', 'CATEGORY', 'TRACK', 'CFF', 'EM', 'PHC',
-            'GEN_TOTAL', 'TECH_TOTAL', 'COM_MERIT', 'GEN_MERIT', 'TECH_MERIT',
+            'GEN_TOTAL', 'TECH_TOTAL', 'COM_MERIT', 'GEN_MERIT', 'TECH_MERIT', 'ALLM_TECH',
             'ALOC_CH_CD', 'ALOC_CH_AB', 'CADRE_CODE', 'CADRE_ABBR', 'ALOC_BASIS',
         ] as $field) {
             self::assertStringContainsString("'name' => '{$field}'", $service);
@@ -38,8 +38,8 @@ final class AllocationA6LegacyDbfExportContractTest extends TestCase
         self::assertStringContainsString('applyPublishedOnly', $service);
         self::assertStringContainsString('ChoiceOptimizationHistoricalChoice', $service);
         self::assertStringContainsString('final_choice_codes', $service);
-        self::assertStringContainsString('Tabulated 19 fields', $view);
-        self::assertStringContainsString('Allocated 17 fields', $view);
+        self::assertStringContainsString('Tabulated 20 fields', $view);
+        self::assertStringContainsString('Allocated 18 fields', $view);
         self::assertStringContainsString('blank otherwise', $view);
     }
 

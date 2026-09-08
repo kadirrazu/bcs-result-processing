@@ -40,6 +40,7 @@ final class AllocationA6ExcelFieldCatalog
             ]],
             'merit' => ['label' => 'Merit', 'fields' => [
                 'merit.common'=>'Common Merit Position','merit.general'=>'General Merit Position','merit.technical'=>'Technical Merit Position',
+                'merit.all_merit_tech'=>'all_merit_tech',
             ]],
             'allocation' => ['label' => 'Allocation', 'fields' => [
                 'allocation.cadre'=>'Allocated Cadre Code','allocation.status'=>'Allocation Status','allocation.withheld'=>'Withheld',

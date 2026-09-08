@@ -435,6 +435,7 @@ final class AllocationA6ExportService
             'merit.common' => $merit?->common_merit_position,
             'merit.general' => $merit?->general_merit_position,
             'merit.technical' => $merit?->technical_merit_position,
+            'merit.all_merit_tech' => MeritResult::allMeritTechJson($merit?->all_merit_tech),
             'allocation.cadre' => $allocation?->cadre_code,
             'allocation.cadre_abbr' => (string) ($data['abbreviations']->get((int) ($allocation?->cadre_code ?? 0)) ?? ''),
             'allocation.status' => $allocationStatus,

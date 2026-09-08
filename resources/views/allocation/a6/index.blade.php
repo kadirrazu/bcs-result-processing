@@ -106,7 +106,7 @@
 <div class="card mb-3">
     <div class="card-header">
         <h3 class="card-title">Legacy Visual FoxPro / DBF Export</h3>
-        <div class="ms-auto text-secondary small">Tabulated 19 fields · Allocated 17 fields · queued generation</div>
+        <div class="ms-auto text-secondary small">Tabulated 20 fields · Allocated 18 fields · queued generation</div>
     </div>
     <div class="card-body">
         <div class="row g-3">
@@ -133,7 +133,7 @@
                 </div>
             </div>
         </div>
-        <div class="text-secondary small mt-3">Common fields: REG, USER_ID, CATEGORY, TRACK, CFF, EM, PHC, GEN_TOTAL, TECH_TOTAL, COM_MERIT, GEN_MERIT, TECH_MERIT, ALOC_CH_CD, ALOC_CH_AB, CADRE_CODE, CADRE_ABBR, ALOC_BASIS. Tabulated DBF additionally includes WITHHELD and CANCELLED.</div>
+        <div class="text-secondary small mt-3">Common fields: REG, USER_ID, CATEGORY, TRACK, CFF, EM, PHC, GEN_TOTAL, TECH_TOTAL, COM_MERIT, GEN_MERIT, TECH_MERIT, ALLM_TECH, ALOC_CH_CD, ALOC_CH_AB, CADRE_CODE, CADRE_ABBR, ALOC_BASIS. Tabulated DBF additionally includes WITHHELD and CANCELLED.</div>
     </div>
 </div>
 
