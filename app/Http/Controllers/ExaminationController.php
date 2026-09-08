@@ -6,6 +6,7 @@ use App\Actions\Examinations\CreateExaminationAction;
 use App\Actions\Examinations\UpdateExaminationAction;
 use App\Data\ExaminationData;
 use App\Enums\ExaminationStatus;
+use App\Enums\ExaminationType;
 use App\Http\Requests\StoreExaminationRequest;
 use App\Http\Requests\UpdateExaminationRequest;
 use App\Models\Examination;
@@ -40,13 +41,13 @@ final class ExaminationController extends Controller
     {
         $this->authorize('create', Examination::class);
 
-        return view('examinations.create', ['statuses' => ExaminationStatus::cases()]);
+        return view('examinations.create', ['statuses' => ExaminationStatus::cases(), 'types' => ExaminationType::cases()]);
     }
 
     public function store(StoreExaminationRequest $request): RedirectResponse
     {
         $this->createExamination->execute(
-            ExaminationData::fromValidated($request->validated(), $request->boolean('is_enabled'))
+            ExaminationData::fromValidated($request->validated(), $request->boolean('is_enabled'), $request->boolean('is_completed'))
         );
 
         return redirect()->route('examinations.index')->with('success', 'Examination created successfully.');
@@ -66,6 +67,7 @@ final class ExaminationController extends Controller
         return view('examinations.edit', [
             'examination' => $examination,
             'statuses' => ExaminationStatus::cases(),
+            'types' => ExaminationType::cases(),
         ]);
     }
 
@@ -73,7 +75,7 @@ final class ExaminationController extends Controller
     {
         $this->updateExamination->execute(
             $examination,
-            ExaminationData::fromValidated($request->validated(), $request->boolean('is_enabled'))
+            ExaminationData::fromValidated($request->validated(), $request->boolean('is_enabled'), $request->boolean('is_completed'))
         );
 
         return redirect()->route('examinations.index')->with('success', 'Examination updated successfully.');

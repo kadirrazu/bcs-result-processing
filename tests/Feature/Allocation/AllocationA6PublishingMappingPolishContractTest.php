@@ -51,6 +51,6 @@ final class AllocationA6PublishingMappingPolishContractTest extends TestCase
 
         self::assertStringContainsString('User::query()->find', $controller);
         self::assertStringContainsString('$run->generated_by }} - {{ $generatedByUser?->name', $runView);
-        self::assertStringContainsString('Back to A6 — Reporting &amp; Export', $runView);
+        self::assertStringContainsString('Back to A6 - Allocation Reporting &amp; Export', $runView);
     }
 }

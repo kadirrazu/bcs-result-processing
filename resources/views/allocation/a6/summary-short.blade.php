@@ -9,7 +9,7 @@
             </div>
             <div class="col-auto ms-auto d-flex gap-2 flex-wrap">
                 <a class="btn btn-outline-primary" href="{{ route('allocation.a6.summary') }}">Open In-depth Summary</a>
-                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 — Reporting &amp; Export</a>
+                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 - Allocation Reporting &amp; Export</a>
             </div>
         </div>
     </div>

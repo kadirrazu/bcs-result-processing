@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\UserController;
+use App\Http\Middleware\EnsureExaminationProcessingOpen;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -21,24 +22,19 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/registration-masters.php';
 
-    require __DIR__.'/registrations.php';
-
-    require __DIR__.'/preliminary.php';
-
-    require __DIR__.'/written.php';
-
-    require __DIR__.'/viva.php';
-
-    require __DIR__.'/circular.php';
-
-    require __DIR__.'/choice-validation.php';
-
-    require __DIR__.'/tabulation.php';
-
-    require __DIR__.'/merit.php';
-
-    require __DIR__.'/choice-optimization.php';
-
-    require __DIR__.'/allocation.php';
+    Route::middleware(EnsureExaminationProcessingOpen::class)->group(function (): void {
+        require __DIR__.'/overview.php';
+        require __DIR__.'/registrations.php';
+        require __DIR__.'/preliminary.php';
+        require __DIR__.'/written.php';
+        require __DIR__.'/viva.php';
+        require __DIR__.'/circular.php';
+        require __DIR__.'/choice-validation.php';
+        require __DIR__.'/tabulation.php';
+        require __DIR__.'/merit.php';
+        require __DIR__.'/choice-optimization.php';
+        require __DIR__.'/allocation.php';
+        require __DIR__.'/reporting.php';
+    });
 
 });

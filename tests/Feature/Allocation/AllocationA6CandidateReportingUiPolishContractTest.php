@@ -20,10 +20,10 @@ final class AllocationA6CandidateReportingUiPolishContractTest extends TestCase
         self::assertStringContainsString('ChoiceOptimizationEffectiveChoice', $service);
         self::assertStringContainsString('Previous BCS cutoff applied', $service);
 
-        self::assertStringContainsString('A6 — Reporting &amp; Export - Candidate Search', $list);
+        self::assertStringContainsString('A6 - Allocation Reporting &amp; Export - Candidate Search', $list);
         self::assertStringContainsString('Total Candidates', $list);
         self::assertStringContainsString("\$allocationAbbr->get", $list);
-        self::assertStringContainsString('A6 — Reporting &amp; Export', $list);
+        self::assertStringContainsString('A6 - Allocation Reporting &amp; Export', $list);
 
         self::assertStringContainsString('ALLOCATED TO', $detail);
         self::assertStringContainsString('Category', $detail);

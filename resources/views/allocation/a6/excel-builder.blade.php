@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('content')
-<div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center"><div class="col"><h2 class="page-title">A6 — Dynamic Excel Export Builder</h2><div class="text-secondary">Build one combined workbook from selected finalized module fields.</div></div><div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 — Reporting &amp; Export</a></div></div></div></div>
+<div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center"><div class="col"><h2 class="page-title">A6 — Dynamic Excel Export Builder</h2><div class="text-secondary">Build one combined workbook from selected finalized module fields.</div></div><div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 - Allocation Reporting &amp; Export</a></div></div></div></div>
 <div class="page-body"><div class="container-xl">
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 <form method="POST" action="{{ route('allocation.a6.exports.excel-builder.start') }}">@csrf

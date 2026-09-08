@@ -3,7 +3,7 @@
 return [
     'examination' => [
         'items' => [
-            ['label' => 'Overview', 'route' => 'dashboard', 'patterns' => ['dashboard']],
+            ['label' => 'Overview', 'route' => 'examination-overview.index', 'patterns' => ['examination-overview.*']],
             ['label' => 'Registrations', 'route' => 'registrations.index', 'patterns' => ['registrations.*']],
             [
                 'label' => 'Preliminary',
@@ -18,7 +18,7 @@ return [
             ['label' => 'Merit', 'route' => 'merit.index', 'patterns' => ['merit.*']],
             ['label' => 'Choice Optimization', 'route' => 'choice-optimization.index', 'patterns' => ['choice-optimization.*']],
             ['label' => 'Allocation', 'route' => 'allocation.index', 'patterns' => ['allocation.*']],
-            ['label' => 'Reports', 'route' => null, 'patterns' => ['examination-reports.*']],
+            ['label' => 'Reporting', 'route' => 'examination-reports.index', 'patterns' => ['examination-reports.*']],
         ],
     ],
 ];

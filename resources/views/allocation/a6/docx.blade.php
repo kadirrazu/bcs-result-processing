@@ -8,7 +8,7 @@
                 <div class="text-secondary">Upload your own Word template, or download a Circular-ordered sample template with ready-to-use tags.</div>
             </div>
             <div class="col-auto ms-auto">
-                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 — Reporting &amp; Export</a>
+                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 - Allocation Reporting &amp; Export</a>
             </div>
         </div>
     </div>

@@ -8,7 +8,7 @@
                 <div class="text-secondary">Final seat utilization summary in Circular category/serial order from the current finalized A5-bound A4 seat ledger.</div>
             </div>
             <div class="col-auto ms-auto">
-                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 — Reporting &amp; Export</a>
+                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 - Allocation Reporting &amp; Export</a>
             </div>
         </div>
     </div>

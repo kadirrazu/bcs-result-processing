@@ -73,7 +73,7 @@ final class AllocationA6ReadinessService
 
         if ($reason !== null || ! $a5 instanceof AllocationA5Run) {
             throw ValidationException::withMessages([
-                'allocation_a6' => $reason ?: 'A6 Reporting & Export is not ready.',
+                'allocation_a6' => $reason ?: 'A6 - Allocation Reporting & Export is not ready.',
             ]);
         }
 

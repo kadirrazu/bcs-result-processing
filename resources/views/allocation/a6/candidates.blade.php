@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('content')
-<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">A6 — Reporting &amp; Export - Candidate Search</h2><div class="text-secondary">Current finalized Tabulation-eligible population. Open a candidate for consolidated module-wise detail.</div></div><div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">A6 — Reporting &amp; Export</a></div></div></div></div>
+<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">A6 - Allocation Reporting &amp; Export - Candidate Search</h2><div class="text-secondary">Current finalized Tabulation-eligible population. Open a candidate for consolidated module-wise detail.</div></div><div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">A6 - Allocation Reporting &amp; Export</a></div></div></div></div>
 <div class="page-body"><div class="container-xl">
 <div class="row row-cards mb-3">
     <div class="col-sm-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-secondary">Total Candidates</div><div class="h1 mb-0">{{ number_format($totalCandidates) }}</div><div class="small text-secondary">Viva Passed / Tabulation-eligible</div></div></div></div>

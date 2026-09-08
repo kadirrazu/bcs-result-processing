@@ -4,7 +4,7 @@
     <div class="container-xl">
         <div class="row g-2 align-items-center">
             <div class="col">
-                <h2 class="page-title">A6 — Reporting &amp; Export</h2>
+                <h2 class="page-title">A6 - Allocation Reporting &amp; Export</h2>
                 <div class="text-secondary">Final read-only publishing layer bound to the current A5 100% PASS result.</div>
             </div>
             <div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a></div>

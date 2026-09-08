@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ExaminationStatus;
+use App\Enums\ExaminationType;
 use Database\Factories\ExaminationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -21,8 +22,12 @@ class Examination extends Model
         'name',
         'slug',
         'database_name',
+        'bcs_type',
+        'advertisement_date',
+        'age_calculation_date',
         'status',
         'is_enabled',
+        'is_completed',
     ];
 
     /** @return array<string, string> */
@@ -31,7 +36,11 @@ class Examination extends Model
         return [
             'bcs_number' => 'integer',
             'status' => ExaminationStatus::class,
+            'bcs_type' => ExaminationType::class,
+            'advertisement_date' => 'date',
+            'age_calculation_date' => 'date',
             'is_enabled' => 'boolean',
+            'is_completed' => 'boolean',
             'database_checked_at' => 'datetime',
             'database_migration_batch' => 'integer',
         ];

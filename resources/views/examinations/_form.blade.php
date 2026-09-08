@@ -56,4 +56,63 @@
             <span class="form-check-label">Enabled for selection</span>
         </label>
     </div>
+
+    <div class="col-12"><hr class="my-1"><div class="text-secondary small">Optional examination metadata</div></div>
+
+    <div class="col-md-4">
+        <label for="bcs_type" class="form-label">BCS Type</label>
+        <select id="bcs_type" name="bcs_type" class="form-select @error('bcs_type') is-invalid @enderror">
+            <option value="">Not specified</option>
+            @foreach ($types as $type)
+                <option value="{{ $type->value }}" @selected(old('bcs_type', $examination->bcs_type?->value ?? '') === $type->value)>{{ $type->label() }}</option>
+            @endforeach
+        </select>
+        @error('bcs_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+
+    <div class="col-md-4">
+        <label for="advertisement_date" class="form-label">Advertisement Date</label>
+        <input id="advertisement_date" name="advertisement_date" type="date"
+               value="{{ old('advertisement_date', isset($examination) && $examination->advertisement_date ? $examination->advertisement_date->format('Y-m-d') : '') }}"
+               class="form-control @error('advertisement_date') is-invalid @enderror">
+        <div class="form-hint">Official BCS circular / advertisement publication date.</div>
+        @error('advertisement_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+
+    <div class="col-md-4">
+        <label for="age_calculation_date" class="form-label">Age Calculation Date</label>
+        <input id="age_calculation_date" name="age_calculation_date" type="date"
+               value="{{ old('age_calculation_date', isset($examination) && $examination->age_calculation_date ? $examination->age_calculation_date->format('Y-m-d') : '') }}"
+               class="form-control @error('age_calculation_date') is-invalid @enderror">
+        <div class="form-hint">Authoritative reference date for age-based Research &amp; Statistics reports.</div>
+        @error('age_calculation_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+
+    <div class="col-12">
+        <label class="form-check form-switch mt-2">
+            <input type="hidden" name="is_completed" value="0">
+            <input id="is_completed" class="form-check-input" type="checkbox" name="is_completed" value="1"
+                   @checked((bool) old('is_completed', $examination->is_completed ?? false))>
+            <span class="form-check-label fw-semibold">Mark as Completed</span>
+        </label>
+        <div class="form-hint">Administrative lock only. Completed examinations remain available for read-only lookup, reporting and export. Unlock this before any re-processing or processing-data mutation.</div>
+        @error('is_completed')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+    </div>
 </div>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const completed = document.getElementById('is_completed');
+    if (!completed) return;
+
+    let initial = completed.checked;
+    completed.addEventListener('change', function () {
+        if (completed.checked && !initial) {
+            const ok = window.confirm('Mark this BCS as Completed? Processing mutations will be locked. Reporting and exports will remain available. You can unlock the examination later if re-processing is required.');
+            if (!ok) completed.checked = false;
+        }
+    });
+});
+</script>
+@endpush

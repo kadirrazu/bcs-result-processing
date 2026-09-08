@@ -710,12 +710,12 @@
 <div class="container-xl">
 <div class="card mt-3 mb-3" id="allocation-a6-card">
     <div class="card-header">
-        <div><h3 class="card-title">A6 — Reporting &amp; Export</h3><div class="card-subtitle">Candidate reporting, cadre drill-down, TXT/XLSX export and DOCX publishing from the final validated Allocation result.</div></div>
+        <div><h3 class="card-title">A6 - Allocation Reporting &amp; Export</h3><div class="card-subtitle">Candidate reporting, cadre drill-down, TXT/XLSX export and DOCX publishing from the final validated Allocation result.</div></div>
         <div class="ms-auto"><span class="badge bg-{{ ($a6Gate['ready'] ?? false) ? 'success' : 'secondary' }}-lt">{{ ($a6Gate['ready'] ?? false) ? 'ACTIVE / READY' : 'INACTIVE / BLOCKED' }}</span></div>
     </div>
     <div class="card-body d-flex align-items-center justify-content-between gap-3 flex-wrap">
         <div class="text-secondary">@if($a6Gate['ready'] ?? false)A5 v{{ $a6Gate['a5_version'] }} finalized 100% PASS · A4 v{{ $a6Gate['a4_version'] }} · Circular v{{ $a6Gate['circular_version'] }}@else{{ $a6Gate['reason'] ?? 'Complete and finalize A1-A5 before Reporting & Export.' }}@endif</div>
-        <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.a6.index') : '#' }}">Open Reporting &amp; Export</a>
+        <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.a6.index') : '#' }}">Open A6 - Allocation Reporting &amp; Export</a>
     </div>
 </div>
 </div>
