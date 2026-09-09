@@ -12,18 +12,32 @@
 <table>
     <colgroup>
         @for($groupIndex = 0; $groupIndex < 3; $groupIndex++)
-            <col style="width:8%">
-            <col style="width:15%">
-            <col style="width:10.33%">
+            <col style="width:6.5%">
+            <col style="width:15.5%">
+            <col style="width:10.4167%">
+            @if($groupIndex < 2)<col style="width:1.375%">@endif
         @endfor
     </colgroup>
 
     <thead>
         <tr>
             @for($groupIndex = 0; $groupIndex < 3; $groupIndex++)
-                <th class="{{ $groupIndex > 0 ? 'group-divider' : '' }}">Serial</th>
-                <th>{{ $section['merit_label'] }}</th>
-                <th>Allocation Basis</th>
+                <th>Serial</th>
+                <th>
+                    @php
+                        $meritHeader = (string) $section['merit_label'];
+                        $meritPrefix = str_ends_with($meritHeader, ' Merit Position')
+                            ? substr($meritHeader, 0, -strlen(' Merit Position'))
+                            : null;
+                    @endphp
+                    @if($meritPrefix !== null)
+                        {{ $meritPrefix }} Merit<br>Position
+                    @else
+                        {{ $meritHeader }}
+                    @endif
+                </th>
+                <th>Allocation<br>Basis</th>
+                @if($groupIndex < 2)<th class="gap"></th>@endif
             @endfor
         </tr>
     </thead>
@@ -31,7 +45,7 @@
     <tbody>
         @if($maxRows === 0)
             <tr>
-                <td colspan="9" class="empty">No ACTIVE allocated candidate for this cadre.</td>
+                <td colspan="11" class="empty">No ACTIVE allocated candidate for this cadre.</td>
             </tr>
         @else
             @for($rowIndex = 0; $rowIndex < $maxRows; $rowIndex++)
@@ -41,9 +55,7 @@
                             $candidate = $groups->get($groupIndex)?->get($rowIndex);
                         @endphp
 
-                        <td class="{{ $groupIndex > 0 ? 'group-divider' : '' }}">
-                            {{ $candidate['serial'] ?? '' }}
-                        </td>
+                        <td>{{ $candidate['serial'] ?? '' }}</td>
                         <td>
                             @if($candidate)
                                 <strong>{{ $candidate['merit_position'] ?? '—' }}</strong>
@@ -56,6 +68,7 @@
                                 </span>
                             @endif
                         </td>
+                        @if($groupIndex < 2)<td class="gap"></td>@endif
                     @endfor
                 </tr>
             @endfor

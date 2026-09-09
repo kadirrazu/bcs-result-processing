@@ -40,6 +40,7 @@ final class AllocationVerificationPdfReport
         $mpdf->WriteHTML(view('reports.pdf.allocation-verification', $data + [
             'examinationName' => $examinationName,
             'generatedAt' => $generatedAt,
+            'reportType' => $reportType,
         ])->render());
 
         $scope = in_array($reportType, ['general-cadre', 'technical-cadre'], true) && $cadreCode
@@ -64,7 +65,7 @@ final class AllocationVerificationPdfReport
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
             'format' => 'A4',
-            'orientation' => 'L',
+            'orientation' => 'P',
             'margin_left' => 12.7,
             'margin_right' => 12.7,
             'margin_top' => 12.7,
@@ -96,7 +97,7 @@ final class AllocationVerificationPdfReport
         foreach ($data['sections'] as $section) {
             foreach ($section['pages'] as $pageIndex => $page) {
                 if ($pageNumber > 0) {
-                    $mpdf->AddPage('L');
+                    $mpdf->AddPage('P');
                 }
 
                 $groups = $page['groups'];

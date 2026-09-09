@@ -27,9 +27,9 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
             ->whereNumber('cadreCode')->name('cadre.verification.general-cadre.pdf');
 
         Route::get('/cadre-section/verification/{type}', [CadreSectionReportingController::class, 'verification'])
-            ->whereIn('type', ['common','general','technical-only'])->name('cadre.verification');
+            ->whereIn('type', ['common','general','technical-only','quota'])->name('cadre.verification');
         Route::post('/cadre-section/verification/{type}/pdf', [CadreSectionReportingController::class, 'queueVerificationPdf'])
-            ->whereIn('type', ['common','general','technical-only'])->name('cadre.verification.pdf');
+            ->whereIn('type', ['common','general','technical-only','quota'])->name('cadre.verification.pdf');
 
         Route::get('/cadre-section/verification/technical-cadre/{cadreCode}', [CadreSectionReportingController::class, 'technicalCadre'])
             ->whereNumber('cadreCode')->name('cadre.verification.technical');

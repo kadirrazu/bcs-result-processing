@@ -5,7 +5,6 @@ namespace App\Services\Reporting;
 use App\Enums\CadreCategory;
 use App\Models\AllocationA4Result;
 use App\Models\AllocationA4Run;
-use App\Models\AllocationA4SeatLedger;
 use App\Models\AllocationInputCandidate;
 use App\Models\AllocationInputQueueEntry;
 use App\Models\AllocationA5Run;
@@ -20,6 +19,7 @@ use App\Models\Registration;
 use App\Services\Allocation\AllocationA6ReportService;
 use App\Services\Allocation\AllocationResultDispositionService;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Identity-free, read-only Allocation Verification reporting.
@@ -126,15 +126,44 @@ final class AllocationVerificationReportService
             ])->values();
     }
 
-    /** @return array{title:string,cadre:?array,rows:Collection,summary:?array} */
+    /** @return array{title:string,cadre:?array,rows:Collection,summary:?array,quotaSummary:?array} */
+    /** @return array{title:string,cadre:?array,rows:Collection,summary:?array,quotaSummary:?array} */
     public function build(string $type, AllocationA5Run $a5, ?int $cadreCode = null): array
+    {
+        $type = strtolower(trim($type));
+        $meritRunId = $this->requireMeritRunId();
+        $disposition = $this->dispositions->snapshot($a5);
+        $key = $this->reportCacheKey('verification', [
+            'a5' => (int) $a5->id,
+            'a4' => (int) $a5->allocation_a4_run_id,
+            'merit' => $meritRunId,
+            'disposition_revision' => (int) $disposition['revision'],
+            'disposition_hash' => (string) $disposition['hash'],
+            'type' => $type,
+            'cadre' => (int) ($cadreCode ?? 0),
+        ]);
+
+        return Cache::remember($key, now()->addHours(6), fn (): array =>
+            $this->buildUncached($type, $a5, $cadreCode)
+        );
+    }
+
+    private function buildUncached(string $type, AllocationA5Run $a5, ?int $cadreCode = null): array
     {
         $meritRunId = $this->requireMeritRunId();
         $type = strtolower(trim($type));
 
         $base = MeritResult::query()
             ->where('merit_results.processing_run_id', $meritRunId)
-            ->select('merit_results.*');
+            ->select([
+                'merit_results.registration_id',
+                'merit_results.cadre_category',
+                'merit_results.written_qualified_track',
+                'merit_results.common_merit_position',
+                'merit_results.general_merit_position',
+                'merit_results.technical_merit_position',
+                'merit_results.all_merit_tech',
+            ]);
         $this->dispositions->applyPublishedOnly(
             $base,
             $a5,
@@ -160,6 +189,40 @@ final class AllocationVerificationReportService
             // T includes candidates who originated as GT but qualified only on the technical side.
             $base->whereIn('written_qualified_track', ['TT', 'T'])
                 ->whereNotNull('technical_merit_position')
+                ->orderBy('technical_merit_position');
+        } elseif ($type === 'quota') {
+            $title = 'Quota Candidate Allocation Verification Report';
+
+            // Quota verification is bound to the exact immutable A4 input freeze.
+            // Registration remains authoritative for quota entitlement. A5.5 publication
+            // disposition is applied exactly as in the rest of Allocation Verification.
+            $a4Run = AllocationA4Run::query()->findOrFail((int) $a5->allocation_a4_run_id);
+            $inputRegistrationIds = AllocationInputCandidate::query()
+                ->where('input_freeze_id', (int) $a4Run->input_freeze_id)
+                ->pluck('registration_id');
+
+            $quotaRegistrationQuery = Registration::query()
+                ->whereIn('id', $inputRegistrationIds)
+                ->where(function ($query): void {
+                    $query->where('has_ff_quota', 2)
+                        ->orWhere('has_em_quota', 1)
+                        ->orWhere('has_phc_quota', 1);
+                });
+
+            $this->dispositions->applyPublishedOnly(
+                $quotaRegistrationQuery,
+                $a5,
+                'registrations.id'
+            );
+
+            $quotaRegistrationIds = $quotaRegistrationQuery->pluck('id');
+
+            $base->whereIn('registration_id', $quotaRegistrationIds)
+                ->orderByRaw('CASE WHEN common_merit_position IS NULL THEN 1 ELSE 0 END')
+                ->orderBy('common_merit_position')
+                ->orderByRaw('CASE WHEN general_merit_position IS NULL THEN 1 ELSE 0 END')
+                ->orderBy('general_merit_position')
+                ->orderByRaw('CASE WHEN technical_merit_position IS NULL THEN 1 ELSE 0 END')
                 ->orderBy('technical_merit_position');
         } elseif ($type === 'general-cadre') {
             abort_if(! $cadreCode, 404);
@@ -261,7 +324,7 @@ final class AllocationVerificationReportService
         $allocations = AllocationA4Result::query()
             ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
             ->whereIn('registration_id', $registrationIds)
-            ->get()
+            ->get(['registration_id','cadre_code','choice_position','allocation_basis','merit_position'])
             ->keyBy('registration_id');
 
         // Allocation-ready choices must come from the exact immutable Input Freeze bound to A4/A5,
@@ -277,15 +340,11 @@ final class AllocationVerificationReportService
         // finalized A4 outcome that produced publication. No report-only allocation rule is run.
         $queueEvidence = AllocationInputQueueEntry::query()
             ->where('input_freeze_id', (int) $a4Run->input_freeze_id)
-            ->whereIn('registration_id', $registrationIds)
+            ->whereIn('registration_id', $allocations->keys()->map(fn ($id) => (int) $id)->values())
             ->orderBy('registration_id')->orderBy('choice_position')
             ->get(['registration_id','cadre_code','choice_position','merit_position','eligible_cff','eligible_em','eligible_phc'])
             ->groupBy('registration_id');
 
-        $seatLedgers = AllocationA4SeatLedger::query()
-            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
-            ->get()
-            ->keyBy('cadre_code');
 
         $finalCutoffs = AllocationA4Result::query()
             ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
@@ -315,7 +374,8 @@ final class AllocationVerificationReportService
         $historicalChoices = ChoiceOptimizationHistoricalChoice::query()
             ->whereIn('registration_id', $registrationIds)
             ->orderBy('registration_id')->orderByDesc('id')
-            ->get()->unique('registration_id')->keyBy('registration_id');
+            ->get(['id','registration_id','input_choice_codes','historical_recommendations','matched_cutoff'])
+            ->unique('registration_id')->keyBy('registration_id');
 
         $choiceCodes = collect();
         foreach ($frozenCandidates as $frozen) {
@@ -330,7 +390,7 @@ final class AllocationVerificationReportService
         $rows = $merits->map(function (MeritResult $merit) use (
             $registrations, $bachelors, $prs, $allocations, $serialByRegistration,
             $frozenCandidates, $historicalChoices, $abbr, $specificRanks, $type,
-            $queueEvidence, $seatLedgers, $finalCutoffs
+            $queueEvidence, $finalCutoffs
         ): array {
             $id = (int) $merit->registration_id;
             $registration = $registrations->get($id);
@@ -348,18 +408,23 @@ final class AllocationVerificationReportService
                 'general' => $merit->general_merit_position,
                 'general-cadre' => $merit->general_merit_position,
                 'technical-only' => $merit->technical_merit_position,
+                'quota' => $merit->common_merit_position
+                    ?? $merit->general_merit_position
+                    ?? $merit->technical_merit_position,
                 'technical-cadre' => $specificRank,
                 default => null,
             };
 
             $allocationCode = $allocation ? (int) $allocation->cadre_code : null;
             $allocationAbbr = $allocationCode ? (string) $abbr->get($allocationCode, (string) $allocationCode) : null;
-            $higherChoiceReview = $allocation
-                ? $this->higherChoiceReview(
+            // Missed-choice evidence is only relevant when a candidate was allocated
+            // lower in the preference sequence. Unallocated candidates intentionally skip
+            // this report-time evidence lookup/calculation.
+            $higherChoiceMissedReasons = $allocation
+                ? $this->higherChoiceMissedReasons(
                     $queueEvidence->get($id, collect()),
                     (int) $allocation->choice_position,
                     $abbr,
-                    $seatLedgers,
                     $finalCutoffs
                 )
                 : [];
@@ -393,8 +458,12 @@ final class AllocationVerificationReportService
                 'validated_choices' => $this->choiceLabels($validatedChoices, $abbr, null),
                 'choices' => $this->choiceLabels($choices, $abbr, $allocationCode),
                 'historical_cutoff' => $historicalCutoff,
-                'higher_choice_review' => $higherChoiceReview,
-                'remarks' => '—',
+                'historical_allocations' => $this->historicalAllocations($history),
+                'higher_choice_missed_reasons' => $higherChoiceMissedReasons,
+                'allocation_outcome' => $allocation ? 'ALLOCATED' : 'NOT_ALLOCATED',
+                'remarks' => $type === 'quota'
+                    ? ($allocation ? 'Allocated by '.strtoupper((string) $allocation->allocation_basis) : 'Not Allocated')
+                    : null,
             ];
         })->values();
 
@@ -433,7 +502,32 @@ final class AllocationVerificationReportService
             ];
         }
 
-        return compact('title','cadre','rows','summary');
+        $meritHeadingLines = match ($type) {
+            'common' => ['COMMON MERIT', 'POSITION'],
+            'general', 'general-cadre' => ['GENERAL MERIT', 'POSITION'],
+            'technical-only' => ['TECHNICAL MERIT', 'POSITION'],
+            'technical-cadre' => [strtoupper((string) ($cadre['abbr'] ?? 'TECHNICAL')).' MERIT', 'POSITION'],
+            'quota' => ['APPLICABLE MERIT', 'POSITION'],
+            default => ['MERIT', 'POSITION'],
+        };
+
+        $quotaSummary = null;
+        if ($type === 'quota') {
+            $quotaSummary = [
+                'total' => $rows->count(),
+                'cff' => $rows->filter(fn (array $row): bool => in_array('CFF', $row['quota_labels'], true))->count(),
+                'em' => $rows->filter(fn (array $row): bool => in_array('EM', $row['quota_labels'], true))->count(),
+                'phc' => $rows->filter(fn (array $row): bool => in_array('PHC', $row['quota_labels'], true))->count(),
+                'allocated' => $rows->where('allocation_outcome', 'ALLOCATED')->count(),
+                'not_allocated' => $rows->where('allocation_outcome', 'NOT_ALLOCATED')->count(),
+                'allocated_mq' => $rows->filter(fn (array $row): bool => $row['allocation_outcome'] === 'ALLOCATED' && ($row['allocation_basis'] ?? null) === 'MQ')->count(),
+                'allocated_cff' => $rows->filter(fn (array $row): bool => $row['allocation_outcome'] === 'ALLOCATED' && ($row['allocation_basis'] ?? null) === 'CFF')->count(),
+                'allocated_em' => $rows->filter(fn (array $row): bool => $row['allocation_outcome'] === 'ALLOCATED' && ($row['allocation_basis'] ?? null) === 'EM')->count(),
+                'allocated_phc' => $rows->filter(fn (array $row): bool => $row['allocation_outcome'] === 'ALLOCATED' && ($row['allocation_basis'] ?? null) === 'PHC')->count(),
+            ];
+        }
+
+        return compact('title','cadre','rows','summary','quotaSummary','meritHeadingLines');
     }
 
     /**
@@ -446,7 +540,25 @@ final class AllocationVerificationReportService
      *
      * @return array{title:string,rows_per_group:int,sections:Collection}
      */
+    /** @return array{title:string,rows_per_group:int,sections:Collection} */
     public function buildCadreSerialMerit(AllocationA5Run $a5): array
+    {
+        $meritRunId = $this->requireMeritRunId();
+        $disposition = $this->dispositions->snapshot($a5);
+        $key = $this->reportCacheKey('cadre-serial-merit', [
+            'a5' => (int) $a5->id,
+            'a4' => (int) $a5->allocation_a4_run_id,
+            'merit' => $meritRunId,
+            'disposition_revision' => (int) $disposition['revision'],
+            'disposition_hash' => (string) $disposition['hash'],
+        ]);
+
+        return Cache::remember($key, now()->addHours(6), fn (): array =>
+            $this->buildCadreSerialMeritUncached($a5)
+        );
+    }
+
+    private function buildCadreSerialMeritUncached(AllocationA5Run $a5): array
     {
         $meritRunId = $this->requireMeritRunId();
 
@@ -583,6 +695,19 @@ final class AllocationVerificationReportService
         ];
     }
 
+    /** @param array<string,mixed> $parts */
+    private function reportCacheKey(string $scope, array $parts): string
+    {
+        $database = (string) config('database.connections.exam.database', 'exam');
+        ksort($parts);
+
+        return 'reporting:allocation-verification:'.hash('sha256', json_encode([
+            'db' => $database,
+            'scope' => $scope,
+            'parts' => $parts,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
     private function requireMeritRunId(): int
     {
         $id = $this->a6->currentMeritRunId();
@@ -642,6 +767,42 @@ final class AllocationVerificationReportService
         return $cadre !== '' && $bcs !== '' ? ['cadre' => $cadre, 'bcs' => 'BCS-'.$bcs] : null;
     }
 
+    /**
+     * Compact previous-BCS cadre history retained by finalized Choice Optimization.
+     * Candidate identity / previous registration values are deliberately excluded.
+     *
+     * @return array<int,array{bcs:string,cadres:array<int,string>}>
+     */
+    private function historicalAllocations(?ChoiceOptimizationHistoricalChoice $history): array
+    {
+        $grouped = [];
+
+        foreach ((array) ($history?->historical_recommendations ?? []) as $recommendation) {
+            $recommendation = (array) $recommendation;
+            $bcs = (int) ($recommendation['bcs_number'] ?? 0);
+            $cadre = strtoupper(trim((string) ($recommendation['cadre'] ?? '')));
+
+            if ($bcs <= 0 || $cadre === '') {
+                continue;
+            }
+
+            $grouped[$bcs] ??= [];
+            if (! in_array($cadre, $grouped[$bcs], true)) {
+                $grouped[$bcs][] = $cadre;
+            }
+        }
+
+        krsort($grouped, SORT_NUMERIC);
+
+        return collect($grouped)
+            ->map(fn (array $cadres, int|string $bcs): array => [
+                'bcs' => 'BCS-'.(int) $bcs,
+                'cadres' => array_values($cadres),
+            ])
+            ->values()
+            ->all();
+    }
+
     /** @return array<int,array{abbr:string,position:int}> */
     private function technicalCadreMerits(MeritResult $merit): array
     {
@@ -661,70 +822,55 @@ final class AllocationVerificationReportService
     }
 
     /**
-     * Explain only choices above the final allocated choice, using immutable queue merit,
-     * finalized A4 seat ledger and finalized A4 cutoff evidence.
+     * Compact missed-choice evidence from the immutable A2 queue and final A4 cutoffs.
      *
-     * @return array<int,array{cadre:string,details:array<int,string>}>
+     * Only choices above the final allocated choice are shown. Unallocated candidates
+     * intentionally do not request missed-choice evidence in verification output.
+     * MQ last merit is always included. Only quota bases applicable to the candidate
+     * for that cadre are additionally included. No report-time allocation is re-run.
+     *
+     * @return array<int,array{cadre:string,last_merits:array<string,?int>}>
      */
-    private function higherChoiceReview(
+    private function higherChoiceMissedReasons(
         Collection $candidateQueue,
         int $allocatedChoicePosition,
         Collection $abbr,
-        Collection $seatLedgers,
         Collection $finalCutoffs
     ): array {
         return $candidateQueue
             ->filter(fn ($q) => (int) $q->choice_position < $allocatedChoicePosition)
             ->sortBy('choice_position')
-            ->map(function ($q) use ($abbr, $seatLedgers, $finalCutoffs): array {
+            ->map(function ($q) use ($abbr, $finalCutoffs): array {
                 $code = (int) $q->cadre_code;
-                $name = (string) $abbr->get($code, (string) $code);
-                $candidateMerit = (int) $q->merit_position;
-                $ledger = $seatLedgers->get($code);
                 $cutoffs = $finalCutoffs->get($code, collect())->keyBy(
                     fn ($row) => strtoupper((string) $row->allocation_basis)
                 );
 
-                $meritCutoff = $cutoffs->get('MQ')?->cutoff_merit;
-                $parts = [];
-                if ($meritCutoff !== null) {
-                    $parts[] = "merit allocation ended at merit ".(int) $meritCutoff."; candidate merit was {$candidateMerit}";
-                } elseif ((int) ($ledger?->merit_capacity ?? 0) > 0) {
-                    $parts[] = "no final MQ allocation was recorded; candidate merit was {$candidateMerit}";
-                } else {
-                    $parts[] = "no merit seat remained in the finalized seat outcome; candidate merit was {$candidateMerit}";
+                $lastMerits = [
+                    'MQ' => $cutoffs->get('MQ')?->cutoff_merit !== null
+                        ? (int) $cutoffs->get('MQ')->cutoff_merit
+                        : null,
+                ];
+
+                if ((bool) $q->eligible_cff) {
+                    $lastMerits['CFF'] = $cutoffs->get('CFF')?->cutoff_merit !== null
+                        ? (int) $cutoffs->get('CFF')->cutoff_merit
+                        : null;
                 }
-
-                $eligible = [];
-                if ((bool) $q->eligible_cff) $eligible[] = 'CFF';
-                if ((bool) $q->eligible_em) $eligible[] = 'EM';
-                if ((bool) $q->eligible_phc) $eligible[] = 'PHC';
-
-                if ($eligible === []) {
-                    $parts[] = 'no applicable quota entitlement';
-                } else {
-                    foreach ($eligible as $quota) {
-                        $capacityField = strtolower($quota).'_capacity';
-                        $occupiedField = strtolower($quota).'_occupied';
-                        $capacity = (int) ($ledger?->{$capacityField} ?? 0);
-                        $occupied = (int) ($ledger?->{$occupiedField} ?? 0);
-                        $quotaCutoff = $cutoffs->get($quota)?->cutoff_merit;
-
-                        if ($capacity <= 0) {
-                            $parts[] = "no {$quota} seat was available in the finalized seat breakup";
-                        } elseif ($quotaCutoff !== null) {
-                            $parts[] = "{$quota} allocation ended at merit ".(int) $quotaCutoff;
-                        } elseif ($occupied <= 0) {
-                            $parts[] = "no final {$quota} allocation was recorded";
-                        } else {
-                            $parts[] = "{$quota} quota was fully accounted for in the finalized outcome";
-                        }
-                    }
+                if ((bool) $q->eligible_em) {
+                    $lastMerits['EM'] = $cutoffs->get('EM')?->cutoff_merit !== null
+                        ? (int) $cutoffs->get('EM')->cutoff_merit
+                        : null;
+                }
+                if ((bool) $q->eligible_phc) {
+                    $lastMerits['PHC'] = $cutoffs->get('PHC')?->cutoff_merit !== null
+                        ? (int) $cutoffs->get('PHC')->cutoff_merit
+                        : null;
                 }
 
                 return [
-                    'cadre' => $name,
-                    'details' => $parts,
+                    'cadre' => (string) $abbr->get($code, (string) $code),
+                    'last_merits' => $lastMerits,
                 ];
             })
             ->values()

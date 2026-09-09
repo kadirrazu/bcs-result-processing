@@ -27,7 +27,7 @@
 @section('content')
 <style>
 @page {
-    size: A4 landscape;
+    size: A4 portrait;
     margin: 0.5in;
 }
 .csm-page {
@@ -49,9 +49,12 @@
     font-weight: 700;
 }
 .csm-table {
-    width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
     table-layout: fixed;
+    margin: 0 !important;
 }
+.csm-table-wrap { width:100%; max-width:100%; overflow-x:hidden; }
 .csm-table th,
 .csm-table td {
     text-align: center;
@@ -59,10 +62,13 @@
 }
 .csm-table th {
     font-weight: 700;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+    line-height: 1.15;
 }
-.csm-group-divider {
-    border-left-width: 2px !important;
-}
+.csm-group-divider { border-left-width: 1px !important; }
+.csm-gap { width: 1.375% !important; min-width: 0 !important; border: 0 !important; background: transparent !important; padding: 0 !important; }
 .csm-basis-mq {
     color: #000;
     font-weight: 700;
@@ -149,22 +155,36 @@
                     </div>
                 </div>
 
-                <div class="table-responsive">
+                <div class="csm-table-wrap">
                     <table class="table table-bordered table-sm csm-table mb-0">
                         <colgroup>
                             @for($groupIndex = 0; $groupIndex < 3; $groupIndex++)
-                                <col style="width:8%">
-                                <col style="width:15%">
-                                <col style="width:10.33%">
+                                <col style="width:6.5%">
+                                <col style="width:15.5%">
+                                <col style="width:10.4167%">
+                                @if($groupIndex < 2)<col style="width:1.375%">@endif
                             @endfor
                         </colgroup>
 
                         <thead>
                             <tr>
                                 @for($groupIndex = 0; $groupIndex < 3; $groupIndex++)
-                                    <th class="{{ $groupIndex > 0 ? 'csm-group-divider' : '' }}">Serial</th>
-                                    <th>{{ $section['merit_label'] }}</th>
-                                    <th>Allocation Basis</th>
+                                    <th>Serial</th>
+                                    <th>
+                                        @php
+                                            $meritHeader = (string) $section['merit_label'];
+                                            $meritPrefix = str_ends_with($meritHeader, ' Merit Position')
+                                                ? substr($meritHeader, 0, -strlen(' Merit Position'))
+                                                : null;
+                                        @endphp
+                                        @if($meritPrefix !== null)
+                                            {{ $meritPrefix }} Merit<br>Position
+                                        @else
+                                            {{ $meritHeader }}
+                                        @endif
+                                    </th>
+                                    <th>Allocation<br>Basis</th>
+                                    @if($groupIndex < 2)<th class="csm-gap"></th>@endif
                                 @endfor
                             </tr>
                         </thead>
@@ -172,7 +192,7 @@
                         <tbody>
                             @if($maxRows === 0)
                                 <tr>
-                                    <td colspan="9" class="text-secondary py-4">
+                                    <td colspan="11" class="text-secondary py-4">
                                         No ACTIVE allocated candidate for this cadre.
                                     </td>
                                 </tr>
@@ -184,9 +204,7 @@
                                                 $candidate = $groups->get($groupIndex)?->get($rowIndex);
                                             @endphp
 
-                                            <td class="{{ $groupIndex > 0 ? 'csm-group-divider' : '' }}">
-                                                {{ $candidate['serial'] ?? '' }}
-                                            </td>
+                                            <td>{{ $candidate['serial'] ?? '' }}</td>
                                             <td>
                                                 @if($candidate)
                                                     <strong>{{ $candidate['merit_position'] ?? '—' }}</strong>
@@ -199,6 +217,7 @@
                                                     </span>
                                                 @endif
                                             </td>
+                                            @if($groupIndex < 2)<td class="csm-gap"></td>@endif
                                         @endfor
                                     </tr>
                                 @endfor

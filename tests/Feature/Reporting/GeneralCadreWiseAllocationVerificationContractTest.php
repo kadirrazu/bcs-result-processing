@@ -24,18 +24,16 @@ final class GeneralCadreWiseAllocationVerificationContractTest extends TestCase
 
         self::assertStringContainsString('public function generalCadre(', $controller);
         self::assertStringContainsString('public function queueGeneralCadrePdf(', $controller);
-        self::assertStringContainsString("'generalCadres' =>", $controller);
-
         self::assertStringContainsString('/verification/general-cadre/{cadreCode}', $routes);
         self::assertStringContainsString('cadre.verification.general-cadre', $routes);
         self::assertStringContainsString('cadre.verification.general-cadre.pdf', $routes);
 
         self::assertStringContainsString('General Cadre-wise Allocation Verification Reports', $landing);
-        self::assertStringContainsString('general-cadre-search', $landing);
-        self::assertStringContainsString('general-cadre-filter', $landing);
-        self::assertStringContainsString('e.g. 125 or PLIC', $landing);
-        self::assertStringContainsString("initCadreFilter('general')", $landing);
-        self::assertStringContainsString("initCadreFilter('technical')", $landing);
+        $listing = file_get_contents(resource_path('views/reporting/cadre-section/cadre-wise-index.blade.php'));
+        self::assertStringContainsString('cadre.verification.general-cadre-wise', $landing);
+        self::assertStringContainsString('id="cadre-search"', $listing);
+        self::assertStringContainsString('id="cadre-filter"', $listing);
+        self::assertStringContainsString('Search by Cadre Code or Abbreviation', $listing);
 
         self::assertStringContainsString("reportType === 'general-cadre'", $report);
         self::assertStringContainsString('cadre.verification.general-cadre.pdf', $report);
