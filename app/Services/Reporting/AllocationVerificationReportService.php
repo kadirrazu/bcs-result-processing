@@ -18,6 +18,7 @@ use App\Models\MeritResult;
 use App\Models\PostRelatedSubject;
 use App\Models\Registration;
 use App\Services\Allocation\AllocationA6ReportService;
+use App\Services\Allocation\AllocationResultDispositionService;
 use Illuminate\Support\Collection;
 
 /**
@@ -29,15 +30,84 @@ use Illuminate\Support\Collection;
  */
 final class AllocationVerificationReportService
 {
-    public function __construct(private readonly AllocationA6ReportService $a6) {}
+    public function __construct(
+        private readonly AllocationA6ReportService $a6,
+        private readonly AllocationResultDispositionService $dispositions,
+    ) {}
+
+    /** @return Collection<int,array<string,mixed>> */
+    public function generalCadres(AllocationA5Run $a5): Collection
+    {
+        $meritRunId = $this->requireMeritRunId();
+        $a4Run = AllocationA4Run::query()->findOrFail((int) $a5->allocation_a4_run_id);
+
+        $generalMeritQuery = MeritResult::query()
+            ->where('processing_run_id', $meritRunId)
+            ->whereNotNull('general_merit_position');
+
+        $this->dispositions->applyPublishedOnly(
+            $generalMeritQuery,
+            $a5,
+            'merit_results.registration_id'
+        );
+
+        $generalMeritIds = $generalMeritQuery
+            ->pluck('registration_id')
+            ->map(fn ($id) => (int) $id)
+            ->flip();
+
+        $candidateQuery = AllocationInputCandidate::query()
+            ->where('input_freeze_id', (int) $a4Run->input_freeze_id);
+
+        $this->dispositions->applyPublishedOnly(
+            $candidateQuery,
+            $a5,
+            'allocation_input_candidates.registration_id'
+        );
+
+        $counts = [];
+        foreach ($candidateQuery->get(['registration_id', 'choice_codes']) as $candidate) {
+            $registrationId = (int) $candidate->registration_id;
+            if (! $generalMeritIds->has($registrationId)) {
+                continue;
+            }
+
+            foreach (collect((array) $candidate->choice_codes)
+                ->map(fn ($code) => (int) $code)
+                ->filter()
+                ->unique() as $code) {
+                $counts[$code] = ($counts[$code] ?? 0) + 1;
+            }
+        }
+
+        return $this->a6->cadres($a5)
+            ->filter(function (array $row): bool {
+                $type = $row['entry']?->cadre_type;
+                $type = $type instanceof \BackedEnum ? $type->value : $type;
+
+                return strtoupper((string) $type) === 'GG';
+            })
+            ->map(fn (array $row) => [
+                'code' => (int) $row['code'],
+                'abbr' => (string) $row['abbr'],
+                'eligible_count' => (int) ($counts[(int) $row['code']] ?? 0),
+            ])
+            ->values();
+    }
 
     /** @return Collection<int,array<string,mixed>> */
     public function technicalCadres(AllocationA5Run $a5): Collection
     {
         $meritRunId = $this->requireMeritRunId();
-        $eligible = MeritCadreRank::query()
+        $eligibleQuery = MeritCadreRank::query()
             ->where('processing_run_id', $meritRunId)
-            ->where('cadre_type', 'TT')
+            ->where('cadre_type', 'TT');
+        $this->dispositions->applyPublishedOnly(
+            $eligibleQuery,
+            $a5,
+            'merit_cadre_ranks.registration_id'
+        );
+        $eligible = $eligibleQuery
             ->selectRaw('cadre_code, COUNT(*) as eligible_count')
             ->groupBy('cadre_code')
             ->pluck('eligible_count', 'cadre_code');
@@ -65,6 +135,11 @@ final class AllocationVerificationReportService
         $base = MeritResult::query()
             ->where('merit_results.processing_run_id', $meritRunId)
             ->select('merit_results.*');
+        $this->dispositions->applyPublishedOnly(
+            $base,
+            $a5,
+            'merit_results.registration_id'
+        );
 
         $title = '';
         $cadre = null;
@@ -81,16 +156,71 @@ final class AllocationVerificationReportService
                 ->orderBy('general_merit_position');
         } elseif ($type === 'technical-only') {
             $title = 'Only Technical Cadre Candidate Allocation Report';
-            // "Only Technical" means the normalized TT category, not GT candidates who also have a technical side.
-            $base->where('cadre_category', CadreCategory::Technical->value)
+            // Written effective technical-only population is TT + T.
+            // T includes candidates who originated as GT but qualified only on the technical side.
+            $base->whereIn('written_qualified_track', ['TT', 'T'])
                 ->whereNotNull('technical_merit_position')
                 ->orderBy('technical_merit_position');
+        } elseif ($type === 'general-cadre') {
+            abort_if(! $cadreCode, 404);
+
+            $a4Run = AllocationA4Run::query()->findOrFail((int) $a5->allocation_a4_run_id);
+            $cadreRow = $this->a6->cadres($a5)
+                ->first(function (array $row) use ($cadreCode): bool {
+                    if ((int) $row['code'] !== $cadreCode) {
+                        return false;
+                    }
+
+                    $cadreType = $row['entry']?->cadre_type;
+                    $cadreType = $cadreType instanceof \BackedEnum ? $cadreType->value : $cadreType;
+
+                    return strtoupper((string) $cadreType) === 'GG';
+                });
+
+            abort_if(! $cadreRow, 404, 'The requested cadre is not a current General cadre.');
+
+            $candidateQuery = AllocationInputCandidate::query()
+                ->where('input_freeze_id', (int) $a4Run->input_freeze_id);
+
+            $this->dispositions->applyPublishedOnly(
+                $candidateQuery,
+                $a5,
+                'allocation_input_candidates.registration_id'
+            );
+
+            $eligibleRegistrationIds = $candidateQuery
+                ->get(['registration_id', 'choice_codes'])
+                ->filter(function (AllocationInputCandidate $candidate) use ($cadreCode): bool {
+                    return collect((array) $candidate->choice_codes)
+                        ->map(fn ($code) => (int) $code)
+                        ->contains($cadreCode);
+                })
+                ->pluck('registration_id')
+                ->map(fn ($id) => (int) $id)
+                ->values();
+
+            $base->whereNotNull('general_merit_position')
+                ->whereIn('registration_id', $eligibleRegistrationIds)
+                ->orderBy('general_merit_position');
+
+            $cadre = [
+                'code' => (int) $cadreCode,
+                'abbr' => (string) $cadreRow['abbr'],
+                'name' => $this->cadreName((int) $cadreCode),
+            ];
+            $title = $cadre['abbr'].' General Cadre Allocation Verification Report';
         } elseif ($type === 'technical-cadre') {
             abort_if(! $cadreCode, 404);
-            $rankRows = MeritCadreRank::query()
+            $rankQuery = MeritCadreRank::query()
                 ->where('processing_run_id', $meritRunId)
                 ->where('cadre_type', 'TT')
-                ->where('cadre_code', $cadreCode)
+                ->where('cadre_code', $cadreCode);
+            $this->dispositions->applyPublishedOnly(
+                $rankQuery,
+                $a5,
+                'merit_cadre_ranks.registration_id'
+            );
+            $rankRows = $rankQuery
                 ->orderBy('cadre_merit_position')
                 ->get();
             abort_if($rankRows->isEmpty(), 404, 'No current technical cadre merit evidence was found.');
@@ -120,7 +250,7 @@ final class AllocationVerificationReportService
 
         $registrations = Registration::query()
             ->whereIn('id', $registrationIds)
-            ->get(['id','bachelor_subject_code','post_related_subject_code'])
+            ->get(['id','bachelor_subject_code','post_related_subject_code','has_ff_quota','has_em_quota','has_phc_quota'])
             ->keyBy('id');
 
         $bachelorCodes = $registrations->pluck('bachelor_subject_code')->filter()->unique()->values();
@@ -164,8 +294,14 @@ final class AllocationVerificationReportService
             ->get()
             ->groupBy('cadre_code');
 
-        $allA4 = AllocationA4Result::query()
-            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
+        $allA4Query = AllocationA4Result::query()
+            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id);
+        $this->dispositions->applyPublishedOnly(
+            $allA4Query,
+            $a5,
+            'allocation_a4_results.registration_id'
+        );
+        $allA4 = $allA4Query
             ->orderBy('cadre_code')->orderBy('merit_position')->orderBy('registration_id')
             ->get(['registration_id','cadre_code']);
         $serialByRegistration = [];
@@ -184,6 +320,9 @@ final class AllocationVerificationReportService
         $choiceCodes = collect();
         foreach ($frozenCandidates as $frozen) {
             $choiceCodes = $choiceCodes->merge((array) $frozen->choice_codes);
+        }
+        foreach ($historicalChoices as $historicalChoice) {
+            $choiceCodes = $choiceCodes->merge((array) $historicalChoice->input_choice_codes);
         }
         $choiceCodes = $choiceCodes->merge($allocations->pluck('cadre_code'))->map(fn ($v) => (int) $v)->filter()->unique()->values();
         $abbr = $this->a6->abbreviations($choiceCodes);
@@ -207,6 +346,7 @@ final class AllocationVerificationReportService
             $meritPosition = match ($type) {
                 'common' => $merit->common_merit_position,
                 'general' => $merit->general_merit_position,
+                'general-cadre' => $merit->general_merit_position,
                 'technical-only' => $merit->technical_merit_position,
                 'technical-cadre' => $specificRank,
                 default => null,
@@ -224,6 +364,12 @@ final class AllocationVerificationReportService
                 )
                 : [];
 
+            $validatedChoices = array_values(array_filter(
+                (array) ($history?->input_choice_codes ?? $choices),
+                fn ($v) => filled($v)
+            ));
+            $historicalCutoff = $this->historicalCutoff($history);
+
             return [
                 'merit_position' => $meritPosition,
                 'category' => $this->categoryCode($merit->cadre_category),
@@ -232,38 +378,209 @@ final class AllocationVerificationReportService
                 'allocation_code' => $allocationCode,
                 'allocation_abbr' => $allocationAbbr,
                 'allocation_serial' => $allocation ? (int) ($serialByRegistration[$id] ?? 0) : null,
+                'allocation_basis' => $allocation ? strtoupper((string) $allocation->allocation_basis) : null,
                 'merit_info' => $this->meritInfo($merit),
                 'merit_general' => $merit->general_merit_position !== null ? (int) $merit->general_merit_position : null,
                 'merit_technical' => $merit->technical_merit_position !== null ? (int) $merit->technical_merit_position : null,
                 'technical_cadre_merits' => $this->technicalCadreMerits($merit),
+                'quota_labels' => $this->quotaLabels($registration),
                 'bachelor' => $this->subjectLabel($registration?->bachelor_subject_code, $bachelors),
                 'bachelor_code' => filled($registration?->bachelor_subject_code) ? (string) $registration->bachelor_subject_code : null,
                 'bachelor_name' => filled($registration?->bachelor_subject_code) ? (string) ($bachelors->get($registration->bachelor_subject_code) ?: 'UNMAPPED') : null,
                 'prs' => $this->subjectLabel($registration?->post_related_subject_code, $prs),
                 'prs_code' => filled($registration?->post_related_subject_code) ? (string) $registration->post_related_subject_code : null,
                 'prs_name' => filled($registration?->post_related_subject_code) ? (string) ($prs->get($registration->post_related_subject_code) ?: 'UNMAPPED') : null,
-                'choices' => collect($choices)->map(fn ($code) => [
-                    'code' => (int) $code,
-                    'abbr' => (string) $abbr->get((int) $code, (string) $code),
-                    'allocated' => $allocationCode !== null && (int) $code === $allocationCode,
-                ])->values(),
+                'validated_choices' => $this->choiceLabels($validatedChoices, $abbr, null),
+                'choices' => $this->choiceLabels($choices, $abbr, $allocationCode),
+                'historical_cutoff' => $historicalCutoff,
                 'higher_choice_review' => $higherChoiceReview,
-                'remarks' => $allocation ? '—' : $this->unallocatedRemark($history),
+                'remarks' => '—',
             ];
         })->values();
 
         $summary = null;
-        if ($type === 'technical-cadre' && $cadreCode !== null) {
-            $allocated = $rows->filter(fn (array $row) => (int) ($row['allocation_code'] ?? 0) === $cadreCode)->count();
+        if (in_array($type, ['general-cadre', 'technical-cadre'], true) && $cadreCode !== null) {
+            $allocated = $rows
+                ->filter(fn (array $row) => (int) ($row['allocation_code'] ?? 0) === $cadreCode)
+                ->count();
+
+            $allocatedInOtherCadres = $rows
+                ->filter(function (array $row) use ($cadreCode): bool {
+                    $allocationCode = (int) ($row['allocation_code'] ?? 0);
+
+                    return $allocationCode > 0 && $allocationCode !== $cadreCode;
+                })
+                ->count();
+
+            $notAllocatedAnywhere = $rows
+                ->filter(fn (array $row): bool => (int) ($row['allocation_code'] ?? 0) === 0)
+                ->count();
+
             $total = $rows->count();
+            $totalPost = (int) ($a5->capacityResults()
+                ->where('cadre_code', $cadreCode)
+                ->value('sanctioned_posts') ?? 0);
+
             $summary = [
+                'cadre_code' => $cadreCode,
+                'cadre_abbr' => (string) ($cadre['abbr'] ?? '—'),
+                'total_post' => $totalPost,
                 'eligible' => $total,
                 'allocated' => $allocated,
                 'non_allocated' => $total - $allocated,
+                'allocated_in_other_cadres' => $allocatedInOtherCadres,
+                'not_allocated_anywhere' => $notAllocatedAnywhere,
             ];
         }
 
         return compact('title','cadre','rows','summary');
+    }
+
+    /**
+     * Cadre-wise final ACTIVE allocation serial / merit / basis verification.
+     *
+     * The candidate population is the current A4 allocation authority filtered
+     * through A5.5 publication disposition. WITHHELD/CANCELLED never appear.
+     * General cadres use finalized General Merit; Technical cadres use finalized
+     * Technical Merit. Allocation Basis is the exact A4 basis (MQ/CFF/EM/PHC).
+     *
+     * @return array{title:string,rows_per_group:int,sections:Collection}
+     */
+    public function buildCadreSerialMerit(AllocationA5Run $a5): array
+    {
+        $meritRunId = $this->requireMeritRunId();
+
+        $allocationQuery = AllocationA4Result::query()
+            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id);
+
+        $this->dispositions->applyPublishedOnly(
+            $allocationQuery,
+            $a5,
+            'allocation_a4_results.registration_id'
+        );
+
+        $allocations = $allocationQuery
+            ->get([
+                'registration_id',
+                'cadre_code',
+                'allocation_basis',
+                'merit_position',
+            ]);
+
+        $registrationIds = $allocations
+            ->pluck('registration_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $merits = MeritResult::query()
+            ->where('processing_run_id', $meritRunId)
+            ->whereIn('registration_id', $registrationIds)
+            ->get([
+                'registration_id',
+                'general_merit_position',
+                'technical_merit_position',
+            ])
+            ->keyBy('registration_id');
+
+        $allocationsByCadre = $allocations->groupBy(
+            fn ($row) => (int) $row->cadre_code
+        );
+
+        $rowsPerGroup = 25;
+
+        $sections = $this->a6->cadres($a5)
+            ->map(function (array $cadreRow) use ($allocationsByCadre, $merits, $rowsPerGroup): array {
+                $code = (int) $cadreRow['code'];
+                $entry = $cadreRow['entry'];
+                $capacity = $cadreRow['capacity'];
+
+                $cadreType = $entry?->cadre_type;
+                $cadreType = $cadreType instanceof \BackedEnum ? $cadreType->value : $cadreType;
+                $isTechnical = strtoupper((string) $cadreType) === 'TT';
+
+                $candidateRows = collect($allocationsByCadre->get($code, collect()))
+                    ->map(function ($allocation) use ($merits, $isTechnical): array {
+                        $merit = $merits->get((int) $allocation->registration_id);
+                        $meritPosition = $isTechnical
+                            ? $merit?->technical_merit_position
+                            : $merit?->general_merit_position;
+
+                        return [
+                            'registration_id' => (int) $allocation->registration_id,
+                            'merit_position' => $meritPosition === null ? null : (int) $meritPosition,
+                            'allocation_basis' => strtoupper((string) ($allocation->allocation_basis ?: '—')),
+                            'fallback_merit_position' => $allocation->merit_position === null
+                                ? null
+                                : (int) $allocation->merit_position,
+                        ];
+                    })
+                    ->sort(function (array $a, array $b): int {
+                        $aOrder = $a['fallback_merit_position'] ?? PHP_INT_MAX;
+                        $bOrder = $b['fallback_merit_position'] ?? PHP_INT_MAX;
+
+                        return [$aOrder, $a['registration_id']] <=> [$bOrder, $b['registration_id']];
+                    })
+                    ->values()
+                    ->map(function (array $row, int $index): array {
+                        $row['serial'] = $index + 1;
+                        unset($row['fallback_merit_position'], $row['registration_id']);
+
+                        return $row;
+                    })
+                    ->values();
+
+                $pages = $candidateRows
+                    ->chunk($rowsPerGroup * 3)
+                    ->map(function (Collection $pageRows) use ($rowsPerGroup): array {
+                        $groups = $pageRows->chunk($rowsPerGroup)->values();
+
+                        return [
+                            'groups' => collect([0, 1, 2])
+                                ->map(fn (int $index) => collect($groups->get($index, collect()))->values())
+                                ->values(),
+                        ];
+                    })
+                    ->values();
+
+                if ($pages->isEmpty()) {
+                    $pages = collect([[
+                        'groups' => collect([collect(), collect(), collect()]),
+                    ]]);
+                }
+
+                $headingParts = collect([
+                    (string) ($entry?->cadre_name_snapshot ?? ''),
+                    (string) ($entry?->post_name_snapshot ?? ''),
+                ])->map(fn (string $value) => trim($value))
+                    ->filter()
+                    ->unique()
+                    ->values();
+
+                $heading = $code.' - '.(string) $cadreRow['abbr'];
+                if ($headingParts->isNotEmpty()) {
+                    $heading .= ' - '.$headingParts->implode(' - ');
+                }
+
+                return [
+                    'code' => $code,
+                    'abbr' => (string) $cadreRow['abbr'],
+                    'heading' => $heading,
+                    'cadre_type' => $isTechnical ? 'TT' : 'GG',
+                    'merit_label' => $isTechnical ? 'Technical Merit Position' : 'General Merit Position',
+                    'total_post' => (int) $capacity->sanctioned_posts,
+                    'total_allocated' => $candidateRows->count(),
+                    'pages' => $pages,
+                ];
+            })
+            ->filter(fn (array $section): bool => (int) $section['total_allocated'] > 0)
+            ->values();
+
+        return [
+            'title' => 'Cadre-wise Serial, Merit & Allocation Basis Verification Report',
+            'rows_per_group' => $rowsPerGroup,
+            'sections' => $sections,
+        ];
     }
 
     private function requireMeritRunId(): int
@@ -288,6 +605,41 @@ final class AllocationVerificationReportService
             if (filled($position)) $parts[] = strtoupper((string) $abbr).' ('.(int) $position.')';
         }
         return $parts === [] ? '—' : implode(', ', $parts);
+    }
+
+    /** @return array<int,string> */
+    private function quotaLabels(?Registration $registration): array
+    {
+        if (! $registration) return [];
+
+        $labels = [];
+        if ((int) $registration->has_ff_quota === 2) $labels[] = 'CFF';
+        if ((int) $registration->has_em_quota === 1) $labels[] = 'EM';
+        if ((int) $registration->has_phc_quota === 1) $labels[] = 'PHC';
+
+        return $labels;
+    }
+
+    /** @return Collection<int,array{code:int,abbr:string,allocated:bool}> */
+    private function choiceLabels(array $codes, Collection $abbr, ?int $allocationCode): Collection
+    {
+        return collect($codes)->map(fn ($code) => [
+            'code' => (int) $code,
+            'abbr' => (string) $abbr->get((int) $code, (string) $code),
+            'allocated' => $allocationCode !== null && (int) $code === $allocationCode,
+        ])->values();
+    }
+
+    /** @return array{cadre:string,bcs:string}|null */
+    private function historicalCutoff(?ChoiceOptimizationHistoricalChoice $history): ?array
+    {
+        if (! $history?->matched_cutoff) return null;
+
+        $cutoff = (array) $history->matched_cutoff;
+        $cadre = strtoupper((string) ($cutoff['historical_cadre'] ?? ''));
+        $bcs = (string) ($cutoff['historical_bcs_number'] ?? '');
+
+        return $cadre !== '' && $bcs !== '' ? ['cadre' => $cadre, 'bcs' => 'BCS-'.$bcs] : null;
     }
 
     /** @return array<int,array{abbr:string,position:int}> */
@@ -401,9 +753,10 @@ final class AllocationVerificationReportService
 
     private function cadreName(int $code): string
     {
-        $main = CadreMaster::query()->where('cadre_code', $code)->value('cadre_title');
+        $main = CadreMaster::query()->where('cadre_code', $code)->value('cadre_name');
         if (filled($main)) return (string) $main;
-        $sub = CadreSubMaster::query()->where('sub_cadre_code', $code)->value('sub_cadre_title');
+
+        $sub = CadreSubMaster::query()->where('sub_cadre_code', $code)->value('post_name');
         return filled($sub) ? (string) $sub : '—';
     }
 }

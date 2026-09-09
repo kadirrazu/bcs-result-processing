@@ -20,6 +20,7 @@ final class AllocationVerificationReportingContractTest extends TestCase
         $this->assertStringContainsString('AllocationInputCandidate::query()', $service);
         $this->assertStringContainsString("where('input_freeze_id'", $service);
         $this->assertStringContainsString("where('cadre_type', 'TT')", $service);
+        $this->assertStringContainsString("whereIn('written_qualified_track', ['TT', 'T'])", $service);
         $this->assertStringContainsString('Historical Cut-off due to', $service);
         $this->assertStringNotContainsString('previous_reg', $view);
         $this->assertStringNotContainsString('birth_date', $view);
@@ -40,6 +41,11 @@ final class AllocationVerificationReportingContractTest extends TestCase
         $this->assertStringNotContainsString("->map(function ($q) use ($abbr, $seatLedgers, $finalCutoffs): string {", $service);
         $this->assertStringContainsString('AllocationInputQueueEntry', $service);
         $this->assertStringContainsString('AllocationA4SeatLedger', $service);
+        $this->assertStringContainsString('AllocationResultDispositionService', $service);
+        $this->assertStringContainsString('applyPublishedOnly', $service);
+        $this->assertStringContainsString("'merit_results.registration_id'", $service);
+        $this->assertStringContainsString("'merit_cadre_ranks.registration_id'", $service);
+        $this->assertStringContainsString("'allocation_a4_results.registration_id'", $service);
         $this->assertStringContainsString('Merit position was outside the available posts for all allocation-ready choices.', $service);
         $this->assertStringContainsString('avr-allocation-cell', $view);
         $this->assertStringContainsString('avr-merit-separator', $view);
@@ -49,6 +55,26 @@ final class AllocationVerificationReportingContractTest extends TestCase
         $this->assertStringNotContainsString('@endforeach@if(!$loop->last); @else. @endif', $view);
         $this->assertStringContainsString("class=\"{{ !$loop->last ? 'mb-1 pb-1 border-bottom' : '' }}\"", $view);
         $this->assertStringContainsString("ucfirst((string) $detail)", $view);
+        $this->assertStringContainsString("value('cadre_name')", $service);
+        $this->assertStringContainsString("value('post_name')", $service);
+        $this->assertStringNotContainsString("value('cadre_title')", $service);
+        $this->assertStringContainsString('allocation_basis', $service);
+        $this->assertStringContainsString('quotaLabels', $service);
+        $this->assertStringContainsString('input_choice_codes', $service);
+        $this->assertStringContainsString('historicalCutoff', $service);
+        $this->assertStringContainsString("value('sanctioned_posts')", $service);
+        $this->assertStringContainsString("'total_post' => $totalPost", $service);
+        $this->assertStringContainsString('Total Post:', $view);
+        $this->assertStringContainsString('>Choice List</th>', $view);
+        $this->assertStringContainsString('Validated Choice', $view);
+        $this->assertStringContainsString('Allocation-ready Choice', $view);
+        $this->assertStringContainsString("->chunk(5)", $view);
+        $this->assertStringContainsString('avr-choice-line', $view);
+        $this->assertStringContainsString("white-space:nowrap", $view);
+        $this->assertStringContainsString("color:#206bc4;font-weight:700", $view);
+        $this->assertStringContainsString('avr-basis-mq', $view);
+        $this->assertStringContainsString('avr-basis-quota', $view);
+        $this->assertStringContainsString('Non Quota', $view);
         $this->assertStringContainsString('cadre.verification.technical', $routes);
     }
 }

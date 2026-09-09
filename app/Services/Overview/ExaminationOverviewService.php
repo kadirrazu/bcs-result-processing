@@ -11,10 +11,12 @@ use App\Models\ChoiceValidationProcessingState;
 use App\Models\CircularProcessingState;
 use App\Models\MeritProcessingState;
 use App\Models\PreliminaryProcessingState;
+use App\Models\PreliminaryResult;
 use App\Models\Registration;
 use App\Models\TabulationProcessingState;
 use App\Models\VivaProcessingState;
 use App\Models\WrittenProcessingState;
+use App\Models\WrittenResult;
 use App\Services\Allocation\AllocationA6ReadinessService;
 
 /** Lightweight current-examination operational overview. */
@@ -37,7 +39,25 @@ final class ExaminationOverviewService
             ->first();
 
         $preliminary = PreliminaryProcessingState::query()->find(1);
+        $preliminaryQuota = PreliminaryResult::query()
+            ->join('registrations as r', 'r.id', '=', 'preliminary_results.registration_id')
+            ->where('preliminary_results.result_status', 'pass')
+            ->selectRaw("SUM(CASE WHEN (r.has_ff_quota = 2 OR r.has_em_quota = 1 OR r.has_phc_quota = 1) THEN 1 ELSE 0 END) quota_total")
+            ->selectRaw("SUM(CASE WHEN r.has_ff_quota = 2 THEN 1 ELSE 0 END) quota_cff")
+            ->selectRaw("SUM(CASE WHEN r.has_em_quota = 1 THEN 1 ELSE 0 END) quota_em")
+            ->selectRaw("SUM(CASE WHEN r.has_phc_quota = 1 THEN 1 ELSE 0 END) quota_phc")
+            ->first();
+
         $written = WrittenProcessingState::query()->find(1);
+        $writtenQuota = WrittenResult::query()
+            ->join('registrations as r', 'r.id', '=', 'written_results.registration_id')
+            ->where('written_results.status', 'active')
+            ->whereNotNull('written_results.written_qualified_track')
+            ->selectRaw("SUM(CASE WHEN (r.has_ff_quota = 2 OR r.has_em_quota = 1 OR r.has_phc_quota = 1) THEN 1 ELSE 0 END) quota_total")
+            ->selectRaw("SUM(CASE WHEN r.has_ff_quota = 2 THEN 1 ELSE 0 END) quota_cff")
+            ->selectRaw("SUM(CASE WHEN r.has_em_quota = 1 THEN 1 ELSE 0 END) quota_em")
+            ->selectRaw("SUM(CASE WHEN r.has_phc_quota = 1 THEN 1 ELSE 0 END) quota_phc")
+            ->first();
         $viva = VivaProcessingState::query()->find(1);
         $vivaFlags = VivaResult::query()
             ->selectRaw('SUM(CASE WHEN issue_flag = 1 THEN 1 ELSE 0 END) issue_count')
@@ -67,8 +87,8 @@ final class ExaminationOverviewService
                 'EM' => (int) ($registration?->quota_em ?? 0),
                 'PHC' => (int) ($registration?->quota_phc ?? 0),
             ]),
-            $this->stateModule('Preliminary', 'preliminary.index', $preliminary, $this->preliminaryStats($preliminary)),
-            $this->stateModule('Written', 'written.index', $written, $this->writtenStats($written)),
+            $this->stateModule('Preliminary', 'preliminary.index', $preliminary, $this->preliminaryStats($preliminary, $preliminaryQuota)),
+            $this->stateModule('Written', 'written.index', $written, $this->writtenStats($written, $writtenQuota)),
             $this->stateModule('Viva', 'viva.index', $viva, $this->vivaStats($viva, $vivaFlags)),
             $this->stateModule('Circular', 'circular.index', $circular, (array) ($circular?->summary ?? [])),
             $this->stateModule('Choice Validation', 'choice-validation.index', $choice, (array) ($choice?->summary ?? [])),
@@ -121,7 +141,7 @@ final class ExaminationOverviewService
     }
 
     /** @return array<string,int> */
-    private function preliminaryStats(?PreliminaryProcessingState $state): array
+    private function preliminaryStats(?PreliminaryProcessingState $state, ?object $quota): array
     {
         $summary = $this->summary($state?->summary, 'finalization');
         $outcome = static fn (string $key): int => (int) data_get($summary, $key.'.total', 0);
@@ -130,11 +150,15 @@ final class ExaminationOverviewService
             'Appeared' => $outcome('pass') + $outcome('fail') + $outcome('cancelled') + $outcome('withheld') + $outcome('expelled'),
             'Absent' => $outcome('absent'),
             'Passed' => $outcome('pass'),
+            'Quota Total' => (int) ($quota?->quota_total ?? 0),
+            'CFF' => (int) ($quota?->quota_cff ?? 0),
+            'EM' => (int) ($quota?->quota_em ?? 0),
+            'PHC' => (int) ($quota?->quota_phc ?? 0),
         ];
     }
 
     /** @return array<string,int> */
-    private function writtenStats(?WrittenProcessingState $state): array
+    private function writtenStats(?WrittenProcessingState $state, ?object $quota): array
     {
         $summary = $this->summary($state?->summary, 'finalization');
 
@@ -144,6 +168,10 @@ final class ExaminationOverviewService
             'Failed' => max(0, (int) ($summary['failed_total'] ?? 0) - (int) ($summary['completely_absent'] ?? 0)),
             'Absent' => (int) ($summary['completely_absent'] ?? 0),
             'Pass %' => $this->percent((int) ($summary['qualified_total'] ?? 0), (int) ($summary['qualified_total'] ?? 0) + (int) ($summary['failed_total'] ?? 0)),
+            'Quota Total' => (int) ($quota?->quota_total ?? 0),
+            'CFF' => (int) ($quota?->quota_cff ?? 0),
+            'EM' => (int) ($quota?->quota_em ?? 0),
+            'PHC' => (int) ($quota?->quota_phc ?? 0),
         ];
     }
 

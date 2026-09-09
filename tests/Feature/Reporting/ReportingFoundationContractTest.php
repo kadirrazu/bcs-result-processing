@@ -30,6 +30,10 @@ final class ReportingFoundationContractTest extends TestCase
         self::assertStringContainsString("capacityResults()->sum('remaining_posts')", $overview);
         self::assertStringContainsString('AllocationResultDispositionState', $overview);
         self::assertStringContainsString('VivaResult::query()', $overview);
+        self::assertStringContainsString('PreliminaryResult::query()', $overview);
+        self::assertStringContainsString('WrittenResult::query()', $overview);
+        self::assertStringContainsString("where('preliminary_results.result_status', 'pass')", $overview);
+        self::assertStringContainsString("whereNotNull('written_results.written_qualified_track')", $overview);
 
         self::assertStringContainsString('A6 - Allocation Reporting &amp; Export', $reporting);
         self::assertStringContainsString('Cadre Section Reporting', $reporting);
