@@ -11,6 +11,34 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/', [ReportingController::class, 'index'])->name('index');
         Route::get('/cadre-section', [CadreSectionReportingController::class, 'index'])->name('cadre.index');
 
+
+        Route::get('/cadre-section/booklet/general-cadre-wise', [CadreSectionReportingController::class, 'bookletGeneralCadreWiseIndex'])
+            ->name('cadre.booklet.general-cadre-wise');
+        Route::get('/cadre-section/booklet/technical-cadre-wise', [CadreSectionReportingController::class, 'bookletTechnicalCadreWiseIndex'])
+            ->name('cadre.booklet.technical-cadre-wise');
+
+        Route::get('/cadre-section/booklet/general-cadre/{cadreCode}', [CadreSectionReportingController::class, 'bookletGeneralCadre'])
+            ->whereNumber('cadreCode')->name('cadre.booklet.general-cadre');
+        Route::post('/cadre-section/booklet/general-cadre/{cadreCode}/pdf', [CadreSectionReportingController::class, 'queueBookletGeneralCadrePdf'])
+            ->whereNumber('cadreCode')->name('cadre.booklet.general-cadre.pdf');
+
+        Route::get('/cadre-section/booklet/technical-cadre/{cadreCode}', [CadreSectionReportingController::class, 'bookletTechnicalCadre'])
+            ->whereNumber('cadreCode')->name('cadre.booklet.technical');
+        Route::post('/cadre-section/booklet/technical-cadre/{cadreCode}/pdf', [CadreSectionReportingController::class, 'queueBookletTechnicalCadrePdf'])
+            ->whereNumber('cadreCode')->name('cadre.booklet.technical.pdf');
+
+        Route::get('/cadre-section/booklet/{type}', [CadreSectionReportingController::class, 'booklet'])
+            ->whereIn('type', ['common','general','technical-only','quota'])->name('cadre.booklet');
+        Route::post('/cadre-section/booklet/{type}/pdf', [CadreSectionReportingController::class, 'queueBookletPdf'])
+            ->whereIn('type', ['common','general','technical-only','quota'])->name('cadre.booklet.pdf');
+
+        Route::get('/cadre-section/booklet/exports/{exportRun}', [CadreSectionReportingController::class, 'exportRun'])
+            ->name('cadre.booklet.exports.show');
+        Route::get('/cadre-section/booklet/exports/{exportRun}/status', [CadreSectionReportingController::class, 'exportStatus'])
+            ->name('cadre.booklet.exports.status');
+        Route::get('/cadre-section/booklet/exports/{exportRun}/download', [CadreSectionReportingController::class, 'download'])
+            ->name('cadre.booklet.exports.download');
+
         Route::get('/cadre-section/verification/general-cadre-wise', [CadreSectionReportingController::class, 'generalCadreWiseIndex'])
             ->name('cadre.verification.general-cadre-wise');
         Route::get('/cadre-section/verification/technical-cadre-wise', [CadreSectionReportingController::class, 'technicalCadreWiseIndex'])

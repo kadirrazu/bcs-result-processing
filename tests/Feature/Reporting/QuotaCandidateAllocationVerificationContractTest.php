@@ -33,9 +33,9 @@ final class QuotaCandidateAllocationVerificationContractTest extends TestCase
 
         self::assertStringContainsString('id="quota-filter"', $view);
         self::assertStringContainsString('id="quota-outcome-filter"', $view);
-        self::assertStringContainsString('id="quota-cadre-filter"', $view);
-        self::assertStringContainsString('data-quotas=', $view);
-        self::assertStringContainsString('data-outcome=', $view);
+        self::assertStringContainsString("'quota-cadre-filter'", $view);
+        self::assertStringContainsString('data-quotas=', $table);
+        self::assertStringContainsString('data-outcome=', $table);
         self::assertStringContainsString('Outcome / Remarks', $table);
 
         self::assertStringContainsString('Total Quota', $summary);

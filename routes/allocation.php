@@ -32,6 +32,7 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     Route::get('/a5/runs/{a5Run}/cadre/{circularEntry}',[AllocationController::class,'showA5CadreResults'])->name('a5.cadre-results');
     Route::post('/a5/runs/{a5Run}/finalize',[AllocationController::class,'finalizeA5'])->name('a5.finalize');
     Route::get('/a5-5',[AllocationDispositionController::class,'index'])->name('disposition.index');
+    Route::get('/a5-5/list/{status}',[AllocationDispositionController::class,'dispositionList'])->whereIn('status',['WITHHELD','CANCELLED'])->name('disposition.list');
     Route::get('/a5-5/candidates/{registrationId}',[AllocationDispositionController::class,'show'])->name('disposition.show');
     Route::put('/a5-5/candidates/{registrationId}',[AllocationDispositionController::class,'update'])->name('disposition.update');
     Route::get('/a6',[AllocationA6Controller::class,'index'])->name('a6.index');

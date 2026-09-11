@@ -1,12 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'Verification PDF Export')
+@section('title', ($booklet ?? false) ? 'Booklet Printing PDF Export' : 'Verification PDF Export')
 
 @section('page-header')
 <div class="row g-2 align-items-center">
     <div class="col">
         <div class="page-pretitle">Cadre Section Reporting</div>
-        <h2 class="page-title">Verification PDF Export #{{ $run->id }}</h2>
+        <h2 class="page-title">{{ ($booklet ?? false) ? 'Booklet Printing' : 'Verification' }} PDF Export #{{ $run->id }}</h2>
         <div class="text-secondary">
             {{ strtoupper((string) $run->scope) }}
             · PDF
@@ -43,7 +43,7 @@
 <div
     class="card"
     id="verification-export-progress"
-    data-status-url="{{ route('examination-reports.cadre.verification.exports.status', $run) }}"
+    data-status-url="{{ route(($booklet ?? false) ? 'examination-reports.cadre.booklet.exports.status' : 'examination-reports.cadre.verification.exports.status', $run) }}"
     data-download-label="Download PDF"
 >
     <div class="card-header">
@@ -101,7 +101,7 @@
             @if($run->status === 'completed' && ! $outdated)
                 <a
                     class="btn btn-success"
-                    href="{{ route('examination-reports.cadre.verification.exports.download', $run) }}"
+                    href="{{ route(($booklet ?? false) ? 'examination-reports.cadre.booklet.exports.download' : 'examination-reports.cadre.verification.exports.download', $run) }}"
                 >
                     Download PDF
                 </a>
@@ -128,7 +128,7 @@
             });
 
             if (!response.ok) {
-                throw new Error('Unable to read verification PDF export status.');
+                throw new Error('Unable to read PDF export status.');
             }
 
             const data = await response.json();

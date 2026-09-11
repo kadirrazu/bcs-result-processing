@@ -21,6 +21,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 final class CadreSectionReportingController extends Controller
 {
     private const EXPORT_MODULE = 'cadre_verification';
+    private const BOOKLET_EXPORT_MODULE = 'cadre_booklet';
 
     public function index(AllocationA6ReadinessService $readiness): View
     {
@@ -115,6 +116,130 @@ final class CadreSectionReportingController extends Controller
         ]);
     }
 
+
+    public function bookletGeneralCadreWiseIndex(
+        AllocationA6ReadinessService $readiness,
+        AllocationVerificationReportService $reports,
+        ExaminationContext $context,
+    ): View {
+        $a5 = $readiness->requireReady();
+
+        return view('reporting.cadre-section.cadre-wise-index', [
+            'examination' => $context->current(),
+            'kind' => 'general',
+            'mode' => 'booklet',
+            'title' => 'General Cadre-wise Allocation Booklet Printing Reports',
+            'description' => 'Identity-bearing booklet reports for the current ACTIVE General Merit population whose exact Allocation-ready Choice contains the selected General cadre.',
+            'cadres' => $reports->generalCadres($a5),
+            'searchPlaceholder' => 'e.g. 125 or PLIC',
+            'filterLabel' => 'All General Cadres',
+            'emptyMessage' => 'No current General cadre Allocation-ready Choice evidence found.',
+        ]);
+    }
+
+    public function bookletTechnicalCadreWiseIndex(
+        AllocationA6ReadinessService $readiness,
+        AllocationVerificationReportService $reports,
+        ExaminationContext $context,
+    ): View {
+        $a5 = $readiness->requireReady();
+
+        return view('reporting.cadre-section.cadre-wise-index', [
+            'examination' => $context->current(),
+            'kind' => 'technical',
+            'mode' => 'booklet',
+            'title' => 'Technical Cadre-wise Allocation Booklet Printing Reports',
+            'description' => 'Identity-bearing booklet reports for finalized cadre-specific merit-eligible populations.',
+            'cadres' => $reports->technicalCadres($a5),
+            'searchPlaceholder' => 'e.g. 540 or MEDI',
+            'filterLabel' => 'All Technical Cadres',
+            'emptyMessage' => 'No current technical cadre merit evidence found.',
+        ]);
+    }
+
+    public function booklet(
+        string $type,
+        AllocationA6ReadinessService $readiness,
+        AllocationVerificationReportService $reports,
+        ExaminationContext $context,
+    ): View {
+        $a5 = $readiness->requireReady();
+        $data = $reports->buildBooklet($type, $a5);
+
+        return view('reporting.allocation-verification.report', $data + [
+            'examination' => $context->current(),
+            'reportType' => $type,
+            'cadreCode' => null,
+            'booklet' => true,
+        ]);
+    }
+
+    public function bookletGeneralCadre(
+        int $cadreCode,
+        AllocationA6ReadinessService $readiness,
+        AllocationVerificationReportService $reports,
+        ExaminationContext $context,
+    ): View {
+        $a5 = $readiness->requireReady();
+        $data = $reports->buildBooklet('general-cadre', $a5, $cadreCode);
+
+        return view('reporting.allocation-verification.report', $data + [
+            'examination' => $context->current(),
+            'reportType' => 'general-cadre',
+            'cadreCode' => $cadreCode,
+            'booklet' => true,
+        ]);
+    }
+
+    public function bookletTechnicalCadre(
+        int $cadreCode,
+        AllocationA6ReadinessService $readiness,
+        AllocationVerificationReportService $reports,
+        ExaminationContext $context,
+    ): View {
+        $a5 = $readiness->requireReady();
+        $data = $reports->buildBooklet('technical-cadre', $a5, $cadreCode);
+
+        return view('reporting.allocation-verification.report', $data + [
+            'examination' => $context->current(),
+            'reportType' => 'technical-cadre',
+            'cadreCode' => $cadreCode,
+            'booklet' => true,
+        ]);
+    }
+
+    public function queueBookletPdf(
+        Request $request,
+        string $type,
+        AllocationA6ReadinessService $readiness,
+        AllocationResultDispositionService $dispositions,
+        ExaminationContext $context,
+    ): RedirectResponse {
+        abort_unless(in_array($type, ['common', 'general', 'technical-only', 'quota'], true), 404);
+
+        return $this->queuePdf($request, $type, null, $readiness, $dispositions, $context, true);
+    }
+
+    public function queueBookletGeneralCadrePdf(
+        Request $request,
+        int $cadreCode,
+        AllocationA6ReadinessService $readiness,
+        AllocationResultDispositionService $dispositions,
+        ExaminationContext $context,
+    ): RedirectResponse {
+        return $this->queuePdf($request, 'general-cadre', $cadreCode, $readiness, $dispositions, $context, true);
+    }
+
+    public function queueBookletTechnicalCadrePdf(
+        Request $request,
+        int $cadreCode,
+        AllocationA6ReadinessService $readiness,
+        AllocationResultDispositionService $dispositions,
+        ExaminationContext $context,
+    ): RedirectResponse {
+        return $this->queuePdf($request, 'technical-cadre', $cadreCode, $readiness, $dispositions, $context, true);
+    }
+
     public function cadreSerialMerit(
         AllocationA6ReadinessService $readiness,
         AllocationVerificationReportService $reports,
@@ -188,6 +313,7 @@ final class CadreSectionReportingController extends Controller
             'run' => $exportRun,
             'generatedByUser' => $generatedByUser,
             'outdated' => $exportRun->status === 'completed' && ! $this->isSnapshotCurrent($exportRun),
+            'booklet' => $exportRun->module === self::BOOKLET_EXPORT_MODULE,
         ]);
     }
 
@@ -208,7 +334,12 @@ final class CadreSectionReportingController extends Controller
             'failure_message' => $exportRun->failure_message,
             'finished' => $exportRun->isFinished(),
             'download_url' => $exportRun->status === 'completed' && ! $outdated
-                ? route('examination-reports.cadre.verification.exports.download', $exportRun)
+                ? route(
+                    $exportRun->module === self::BOOKLET_EXPORT_MODULE
+                        ? 'examination-reports.cadre.booklet.exports.download'
+                        : 'examination-reports.cadre.verification.exports.download',
+                    $exportRun
+                )
                 : null,
         ]);
     }
@@ -230,7 +361,7 @@ final class CadreSectionReportingController extends Controller
         abort_if(
             $expectedHash === '' || ! hash_equals($expectedHash, (string) $current['hash']),
             409,
-            'This verification PDF is OUTDATED because A5.5 publication status changed. Regenerate it before download.'
+            'This report PDF is OUTDATED because A5.5 publication status changed. Regenerate it before download.'
         );
 
         abort_unless($exportRun->file_path && File::isFile($exportRun->file_path), 404, 'Generated PDF file is missing.');
@@ -249,6 +380,7 @@ final class CadreSectionReportingController extends Controller
         AllocationA6ReadinessService $readiness,
         AllocationResultDispositionService $dispositions,
         ExaminationContext $context,
+        bool $booklet = false,
     ): RedirectResponse {
         $a5 = $readiness->requireReadyStrict();
         $examinationId = $context->currentId();
@@ -257,7 +389,7 @@ final class CadreSectionReportingController extends Controller
         $disposition = $dispositions->snapshot($a5);
 
         $run = ReportingExportRun::query()->create([
-            'module' => self::EXPORT_MODULE,
+            'module' => $booklet ? self::BOOKLET_EXPORT_MODULE : self::EXPORT_MODULE,
             'export_type' => 'PDF',
             'scope' => $type,
             'status' => 'queued',
@@ -268,6 +400,7 @@ final class CadreSectionReportingController extends Controller
             'progress_message' => 'Waiting for the centralized export queue.',
             'parameters' => [
                 'report_type' => $type,
+                'booklet' => $booklet,
                 'cadre_code' => $cadreCode,
                 'page_size' => $type === 'cadre-serial-merit' ? 'A4' : 'Legal',
                 'orientation' => $type === 'cadre-serial-merit' ? 'Portrait' : 'Landscape',
@@ -295,8 +428,16 @@ final class CadreSectionReportingController extends Controller
         );
 
         return redirect()
-            ->route('examination-reports.cadre.verification.exports.show', $run)
-            ->with('success', 'Verification PDF generation queued. Progress will update automatically.');
+            ->route(
+                $booklet
+                    ? 'examination-reports.cadre.booklet.exports.show'
+                    : 'examination-reports.cadre.verification.exports.show',
+                $run
+            )
+            ->with(
+                'success',
+                ($booklet ? 'Booklet Printing' : 'Verification').' PDF generation queued. Progress will update automatically.'
+            );
     }
 
     private function isSnapshotCurrent(ReportingExportRun $run): bool
@@ -317,6 +458,10 @@ final class CadreSectionReportingController extends Controller
 
     private function assertVerificationRun(ReportingExportRun $run): void
     {
-        abort_unless($run->module === self::EXPORT_MODULE && $run->export_type === 'PDF', 404);
+        abort_unless(
+            in_array($run->module, [self::EXPORT_MODULE, self::BOOKLET_EXPORT_MODULE], true)
+                && $run->export_type === 'PDF',
+            404
+        );
     }
 }

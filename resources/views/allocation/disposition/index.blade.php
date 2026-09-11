@@ -11,8 +11,8 @@
 <tbody><tr>
 <td><span class="fs-2 fw-bold text-blue">{{ number_format($a5->total_allocated) }}</span></td>
 <td><span class="fs-2 fw-bold text-success">{{ number_format($snapshot['active']) }}</span></td>
-<td><span class="fs-2 fw-bold text-warning">{{ number_format($snapshot['withheld']) }}</span></td>
-<td><span class="fs-2 fw-bold text-danger">{{ number_format($snapshot['cancelled']) }}</span></td>
+<td><span class="fs-2 fw-bold text-warning">{{ number_format($snapshot['withheld']) }}</span><div class="mt-2"><a class="btn btn-sm btn-outline-warning" href="{{ route('allocation.disposition.list',['status'=>'WITHHELD']) }}">View / Print List</a></div></td>
+<td><span class="fs-2 fw-bold text-danger">{{ number_format($snapshot['cancelled']) }}</span><div class="mt-2"><a class="btn btn-sm btn-outline-danger" href="{{ route('allocation.disposition.list',['status'=>'CANCELLED']) }}">View / Print List</a></div></td>
 </tr></tbody>
 </table>
 </div>

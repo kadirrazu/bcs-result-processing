@@ -25,6 +25,7 @@
     'rows' => $rows,
     'reportType' => ($quotaSummary ?? null) ? 'quota' : ($reportType ?? ''),
     'interactive' => false,
+    'booklet' => (bool) ($booklet ?? false),
 ])
 
 

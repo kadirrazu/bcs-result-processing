@@ -1,9 +1,10 @@
 @extends('layouts.app')
 @section('title', $title)
+@php($booklet = ($mode ?? 'verification') === 'booklet')
 @section('page-header')
 <div class="row g-2 align-items-center">
 <div class="col">
-<div class="page-pretitle">{{ $examination->name }} · Allocation Verification Reports</div>
+<div class="page-pretitle">{{ $examination->name }} · {{ $booklet ? 'Booklet Printing Reports' : 'Allocation Verification Reports' }}</div>
 <h2 class="page-title">{{ $title }}</h2>
 </div>
 <div class="col-auto ms-auto">
@@ -57,9 +58,9 @@
 <td class="text-end">
 @if((int)$cadre['eligible_count'] > 0)
 @if($kind === 'general')
-<a class="btn btn-sm btn-outline-primary" href="{{ route('examination-reports.cadre.verification.general-cadre',['cadreCode'=>$cadre['code']]) }}">Open Verification Report</a>
+<a class="btn btn-sm btn-outline-primary" href="{{ route($booklet ? 'examination-reports.cadre.booklet.general-cadre' : 'examination-reports.cadre.verification.general-cadre',['cadreCode'=>$cadre['code']]) }}">Open {{ $booklet ? 'Booklet' : 'Verification' }} Report</a>
 @else
-<a class="btn btn-sm btn-outline-primary" href="{{ route('examination-reports.cadre.verification.technical',['cadreCode'=>$cadre['code']]) }}">Open Verification Report</a>
+<a class="btn btn-sm btn-outline-primary" href="{{ route($booklet ? 'examination-reports.cadre.booklet.technical' : 'examination-reports.cadre.verification.technical',['cadreCode'=>$cadre['code']]) }}">Open {{ $booklet ? 'Booklet' : 'Verification' }} Report</a>
 @endif
 @else
 <span class="text-secondary">—</span>

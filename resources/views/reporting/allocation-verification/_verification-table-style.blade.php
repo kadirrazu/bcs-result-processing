@@ -16,18 +16,20 @@ body{font-family:DejaVu Sans,Arial,sans-serif;color:#182433}
 .avr-center{text-align:center!important;vertical-align:middle!important}.avr-middle-left{text-align:left!important;vertical-align:middle!important}
 .avr-sl-col{width:32px;min-width:32px;max-width:32px;white-space:nowrap}
 .avr-merit-heading{white-space:nowrap;min-width:64px}
-.avr-table td:nth-child(8){min-width:285px}.avr-table td:nth-child(9){min-width:205px}
+.avr-table:not(.avr-booklet-table) td:nth-child(8){min-width:285px}.avr-table:not(.avr-booklet-table) td:nth-child(9){min-width:205px}
+.avr-booklet-table td:nth-child(9){min-width:285px}
+.avr-candidate-heading{min-width:155px}.avr-candidate-cell{min-width:155px;line-height:1.48}.avr-candidate-label{font-weight:700;color:#475569}
 .avr-choice{display:inline-block;margin:1px 4px 2px 0;padding:1px 4px;border:1px solid #d8dee9;border-radius:3px;white-space:nowrap}
 .avr-choice-allocated{color:#d63939!important;border-color:#d63939;font-weight:700}
 .avr-choice-label{font-weight:700;margin-bottom:4px}.avr-choice-line{white-space:nowrap;line-height:1.68;margin-bottom:4px}
 .avr-choice-separator,.avr-cell-separator,.avr-merit-separator{border-top:1px dashed #c6ced8;margin:5px 0}
-.avr-allocated-cadre{color:#2fb344;font-weight:700}.avr-basis-mq{color:#000;font-weight:700}.avr-basis-quota,.avr-quota,.avr-review-cadre{color:#206bc4;font-weight:700}
+.avr-allocated-cadre{color:#2fb344;font-weight:700}.avr-withheld{color:#d63939;font-weight:700;white-space:nowrap}.avr-basis-mq{color:#000;font-weight:700}.avr-basis-quota,.avr-quota,.avr-review-cadre{color:#206bc4;font-weight:700}
 .avr-non-quota{color:#000}.avr-merit-value,.avr-review-value{font-weight:700}
 .avr-merit-line{white-space:nowrap;line-height:1.5;margin-bottom:2px}.avr-merit-item{white-space:nowrap}
 .avr-code-gg{color:#206bc4;font-weight:700}.avr-code-gt{color:#5f3dc4;font-weight:700}.avr-code-tt{color:#f76707;font-weight:700}.avr-code-t{color:#0ca678;font-weight:700}.avr-code-default{color:#475569;font-weight:700}
 .avr-subject-label{font-weight:700;color:#475569}.avr-subject-value{display:block;margin-top:2px}
 .avr-missed-line{white-space:nowrap;margin-bottom:3px;line-height:1.38}.avr-last-merit-basis{color:#475569}.avr-last-merit-quota{color:#206bc4}
-.avr-history-line{white-space:nowrap;line-height:1.42;margin-bottom:2px}.avr-history-cadre{white-space:nowrap;color:#206bc4;font-weight:700}
+.avr-history-line{white-space:nowrap;line-height:1.42;margin-bottom:2px}.avr-history-cadre{white-space:nowrap;color:#206bc4;font-weight:700}.avr-history-source{white-space:nowrap;color:#475569}
 .avr-empty{padding:14px!important;color:#667085}
 @media print{
   .navbar,.page-header .btn,.footer,.no-print{display:none!important}

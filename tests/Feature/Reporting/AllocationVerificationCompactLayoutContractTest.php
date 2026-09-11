@@ -6,7 +6,7 @@ use Tests\TestCase;
 
 final class AllocationVerificationCompactLayoutContractTest extends TestCase
 {
-    public function test_browser_and_pdf_share_compact_nine_column_verification_contract(): void
+    public function test_browser_and_pdf_share_compact_verification_and_booklet_table_contract(): void
     {
         $browser = file_get_contents(resource_path('views/reporting/allocation-verification/report.blade.php'));
         $pdf = file_get_contents(resource_path('views/reports/pdf/allocation-verification.blade.php'));
@@ -17,9 +17,10 @@ final class AllocationVerificationCompactLayoutContractTest extends TestCase
         self::assertStringContainsString("_verification-table',", $pdf);
 
         foreach ([
-            'Merit<br>Position', 'Category &amp;<br>Written Track', 'Merit Details',
+            'avr-merit-heading', 'Category &amp;<br>Written Track', 'Merit Details',
             'Bachelor Subject &amp;<br>PRS', 'Choice List', 'Higher Choice<br>Missed Reason',
-            'B_SUBJECT:', 'PRS:', 'CAT:', 'TRACK:', ' - Last Merit (', 'colspan="9"',
+            'Candidate<br>Information', 'B_SUBJECT:', 'PRS:', 'CAT:', 'TRACK:',
+            ' - Last Merit (', '$columnCount',
         ] as $needle) {
             self::assertStringContainsString($needle, $table);
         }

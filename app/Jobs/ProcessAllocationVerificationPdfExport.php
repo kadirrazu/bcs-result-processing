@@ -49,9 +49,11 @@ final class ProcessAllocationVerificationPdfExport implements ShouldQueue
 
         try {
             $run = ReportingExportRun::query()
-                ->where('module', 'cadre_verification')
+                ->whereIn('module', ['cadre_verification', 'cadre_booklet'])
                 ->where('export_type', 'PDF')
                 ->findOrFail($this->exportRunId);
+
+            $booklet = $run->module === 'cadre_booklet';
 
             $this->update($run, 'running', 'VERIFYING_SOURCE', 5, 'Confirming current finalized A5 and A5.5 publication state.');
 
@@ -64,7 +66,15 @@ final class ProcessAllocationVerificationPdfExport implements ShouldQueue
                 ? (int) $parameters['cadre_code']
                 : null;
 
-            $this->update($run, 'running', 'PREPARING_REPORT', 20, 'Preparing identity-free verification report rows.');
+            $this->update(
+                $run,
+                'running',
+                'PREPARING_REPORT',
+                20,
+                $booklet
+                    ? 'Preparing identity-bearing booklet printing report rows.'
+                    : 'Preparing identity-free verification report rows.'
+            );
 
             if ($type === 'cadre-serial-merit') {
                 $data = $reports->buildCadreSerialMerit($a5);
@@ -85,7 +95,9 @@ final class ProcessAllocationVerificationPdfExport implements ShouldQueue
                     (string) $exam->name
                 );
             } else {
-                $data = $reports->build($type, $a5, $cadreCode);
+                $data = $booklet
+                    ? $reports->buildBooklet($type, $a5, $cadreCode)
+                    : $reports->build($type, $a5, $cadreCode);
                 $rowCount = (int) $data['rows']->count();
 
                 $this->update(
@@ -98,9 +110,15 @@ final class ProcessAllocationVerificationPdfExport implements ShouldQueue
                     $rowCount,
                 );
 
-                $generated = $pdf->generate($data, (string) $exam->name, $type, $cadreCode);
+                $generated = $pdf->generate(
+                    $data,
+                    (string) $exam->name,
+                    $type,
+                    $cadreCode,
+                    $booklet
+                );
             }
-            $path = $files->outputPath('cadre-verification', (int) $run->id, 'pdf');
+            $path = $files->outputPath($booklet ? 'cadre-booklet' : 'cadre-verification', (int) $run->id, 'pdf');
             File::put($path, $generated['content']);
 
             $this->update($run, 'running', 'FINALIZING', 92, 'Hashing and finalizing generated PDF.', $rowCount, $rowCount);
@@ -111,7 +129,7 @@ final class ProcessAllocationVerificationPdfExport implements ShouldQueue
                 'progress_percent' => 100,
                 'progress_current' => $rowCount,
                 'progress_total' => $rowCount,
-                'progress_message' => 'Verification PDF completed and is ready to download.',
+                'progress_message' => ($booklet ? 'Booklet Printing' : 'Verification').' PDF completed and is ready to download.',
                 'file_path' => $path,
                 'file_name' => (string) $generated['filename'],
                 'file_mime' => 'application/pdf',
@@ -123,7 +141,7 @@ final class ProcessAllocationVerificationPdfExport implements ShouldQueue
             ReportingExportRun::query()->whereKey($this->exportRunId)->update([
                 'status' => 'failed',
                 'phase' => 'FAILED',
-                'progress_message' => 'Verification PDF generation failed. No PDF was published.',
+                'progress_message' => 'Report PDF generation failed. No PDF was published.',
                 'failure_message' => mb_substr($e->getMessage(), 0, 65000),
                 'completed_at' => now(),
             ]);

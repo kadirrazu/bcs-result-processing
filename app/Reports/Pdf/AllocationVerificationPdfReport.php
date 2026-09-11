@@ -11,7 +11,7 @@ use RuntimeException;
 final class AllocationVerificationPdfReport
 {
     /** @param array{title:string,cadre:?array,rows:\Illuminate\Support\Collection,summary:?array} $data */
-    public function generate(array $data, string $examinationName, string $reportType, ?int $cadreCode = null): array
+    public function generate(array $data, string $examinationName, string $reportType, ?int $cadreCode = null, bool $booklet = false): array
     {
         $generatedAt = now();
 
@@ -41,6 +41,7 @@ final class AllocationVerificationPdfReport
             'examinationName' => $examinationName,
             'generatedAt' => $generatedAt,
             'reportType' => $reportType,
+            'booklet' => $booklet,
         ])->render());
 
         $scope = in_array($reportType, ['general-cadre', 'technical-cadre'], true) && $cadreCode
@@ -51,7 +52,9 @@ final class AllocationVerificationPdfReport
 
         return [
             'content' => $mpdf->Output('', Destination::STRING_RETURN),
-            'filename' => $slug.'-allocation-verification-'.$scope.'-'.$generatedAt->format('Ymd-His').'.pdf',
+            'filename' => $slug
+                .($booklet ? '-booklet-printing-' : '-allocation-verification-')
+                .$scope.'-'.$generatedAt->format('Ymd-His').'.pdf',
         ];
     }
 

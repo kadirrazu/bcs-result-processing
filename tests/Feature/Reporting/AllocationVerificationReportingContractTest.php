@@ -26,10 +26,11 @@ final class AllocationVerificationReportingContractTest extends TestCase
         $this->assertStringContainsString('Historical Cut-off due to', $table);
 
         $this->assertStringNotContainsString('previous_reg', $table);
-        $this->assertStringNotContainsString('birth_date', $table);
-        $this->assertStringNotContainsString('candidate_name', $table);
+        $this->assertStringContainsString('@if($booklet)', $table);
+        $this->assertStringContainsString('candidate_name', $table);
+        $this->assertStringContainsString('Candidate<br>Information', $table);
 
-        $this->assertStringContainsString('Merit<br>Position', $table);
+        $this->assertStringContainsString('avr-merit-heading', $table);
         $this->assertStringContainsString('Category &amp;<br>Written Track', $table);
         $this->assertStringContainsString('Merit Details', $table);
         $this->assertStringContainsString('Bachelor Subject &amp;<br>PRS', $table);
@@ -71,7 +72,7 @@ final class AllocationVerificationReportingContractTest extends TestCase
         $this->assertStringContainsString('>Choice List</th>', $table);
         $this->assertStringContainsString('Validated Choice', $table);
         $this->assertStringContainsString('Allocation-ready Choice', $table);
-        $this->assertStringContainsString("->chunk(5)", $view);
+        $this->assertStringContainsString("->chunk(5)", $table);
         $this->assertStringContainsString('avr-choice-line', $table);
         $this->assertStringContainsString('white-space:nowrap', $style);
         $this->assertStringContainsString('avr-basis-mq', $table);

@@ -25,7 +25,8 @@ final class AllocationVerificationPdfExportContractTest extends TestCase
         self::assertStringContainsString('Export PDF', $report);
         self::assertStringContainsString('@page{size:legal landscape;margin:0.5in}', $sharedStyle);
         self::assertStringContainsString('ProcessAllocationVerificationPdfExport', $controller);
-        self::assertStringContainsString("'module' => self::EXPORT_MODULE", $controller);
+        self::assertStringContainsString("self::BOOKLET_EXPORT_MODULE", $controller);
+        self::assertStringContainsString("self::EXPORT_MODULE", $controller);
         self::assertStringContainsString("'page_size' => 'Legal'", $controller);
         self::assertStringContainsString("? 'Portrait' : 'Landscape'", $controller);
         self::assertStringContainsString("'margin_inches' => 0.5", $controller);

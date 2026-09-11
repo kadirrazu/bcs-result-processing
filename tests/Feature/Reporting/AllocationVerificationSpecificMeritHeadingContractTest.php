@@ -22,7 +22,7 @@ final class AllocationVerificationSpecificMeritHeadingContractTest extends TestC
         self::assertStringContainsString('class="avr-sl-col">Sl.</th>', $table);
         self::assertStringContainsString('{{ $loop->iteration }}', $table);
         self::assertStringContainsString('$meritHeadingLines', $table);
-        self::assertStringContainsString('colspan="10"', $table);
+        self::assertStringContainsString('$columnCount', $table);
         self::assertStringContainsString('.avr-merit-heading{white-space:nowrap', $style);
     }
 }

@@ -36,6 +36,7 @@ final class AllocationDispositionController extends Controller
             ])
             ->unique('code')
             ->values();
+
         $cadreCode = (int) $request->query('cadre_code', 0);
         if ($cadreCode > 0 && ! $cadreOptions->contains(fn (array $row): bool => (int) $row['code'] === $cadreCode)) {
             $cadreCode = 0;
@@ -74,6 +75,102 @@ final class AllocationDispositionController extends Controller
         $operators = User::query()->whereIn('id', $rows->pluck('disposition_changed_by')->filter())->pluck('name', 'id');
 
         return view('allocation.disposition.index', compact('a5','snapshot','rows','search','status','cadreCode','cadreOptions','abbr','operators'));
+    }
+
+    public function dispositionList(
+        Request $request,
+        string $status,
+        AllocationA6ReadinessService $readiness,
+        AllocationA6ReportService $reports,
+        AllocationResultDispositionService $dispositions,
+    ): View {
+        $status = strtoupper(trim($status));
+        abort_unless(in_array($status, [
+            AllocationResultDispositionService::WITHHELD,
+            AllocationResultDispositionService::CANCELLED,
+        ], true), 404);
+
+        $a5 = $readiness->requireReady();
+        $snapshot = $dispositions->snapshot($a5);
+        $search = trim((string) $request->query('search', ''));
+
+        $statusCadreCodes = AllocationResultDisposition::query()
+            ->where('allocation_a5_run_id', (int) $a5->id)
+            ->where('status', $status)
+            ->whereNotNull('cadre_code')
+            ->distinct()
+            ->orderBy('cadre_code')
+            ->pluck('cadre_code')
+            ->map(fn ($code) => (int) $code)
+            ->filter()
+            ->values();
+
+        $statusCadreAbbr = $reports->abbreviations($statusCadreCodes);
+
+        $cadreOptions = $statusCadreCodes
+            ->map(fn (int $code): array => [
+                'code' => $code,
+                'abbr' => (string) $statusCadreAbbr->get($code, (string) $code),
+            ])
+            ->values();
+
+        $cadreCode = (int) $request->query('cadre_code', 0);
+        if ($cadreCode > 0 && ! $cadreOptions->contains(fn (array $row): bool => (int) $row['code'] === $cadreCode)) {
+            $cadreCode = 0;
+        }
+
+        $query = AllocationResultDisposition::query()
+            ->from('allocation_result_dispositions as d')
+            ->where('d.allocation_a5_run_id', (int) $a5->id)
+            ->where('d.status', $status)
+            ->join('registrations as r', 'r.id', '=', 'd.registration_id')
+            ->join('allocation_a4_results as a4', function ($join) use ($a5): void {
+                $join->on('a4.registration_id', '=', 'd.registration_id')
+                    ->where('a4.allocation_a4_run_id', '=', (int) $a5->allocation_a4_run_id);
+            })
+            ->select([
+                'd.registration_id',
+                'd.reg',
+                'd.cadre_code',
+                'd.status',
+                'd.reason',
+                'd.reference_no',
+                'd.changed_by',
+                'd.changed_at',
+                'r.name as candidate_name',
+                'r.birth_date as candidate_birth_date',
+                'a4.allocation_basis',
+                'a4.merit_position',
+            ]);
+
+        if ($search !== '') {
+            $query->where(function ($nested) use ($search): void {
+                $nested->where('d.reg', 'like', '%'.$search.'%')
+                    ->orWhere('r.name', 'like', '%'.$search.'%');
+            });
+        }
+
+        if ($cadreCode > 0) {
+            $query->where('d.cadre_code', $cadreCode);
+        }
+
+        $rows = $query
+            ->orderBy('d.cadre_code')
+            ->orderBy('a4.merit_position')
+            ->orderBy('d.reg')
+            ->get();
+
+        $abbr = $reports->abbreviations($rows->pluck('cadre_code'));
+        return view('allocation.disposition.list', compact(
+            'a5',
+            'snapshot',
+            'status',
+            'rows',
+            'search',
+            'cadreCode',
+            'cadreOptions',
+            'abbr',
+        ));
     }
 
     public function show(

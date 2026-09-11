@@ -71,15 +71,33 @@
         </a>
     </div>
 
-    <div class="mt-4 mb-2">
-        <div class="subheader">Publication / Identity-bearing</div>
-    </div>
-    <div class="csr-booklet">
+    <div class="csr-section-head mt-4">
         <div>
-            <div class="fw-semibold">Booklet Printing Reports</div>
-            <div class="small text-secondary mt-1">Approved identity-bearing booklet outputs will be managed here.</div>
+            <div class="subheader">Publication / Identity-bearing</div>
+            <h3 class="csr-section-title">Booklet Printing Reports</h3>
+            <div class="csr-section-copy">Publication-stage reports based on the same finalized Allocation evidence, with candidate identity information included and Higher Choice Missed Reason omitted.</div>
         </div>
-        <span class="badge bg-secondary-lt">Next subsection</span>
+    </div>
+
+    <div class="csr-grid">
+        <a class="csr-tile {{ $ready?'':'is-disabled' }}" href="{{ $ready?route('examination-reports.cadre.booklet',['type'=>'common']):'#' }}">
+            <span class="csr-number">01</span><span class="csr-copy"><span class="csr-name">Common Merit Position Allocation Report</span><span class="csr-desc d-block">Identity-bearing booklet report in Common Merit order.</span></span><span class="csr-arrow">›</span>
+        </a>
+        <a class="csr-tile {{ $ready?'':'is-disabled' }}" href="{{ $ready?route('examination-reports.cadre.booklet',['type'=>'general']):'#' }}">
+            <span class="csr-number">02</span><span class="csr-copy"><span class="csr-name">General Cadre Candidate Allocation Report</span><span class="csr-desc d-block">General-side finalized merit population for booklet printing.</span></span><span class="csr-arrow">›</span>
+        </a>
+        <a class="csr-tile {{ $ready?'':'is-disabled' }}" href="{{ $ready?route('examination-reports.cadre.booklet',['type'=>'technical-only']):'#' }}">
+            <span class="csr-number">03</span><span class="csr-copy"><span class="csr-name">Only Technical Cadre Candidate Allocation Report</span><span class="csr-desc d-block">Effective TT + T technical-only booklet population.</span></span><span class="csr-arrow">›</span>
+        </a>
+        <a class="csr-tile {{ $ready?'':'is-disabled' }}" href="{{ $ready?route('examination-reports.cadre.booklet',['type'=>'quota']):'#' }}">
+            <span class="csr-number">04</span><span class="csr-copy"><span class="csr-name">Quota Candidate Allocation Report</span><span class="csr-desc d-block">CFF, EM and PHC candidates with identity and allocation outcome.</span></span><span class="csr-arrow">›</span>
+        </a>
+        <a class="csr-tile {{ $ready?'':'is-disabled' }}" href="{{ $ready?route('examination-reports.cadre.booklet.general-cadre-wise'):'#' }}">
+            <span class="csr-number">05</span><span class="csr-copy"><span class="csr-name">General Cadre-wise Allocation Reports</span><span class="csr-desc d-block">Search and open a General cadre booklet report.</span></span><span class="csr-arrow">›</span>
+        </a>
+        <a class="csr-tile {{ $ready?'':'is-disabled' }}" href="{{ $ready?route('examination-reports.cadre.booklet.technical-cadre-wise'):'#' }}">
+            <span class="csr-number">06</span><span class="csr-copy"><span class="csr-name">Technical Cadre-wise Allocation Reports</span><span class="csr-desc d-block">Search and open a cadre-specific Technical booklet report.</span></span><span class="csr-arrow">›</span>
+        </a>
     </div>
 </div>
 @endsection
