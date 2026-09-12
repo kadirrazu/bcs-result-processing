@@ -16,11 +16,11 @@ final class QuotaCandidateAllocationVerificationContractTest extends TestCase
         $summary = file_get_contents(resource_path('views/reporting/allocation-verification/_quota-summary.blade.php'));
         $table = file_get_contents(resource_path('views/reporting/allocation-verification/_verification-table.blade.php'));
 
-        self::assertStringContainsString("elseif ($type === 'quota')", $service);
+        self::assertStringContainsString("elseif (\$type === 'quota')", $service);
         self::assertStringContainsString("has_ff_quota', 2", $service);
         self::assertStringContainsString("has_em_quota', 1", $service);
         self::assertStringContainsString("has_phc_quota', 1", $service);
-        self::assertStringContainsString("where('input_freeze_id', (int) $a4Run->input_freeze_id)", $service);
+        self::assertStringContainsString("where('input_freeze_id', (int) \$a4Run->input_freeze_id)", $service);
         self::assertStringContainsString("'registrations.id'", $service);
         self::assertStringContainsString("'allocated_mq'", $service);
         self::assertStringContainsString("'allocated_cff'", $service);

@@ -36,6 +36,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     Route::get('/a5-5/candidates/{registrationId}',[AllocationDispositionController::class,'show'])->name('disposition.show');
     Route::put('/a5-5/candidates/{registrationId}',[AllocationDispositionController::class,'update'])->name('disposition.update');
     Route::get('/a6',[AllocationA6Controller::class,'index'])->name('a6.index');
+    Route::get('/a6/special-requirements',[AllocationA6Controller::class,'specialRequirements'])->name('a6.special-requirements');
+    Route::post('/a6/special-requirements/{registrationId}/review',[AllocationA6Controller::class,'reviewSpecialRequirement'])->name('a6.special-requirements.review');
     Route::get('/a6/candidates',[AllocationA6Controller::class,'candidates'])->name('a6.candidates');
     Route::get('/a6/candidates/{reg}',[AllocationA6Controller::class,'candidate'])->name('a6.candidate');
     Route::get('/a6/cadres',[AllocationA6Controller::class,'cadres'])->name('a6.cadres');

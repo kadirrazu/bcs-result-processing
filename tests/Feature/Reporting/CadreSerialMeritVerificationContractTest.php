@@ -27,11 +27,11 @@ final class CadreSerialMeritVerificationContractTest extends TestCase
         self::assertStringContainsString('allocation_basis', $service);
         self::assertStringContainsString('$rowsPerGroup = 25', $service);
         self::assertStringContainsString('->chunk($rowsPerGroup * 3)', $service);
-        self::assertStringContainsString("'serial' => $index + 1", $service);
+        self::assertStringContainsString("\$row['serial'] = \$index + 1", $service);
         self::assertStringContainsString("'fallback_merit_position'", $service);
         self::assertStringContainsString("'total_allocated'] > 0", $service);
-        self::assertStringContainsString("'total_post' => (int) $capacity->sanctioned_posts", $service);
-        self::assertStringContainsString("'total_allocated' => $candidateRows->count()", $service);
+        self::assertStringContainsString("'total_post' => (int) \$capacity->sanctioned_posts", $service);
+        self::assertStringContainsString("'total_allocated' => \$candidateRows->count()", $service);
 
         self::assertStringContainsString('Cadre-wise Serial, Merit &amp; Allocation Basis Report', $index);
         self::assertStringContainsString('cadreSerialMerit', $controller);
@@ -47,14 +47,14 @@ final class CadreSerialMeritVerificationContractTest extends TestCase
         self::assertStringContainsString('$groupIndex < 3', $view);
         self::assertStringContainsString('colspan="11"', $view);
 
-        self::assertStringContainsString("if ($type === 'cadre-serial-merit')", $job);
+        self::assertStringContainsString("if (\$type === 'cadre-serial-merit')", $job);
         self::assertStringContainsString('generateCadreSerialMerit', $job);
         self::assertStringContainsString('HTMLParserMode::HEADER_CSS', $pdf);
         self::assertStringContainsString('HTMLParserMode::HTML_BODY', $pdf);
         self::assertStringContainsString('$mpdf->AddPage(\'P\')', $pdf);
         self::assertStringContainsString('cadre-serial-merit-verification-style', $pdf);
         self::assertStringContainsString('cadre-serial-merit-verification-page', $pdf);
-        self::assertStringNotContainsString("view('reports.pdf.cadre-serial-merit-verification', $data", $pdf);
+        self::assertStringNotContainsString("view('reports.pdf.cadre-serial-merit-verification', \$data", $pdf);
         self::assertStringContainsString("'format' => 'A4'", $pdf);
         self::assertStringContainsString("'orientation' => 'P'", $pdf);
         self::assertStringContainsString('cadre-serial-merit-verification', $pdf);

@@ -18,6 +18,7 @@ use App\Models\TabulationResult;
 use App\Models\VivaResult;
 use App\Models\WrittenResult;
 use App\Services\Documents\DocxPlaceholderTemplateService;
+use App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService;
 use App\Services\Reporting\ReportExportFileStore;
 use App\Services\Reporting\SpreadsheetReportWriter;
 use App\Support\Examinations\ExaminationContext;
@@ -43,6 +44,7 @@ final class AllocationA6ExportService
         private readonly AllocationA6ExcelFieldCatalog $fieldCatalog,
         private readonly AllocationA6SummaryService $summary,
         private readonly AllocationResultDispositionService $dispositions,
+        private readonly FinalAllocationReadyChoiceService $finalChoices,
         private readonly ReportExportFileStore $files,
         private readonly SpreadsheetReportWriter $spreadsheets,
         private readonly ExaminationContext $context,
@@ -345,13 +347,16 @@ final class AllocationA6ExportService
             return [(int) $choice->registration_id => $codes];
         });
 
+        $finalChoiceMap = collect($this->finalChoices->effectiveMap())
+            ->only($registrationIds->map(fn ($id) => (int) $id)->all());
+
         $registrations = Registration::query()->whereIn('id', $registrationIds)->get()->keyBy('id');
         $sexCodes = $registrations->pluck('sex_code')->filter(fn ($value) => filled($value))->unique()->values();
         $districtCodes = $registrations->pluck('district_code')->filter(fn ($value) => filled($value))->unique()->values();
         $choiceCodes = $registrationChoices->flatten()
             ->merge($choices->pluck('validated_choice_codes')->flatten())
             ->merge(ChoiceOptimizationEffectiveChoice::query()->whereIn('registration_id', $registrationIds)->get()->flatMap(fn ($row) => array_merge((array) ($row->omr_override_choice_codes ?? []), (array) ($row->effective_choice_codes ?? []))))
-            ->merge(ChoiceOptimizationHistoricalChoice::query()->whereIn('registration_id', $registrationIds)->get()->flatMap(fn ($row) => (array) ($row->final_choice_codes ?? [])))
+            ->merge($finalChoiceMap->flatten())
             ->map(fn ($value) => (int) $value)->filter()->unique()->values();
         $allocationCodes = AllocationA4Result::query()->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
             ->whereIn('registration_id', $registrationIds)->pluck('cadre_code')->map(fn ($value) => (int) $value)->filter();
@@ -371,6 +376,7 @@ final class AllocationA6ExportService
             'registration_choice' => $registrationChoices,
             'effective_choice' => ChoiceOptimizationEffectiveChoice::query()->whereIn('registration_id', $registrationIds)->get()->keyBy('registration_id'),
             'optimized' => ChoiceOptimizationHistoricalChoice::query()->whereIn('registration_id', $registrationIds)->orderBy('id')->get()->keyBy('registration_id'),
+            'final_choice' => $finalChoiceMap,
             'allocation' => AllocationA4Result::query()->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)->whereIn('registration_id', $registrationIds)->get()->keyBy('registration_id'),
             'disposition' => $this->dispositions->dispositionMap($a5, $registrationIds),
             'a5' => $a5->candidateResults()->whereIn('registration_id', $registrationIds)->get()->keyBy('registration_id'),
@@ -389,6 +395,7 @@ final class AllocationA6ExportService
         $choice = $data['choice']->get($registrationId);
         $effectiveChoice = $data['effective_choice']->get($registrationId);
         $optimized = $data['optimized']->get($registrationId);
+        $finalChoice = (array) ($data['final_choice']->get($registrationId, []));
         $allocation = $data['allocation']->get($registrationId);
         $disposition = $data['disposition']->get($registrationId);
         $allocationStatus = $allocation ? strtoupper((string) ($disposition?->status ?: 'ACTIVE')) : '';
@@ -430,8 +437,8 @@ final class AllocationA6ExportService
             'choice.validated_abbr' => $this->choiceAbbreviationsText((array) ($choice?->validated_choice_codes ?? []), $data['abbreviations']),
             'choice.omr' => $this->choiceCodesText((array) ($effectiveChoice?->omr_override_choice_codes ?? [])),
             'choice.omr_abbr' => $this->choiceAbbreviationsText((array) ($effectiveChoice?->omr_override_choice_codes ?? []), $data['abbreviations']),
-            'choice.effective' => $this->choiceCodesText((array) ($optimized?->final_choice_codes ?? $effectiveChoice?->effective_choice_codes ?? $choice?->validated_choice_codes ?? [])),
-            'choice.effective_abbr' => $this->choiceAbbreviationsText((array) ($optimized?->final_choice_codes ?? $effectiveChoice?->effective_choice_codes ?? $choice?->validated_choice_codes ?? []), $data['abbreviations']),
+            'choice.effective' => $this->choiceCodesText($finalChoice !== [] ? $finalChoice : (array) ($optimized?->final_choice_codes ?? $effectiveChoice?->effective_choice_codes ?? $choice?->validated_choice_codes ?? [])),
+            'choice.effective_abbr' => $this->choiceAbbreviationsText($finalChoice !== [] ? $finalChoice : (array) ($optimized?->final_choice_codes ?? $effectiveChoice?->effective_choice_codes ?? $choice?->validated_choice_codes ?? []), $data['abbreviations']),
             'merit.common' => $merit?->common_merit_position,
             'merit.general' => $merit?->general_merit_position,
             'merit.technical' => $merit?->technical_merit_position,

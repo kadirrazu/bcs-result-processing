@@ -19,6 +19,7 @@ use App\Models\PostRelatedSubject;
 use App\Models\Registration;
 use App\Services\Allocation\AllocationA6ReportService;
 use App\Services\Allocation\AllocationResultDispositionService;
+use App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
@@ -34,6 +35,7 @@ final class AllocationVerificationReportService
     public function __construct(
         private readonly AllocationA6ReportService $a6,
         private readonly AllocationResultDispositionService $dispositions,
+        private readonly FinalAllocationReadyChoiceService $finalChoices,
     ) {}
 
     /** @return Collection<int,array<string,mixed>> */
@@ -437,12 +439,17 @@ final class AllocationVerificationReportService
             ->get(['id','registration_id','input_choice_codes','historical_recommendations','matched_cutoff'])
             ->unique('registration_id')->keyBy('registration_id');
 
+        $manualExclusions = $this->finalChoices->activeExclusionEvents($registrationIds);
+
         $choiceCodes = collect();
         foreach ($frozenCandidates as $frozen) {
             $choiceCodes = $choiceCodes->merge((array) $frozen->choice_codes);
         }
         foreach ($historicalChoices as $historicalChoice) {
             $choiceCodes = $choiceCodes->merge((array) $historicalChoice->input_choice_codes);
+        }
+        foreach ($manualExclusions as $events) {
+            $choiceCodes = $choiceCodes->merge($events->pluck('choice_code'));
         }
         $choiceCodes = $choiceCodes->merge($allocations->pluck('cadre_code'))->map(fn ($v) => (int) $v)->filter()->unique()->values();
         $abbr = $this->a6->abbreviations($choiceCodes);
@@ -451,7 +458,7 @@ final class AllocationVerificationReportService
             $registrations, $bachelors, $prs, $allocations, $serialByRegistration,
             $frozenCandidates, $historicalChoices, $abbr, $specificRanks, $type,
             $queueEvidence, $finalCutoffs, $includeIdentity, $includeHigherChoice,
-            $dispositionMap
+            $dispositionMap, $manualExclusions
         ): array {
             $id = (int) $merit->registration_id;
             $registration = $registrations->get($id);
@@ -498,6 +505,11 @@ final class AllocationVerificationReportService
                 fn ($v) => filled($v)
             ));
             $historicalCutoff = $this->historicalCutoff($history);
+            $manualAdjustmentNotes = $this->manualAdjustmentNotes(
+                $manualExclusions->get($id, collect()),
+                $abbr,
+                $merit
+            );
 
             return [
                 'candidate_reg' => $includeIdentity ? (string) ($registration?->reg ?? '') : null,
@@ -532,6 +544,7 @@ final class AllocationVerificationReportService
                 'choices' => $this->choiceLabels($choices, $abbr, $allocationCode),
                 'historical_cutoff' => $historicalCutoff,
                 'historical_allocations' => $this->historicalAllocations($history),
+                'manual_adjustment_notes' => $manualAdjustmentNotes,
                 'higher_choice_missed_reasons' => $higherChoiceMissedReasons,
                 'allocation_outcome' => $allocation ? 'ALLOCATED' : 'NOT_ALLOCATED',
                 'remarks' => ! $includeIdentity && $dispositionStatus === AllocationResultDispositionService::WITHHELD
@@ -853,7 +866,35 @@ final class AllocationVerificationReportService
         ])->values();
     }
 
-    /** @return array{cadre:string,bcs:string}|null */
+    /** @return array<int,string> */
+    private function manualAdjustmentNotes(Collection $events, Collection $abbr, MeritResult $merit): array
+    {
+        if ($events->isEmpty()) return [];
+
+        $meritParts = [];
+        if ($merit->common_merit_position !== null) $meritParts[] = 'Common '.(int) $merit->common_merit_position;
+        if ($merit->general_merit_position !== null) $meritParts[] = 'General '.(int) $merit->general_merit_position;
+        if ($merit->technical_merit_position !== null) $meritParts[] = 'Technical '.(int) $merit->technical_merit_position;
+        foreach ((array) $merit->all_merit_tech as $technicalAbbr => $position) {
+            if (filled($position)) $meritParts[] = strtoupper((string) $technicalAbbr).' '.(int) $position;
+        }
+        $meritLabel = $meritParts !== [] ? 'Merit: '.implode(' · ', $meritParts) : 'Merit: —';
+
+        return $events->map(function ($event) use ($abbr, $meritLabel): string {
+            $code = (int) $event->choice_code;
+            $label = (string) $abbr->get($code, (string) $code);
+            $reason = trim((string) $event->reason);
+
+            return sprintf(
+                'Manual Choice Removal: %s (%d) excluded from Final Allocation Ready Choice — Reason: %s · %s',
+                $label,
+                $code,
+                $reason !== '' ? $reason : 'Operator reason not available',
+                $meritLabel
+            );
+        })->values()->all();
+    }
+
     private function historicalCutoff(?ChoiceOptimizationHistoricalChoice $history): ?array
     {
         if (! $history?->matched_cutoff) return null;

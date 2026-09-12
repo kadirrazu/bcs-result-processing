@@ -29,7 +29,7 @@ final class CadreWiseVerificationListingPagesContractTest extends TestCase
         self::assertStringContainsString('Search by Cadre Code or Abbreviation', $listing);
         self::assertStringContainsString('id="cadre-filter"', $listing);
         self::assertStringContainsString('class="cadre-report-row"', $listing);
-        self::assertStringContainsString("if($kind === 'general')", $listing);
+        self::assertStringContainsString("if(\$kind === 'general')", $listing);
         self::assertStringContainsString('cadre.verification.general-cadre', $listing);
         self::assertStringContainsString('cadre.verification.technical', $listing);
     }

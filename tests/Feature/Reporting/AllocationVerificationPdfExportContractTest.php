@@ -27,7 +27,7 @@ final class AllocationVerificationPdfExportContractTest extends TestCase
         self::assertStringContainsString('ProcessAllocationVerificationPdfExport', $controller);
         self::assertStringContainsString("self::BOOKLET_EXPORT_MODULE", $controller);
         self::assertStringContainsString("self::EXPORT_MODULE", $controller);
-        self::assertStringContainsString("'page_size' => 'Legal'", $controller);
+        self::assertStringContainsString("'page_size' => \$type === 'cadre-serial-merit' ? 'A4' : 'Legal'", $controller);
         self::assertStringContainsString("? 'Portrait' : 'Landscape'", $controller);
         self::assertStringContainsString("'margin_inches' => 0.5", $controller);
         self::assertStringContainsString("'format' => 'Legal'", $pdf);
@@ -41,7 +41,7 @@ final class AllocationVerificationPdfExportContractTest extends TestCase
         self::assertStringContainsString('disposition_hash', $job);
         self::assertStringContainsString('verification-export-progress', $progress);
         self::assertSame(substr_count($progress, '@if('), substr_count($progress, '@endif'));
-        self::assertStringContainsString("@php\n    $isRunning = in_array", $progress);
+        self::assertStringContainsString("@php\n    \$isRunning = in_array", $progress);
 
         $pdfView = file_get_contents(resource_path('views/reports/pdf/allocation-verification.blade.php'));
         self::assertStringContainsString("_verification-table',", $pdfView);

@@ -16,7 +16,7 @@ final class AllocationVerificationWithheldDispositionContractTest extends TestCa
         self::assertStringContainsString('AllocationResultDispositionService::CANCELLED', $service);
         self::assertStringContainsString('return $this->dispositions->applyPublishedOnly', $service);
         self::assertStringContainsString("'is_withheld'", $service);
-        self::assertStringContainsString("'WITHHELD'.($dispositionReason", $service);
+        self::assertStringContainsString("'WITHHELD'.(\$dispositionReason", $service);
 
         self::assertStringContainsString('avr-withheld', $table);
         self::assertStringContainsString('(WITHHELD)', $table);

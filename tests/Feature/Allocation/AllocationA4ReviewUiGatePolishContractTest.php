@@ -24,7 +24,7 @@ final class AllocationA4ReviewUiGatePolishContractTest extends TestCase
 
         // Both UI and server-side processing gate A4 while any upstream readiness check is blocked.
         $this->assertStringContainsString('$readiness[\'ready\'] ? \'\' : \'disabled\'', $index);
-        $this->assertStringContainsString('$readiness->inspectStrict()', $controller);
+        $this->assertStringContainsString('$readiness->inspectDashboard()', $controller);
         $this->assertStringContainsString('Allocation Pre-run Gate is BLOCKED', $controller);
 
         // Circular group ordering must precede per-group serial ordering (GG then TT).

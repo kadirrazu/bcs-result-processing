@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ChoiceOptimizationController;
 use App\Http\Controllers\ChoiceOptimizationGoogleFormController;
+use App\Http\Controllers\ManualAllocationChoiceAdjustmentController;
 use App\Http\Middleware\ConfigureExaminationConnection;
 use App\Http\Middleware\EnsureExaminationSelected;
 use Illuminate\Support\Facades\Route;
@@ -12,6 +13,14 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     ->group(function (): void {
         Route::get('/', [ChoiceOptimizationController::class, 'index'])->name('index');
         Route::post('/setting', [ChoiceOptimizationController::class, 'updateSetting'])->name('setting.update');
+
+        Route::get('/final-allocation-ready-choice', [ManualAllocationChoiceAdjustmentController::class, 'finalIndex'])->name('final-allocation-ready-choice.index');
+        Route::get('/final-allocation-ready-choice/{registrationId}', [ManualAllocationChoiceAdjustmentController::class, 'finalShow'])->name('final-allocation-ready-choice.show');
+
+        Route::get('/manual-adjustment', [ManualAllocationChoiceAdjustmentController::class, 'index'])->name('manual-adjustment.index');
+        Route::get('/manual-adjustment/{registrationId}', [ManualAllocationChoiceAdjustmentController::class, 'show'])->name('manual-adjustment.show');
+        Route::post('/manual-adjustment/{registrationId}/{choiceCode}/exclude', [ManualAllocationChoiceAdjustmentController::class, 'exclude'])->name('manual-adjustment.exclude');
+        Route::post('/manual-adjustment/{registrationId}/{choiceCode}/restore', [ManualAllocationChoiceAdjustmentController::class, 'restore'])->name('manual-adjustment.restore');
 
         Route::post('/google-form/decision', [ChoiceOptimizationGoogleFormController::class, 'decision'])->name('google-form.decision');
         Route::post('/google-form/upload', [ChoiceOptimizationGoogleFormController::class, 'upload'])->name('google-form.upload');

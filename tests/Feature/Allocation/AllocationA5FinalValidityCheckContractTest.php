@@ -35,7 +35,7 @@ class AllocationA5FinalValidityCheckContractTest extends TestCase
         $stale = file_get_contents(app_path('Services/Allocation/AllocationRunStaleService.php'));
         $view = file_get_contents(resource_path('views/allocation/a5-show.blade.php'));
 
-        $this->assertStringContainsString('inspectStrict()', $controller);
+        $this->assertStringContainsString('inspectDashboard()', $controller);
         $this->assertStringContainsString("where('status', 'a4_complete')", $controller);
         $this->assertStringContainsString("where('is_stale', false)", $controller);
         $this->assertStringContainsString("status !== 'validated_ok'", $service);

@@ -49,6 +49,7 @@
                 <a class="btn btn-outline-primary {{ $gate['ready']?'':'disabled' }}" href="{{ $gate['ready']?route('allocation.a6.cadres'):'#' }}">Cadre Drill-down</a>
                 <a class="btn btn-outline-primary {{ $gate['ready']?'':'disabled' }}" href="{{ $gate['ready']?route('allocation.a6.summary.short'):'#' }}">Short Summary</a>
                 <a class="btn btn-outline-primary {{ $gate['ready']?'':'disabled' }}" href="{{ $gate['ready']?route('allocation.a6.summary'):'#' }}">In-depth Summary</a>
+                <a class="btn btn-outline-warning {{ $gate['ready']?'':'disabled' }}" href="{{ $gate['ready']?route('allocation.a6.special-requirements'):'#' }}">Special Requirement Review @if($gate['ready'] && $specialRequirementCount>0)<span class="badge bg-warning-lt ms-1">{{ $specialRequirementCount }}</span>@endif</a>
             </div>
         </div></div>
     </div>

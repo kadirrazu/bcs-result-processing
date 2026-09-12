@@ -134,15 +134,19 @@
                     @endforelse
                 </td>
             @endif
-            <td class="{{ empty($row['historical_allocations']) && empty($row['remarks']) ? 'avr-center' : '' }}">
+            <td class="{{ empty($row['historical_allocations']) && empty($row['manual_adjustment_notes']) && empty($row['remarks']) ? 'avr-center' : '' }}">
                 @if(!empty($row['remarks']))
                     <div>{{ $row['remarks'] }}</div>
-                    @if(!empty($row['historical_allocations']))<div class="avr-cell-separator"></div>@endif
+                    @if(!empty($row['manual_adjustment_notes']) || !empty($row['historical_allocations']))<div class="avr-cell-separator"></div>@endif
                 @endif
+                @foreach(($row['manual_adjustment_notes'] ?? []) as $manualNote)
+                    <div class="avr-manual-adjustment-note">{{ $manualNote }}</div>
+                    @if(!$loop->last || !empty($row['historical_allocations']))<div class="avr-cell-separator"></div>@endif
+                @endforeach
                 @forelse($row['historical_allocations'] as $historyRow)
                     <div class="avr-history-line"><span>{{ $historyRow['bcs'] }}:</span> @foreach($historyRow['cadres'] as $historyCadre)<span class="avr-history-cadre">{{ $historyCadre['cadre'] }}</span> <span class="avr-history-source">({{ implode(', ', $historyCadre['sources']) }})</span>@if(!$loop->last) / @endif @endforeach</div>
                 @empty
-                    @if(empty($row['remarks']))—@endif
+                    @if(empty($row['remarks']) && empty($row['manual_adjustment_notes']))—@endif
                 @endforelse
             </td>
         </tr>

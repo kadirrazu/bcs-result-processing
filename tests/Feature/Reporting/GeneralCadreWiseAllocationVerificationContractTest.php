@@ -16,10 +16,10 @@ final class GeneralCadreWiseAllocationVerificationContractTest extends TestCase
 
         self::assertStringContainsString('public function generalCadres', $service);
         self::assertStringContainsString("whereNotNull('general_merit_position')", $service);
-        self::assertStringContainsString("where('input_freeze_id', (int) $a4Run->input_freeze_id)", $service);
+        self::assertStringContainsString("where('input_freeze_id', (int) \$a4Run->input_freeze_id)", $service);
         self::assertStringContainsString('applyPublishedOnly', $service);
-        self::assertStringContainsString("elseif ($type === 'general-cadre')", $service);
-        self::assertStringContainsString("'general-cadre' => $merit->general_merit_position", $service);
+        self::assertStringContainsString("elseif (\$type === 'general-cadre')", $service);
+        self::assertStringContainsString("'general-cadre' => \$merit->general_merit_position", $service);
         self::assertStringContainsString("['general-cadre', 'technical-cadre']", $service);
 
         self::assertStringContainsString('public function generalCadre(', $controller);

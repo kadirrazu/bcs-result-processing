@@ -96,10 +96,11 @@ final class CircularController extends Controller
         $prsMap = PostRelatedSubject::query()
             ->whereIn('subject_code', $entries->flatMap(fn ($e) => $e->prsSubjects->pluck('prs_code'))->unique())
             ->pluck('subject_name', 'subject_code');
+        $abbreviationMap = $this->circularAbbreviationMap($entries);
 
         $isHistorical = $version !== (int) $state->current_version;
 
-        return view('circular.view', compact('state', 'version', 'entries', 'bachelorMap', 'prsMap', 'isHistorical'));
+        return view('circular.view', compact('state', 'version', 'entries', 'bachelorMap', 'prsMap', 'abbreviationMap', 'isHistorical'));
     }
 
     public function entries(Request $request): View
@@ -456,8 +457,42 @@ final class CircularController extends Controller
             ->pluck('subject_name', 'subject_code');
         $prsMap = PostRelatedSubject::query()->whereIn('subject_code', $entries->flatMap(fn ($e) => $e->prsSubjects->pluck('prs_code'))->unique())
             ->pluck('subject_name', 'subject_code');
+        $abbreviationMap = $this->circularAbbreviationMap($entries);
 
         $isHistorical = false;
-        return view('circular.view', compact('state', 'version', 'entries', 'bachelorMap', 'prsMap', 'isHistorical'));
+        return view('circular.view', compact('state', 'version', 'entries', 'bachelorMap', 'prsMap', 'abbreviationMap', 'isHistorical'));
+    }
+
+    /**
+     * Display-only abbreviation lookup for Circular View.
+     * Circular authority data/hashes remain untouched; abbreviations are resolved
+     * from the reusable Cadre/Sub-Cadre master namespace.
+     *
+     * @return array<int,string>
+     */
+    private function circularAbbreviationMap($entries): array
+    {
+        $mainCodes = $entries->whereNull('sub_cadre_code')->pluck('cadre_code')->filter()->unique()->values();
+        $subCodes = $entries->whereNotNull('sub_cadre_code')->pluck('sub_cadre_code')->filter()->unique()->values();
+
+        $map = [];
+
+        if ($mainCodes->isNotEmpty()) {
+            foreach (CadreMaster::query()->whereIn('cadre_code', $mainCodes)->get(['cadre_code', 'cadre_abbr']) as $cadre) {
+                if (filled($cadre->cadre_abbr)) {
+                    $map[(int) $cadre->cadre_code] = (string) $cadre->cadre_abbr;
+                }
+            }
+        }
+
+        if ($subCodes->isNotEmpty()) {
+            foreach (CadreSubMaster::query()->whereIn('sub_cadre_code', $subCodes)->get(['sub_cadre_code', 'sub_cadre_abbr']) as $subCadre) {
+                if (filled($subCadre->sub_cadre_abbr)) {
+                    $map[(int) $subCadre->sub_cadre_code] = (string) $subCadre->sub_cadre_abbr;
+                }
+            }
+        }
+
+        return $map;
     }
 }

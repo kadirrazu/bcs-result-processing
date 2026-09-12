@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Jobs\ProcessAllocationA6Export;
 use App\Models\AllocationA4Result;
 use App\Models\AllocationA5Run;
+use App\Models\AllocationSpecialRequirementReviewEvent;
+use App\Models\CircularEntry;
 use App\Models\AllocationA6ExportAudit;
 use App\Models\Registration;
 use App\Models\ReportingExportRun;
@@ -32,10 +34,84 @@ final class AllocationA6Controller extends Controller
         $gate = $readiness->inspect();
         $cadres = $gate['ready'] ? $reports->cadres($gate['a5']) : collect();
         $dispositionSnapshot = $gate['ready'] ? $this->dispositions->snapshot($gate['a5']) : null;
+        $specialRequirementCount = $gate['ready']
+            ? AllocationA4Result::query()
+                ->where('allocation_a4_run_id', (int) $gate['a5']->allocation_a4_run_id)
+                ->whereHas('circularEntry', fn ($q) => $q->where('special_requirement', true))
+                ->count()
+            : 0;
         $audits = AllocationA6ExportAudit::query()->latest('id')->limit(10)->get();
         $exportRuns = ReportingExportRun::query()->where('module', 'allocation_a6')->latest('id')->limit(10)->get();
 
-        return view('allocation.a6.index', compact('gate', 'cadres', 'audits', 'exportRuns', 'dispositionSnapshot'));
+        return view('allocation.a6.index', compact('gate', 'cadres', 'audits', 'exportRuns', 'dispositionSnapshot', 'specialRequirementCount'));
+    }
+
+    public function specialRequirements(Request $request, AllocationA6ReadinessService $readiness, AllocationA6ReportService $reports): View
+    {
+        $a5 = $readiness->requireReady();
+        $status = strtoupper(trim((string) $request->query('status', 'ALL')));
+        if (! in_array($status, ['ALL','PENDING','VERIFIED','FAILED'], true)) $status = 'ALL';
+        $search = trim((string) $request->query('search', ''));
+
+        $rows = AllocationA4Result::query()
+            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
+            ->join('circular_entries as ce', 'ce.id', '=', 'allocation_a4_results.circular_entry_id')
+            ->join('registrations as r', 'r.id', '=', 'allocation_a4_results.registration_id')
+            ->where('ce.special_requirement', true)
+            ->select([
+                'allocation_a4_results.registration_id','allocation_a4_results.reg','allocation_a4_results.cadre_code',
+                'allocation_a4_results.merit_position','allocation_a4_results.allocation_basis','allocation_a4_results.circular_entry_id',
+                'r.name as candidate_name','ce.cadre_name_snapshot','ce.post_name_snapshot','ce.special_requirement_comment',
+            ])
+            ->when($search !== '', fn ($q) => $q->where(fn ($n) => $n->where('r.reg','like','%'.$search.'%')->orWhere('r.name','like','%'.$search.'%')))
+            ->orderBy('allocation_a4_results.cadre_code')->orderBy('allocation_a4_results.merit_position')->get();
+
+        $latestReviews = AllocationSpecialRequirementReviewEvent::query()
+            ->where('allocation_a5_run_id', (int) $a5->id)
+            ->orderBy('id')->get()
+            ->keyBy(fn ($event) => (int)$event->registration_id.':'.(int)$event->circular_entry_id);
+
+        $rows = $rows->map(function ($row) use ($latestReviews) {
+            $review = $latestReviews->get((int)$row->registration_id.':'.(int)$row->circular_entry_id);
+            $row->review_status = $review?->status ?? 'PENDING';
+            $row->review_note = $review?->note;
+            $row->reviewed_at = $review?->created_at;
+            return $row;
+        })->when($status !== 'ALL', fn ($items) => $items->filter(fn ($row) => $row->review_status === $status)->values());
+
+        $abbr = $reports->abbreviations($rows->pluck('cadre_code'));
+        return view('allocation.a6.special-requirements', compact('a5','rows','status','search','abbr'));
+    }
+
+    public function reviewSpecialRequirement(Request $request, int $registrationId, AllocationA6ReadinessService $readiness): RedirectResponse
+    {
+        $a5 = $readiness->requireReady();
+        $validated = $request->validate([
+            'status'=>['required','in:VERIFIED,FAILED'],
+            'note'=>['nullable','string','max:5000'],
+        ]);
+        $allocation = AllocationA4Result::query()
+            ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
+            ->where('registration_id', $registrationId)
+            ->firstOrFail();
+        $entry = CircularEntry::query()->whereKey($allocation->circular_entry_id)->where('special_requirement', true)->firstOrFail();
+
+        AllocationSpecialRequirementReviewEvent::query()->create([
+            'allocation_a5_run_id'=>(int)$a5->id,
+            'allocation_a4_run_id'=>(int)$a5->allocation_a4_run_id,
+            'registration_id'=>$registrationId,
+            'circular_entry_id'=>(int)$entry->id,
+            'status'=>$validated['status'],
+            'note'=>filled($validated['note'] ?? null) ? trim((string)$validated['note']) : null,
+            'actor_id'=>$request->user()?->id,
+            'created_at'=>now(),
+        ]);
+
+        if ($validated['status'] === 'FAILED') {
+            return redirect()->route('choice-optimization.manual-adjustment.show', $registrationId)
+                ->with('warning', 'Special requirement marked FAILED. If the allocated choice must be removed, exclude that existing choice below with a mandatory reason; this will make Allocation stale for re-run.');
+        }
+        return redirect()->route('allocation.a6.special-requirements')->with('success','Special requirement review marked VERIFIED.');
     }
 
     public function candidates(Request $request, AllocationA6ReadinessService $readiness, AllocationA6ReportService $reports): View

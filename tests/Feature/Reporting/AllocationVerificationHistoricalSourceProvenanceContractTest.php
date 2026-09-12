@@ -13,7 +13,7 @@ final class AllocationVerificationHistoricalSourceProvenanceContractTest extends
 
         self::assertStringContainsString("'previous_bcs_repository' => 'Archive'", $service);
         self::assertStringContainsString("'google_form' => 'Google'", $service);
-        self::assertStringContainsString("'sources' => array_values($sources)", $service);
+        self::assertStringContainsString("'sources' => array_values(\$sources)", $service);
         self::assertStringContainsString("implode(', ', \$historyCadre['sources'])", $table);
         self::assertStringContainsString("\$historyCadre['cadre']", $table);
     }

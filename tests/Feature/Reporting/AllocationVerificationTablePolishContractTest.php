@@ -22,7 +22,7 @@ final class AllocationVerificationTablePolishContractTest extends TestCase
         self::assertStringContainsString('B_SUBJECT:</span>', $table);
         self::assertStringContainsString('PRS:</span>', $table);
 
-        self::assertStringContainsString('$higherChoiceMissedReasons = $allocation', $service);
+        self::assertStringContainsString('$higherChoiceMissedReasons = $includeHigherChoice && $allocation', $service);
         self::assertStringContainsString(': [];', $service);
         self::assertStringContainsString('\'historical_allocations\' => $this->historicalAllocations($history)', $service);
         self::assertStringContainsString('historical_recommendations', $service);

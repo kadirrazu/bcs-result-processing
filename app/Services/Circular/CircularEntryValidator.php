@@ -71,6 +71,15 @@ final class CircularEntryValidator
             }
         }
 
+
+        $specialRequirement = filter_var($data['special_requirement'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $specialRequirementComment = filled($data['special_requirement_comment'] ?? null)
+            ? trim((string) $data['special_requirement_comment'])
+            : null;
+        if ($specialRequirement && $specialRequirementComment === null) {
+            $errors[] = 'special_requirement_comment is required when Special Requirement is YES.';
+        }
+
         $normalized = [
             'cadre_serial' => (int) ($data['cadre_serial'] ?? 0),
             'sub_serial' => filled($data['sub_serial'] ?? null) ? (int) $data['sub_serial'] : null,
@@ -82,6 +91,8 @@ final class CircularEntryValidator
             'prs_codes' => $prsCodes,
             'status' => strtolower($status ?: 'ACTIVE'),
             'note' => filled($data['note'] ?? null) ? trim((string) $data['note']) : null,
+            'special_requirement' => $specialRequirement,
+            'special_requirement_comment' => $specialRequirement ? $specialRequirementComment : null,
         ];
 
         if ($resolved) {

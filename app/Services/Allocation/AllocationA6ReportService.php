@@ -25,12 +25,15 @@ use App\Models\TabulationProcessingState;
 use App\Models\TabulationResult;
 use App\Models\VivaResult;
 use App\Models\WrittenResult;
+use App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /** Read-only consolidated reporting queries bound to the current finalized A5. */
 final class AllocationA6ReportService
 {
+    public function __construct(private readonly FinalAllocationReadyChoiceService $finalChoices) {}
+
     public function currentTabulationRunId(): ?int
     {
         $state = TabulationProcessingState::query()->find(1);
@@ -112,8 +115,10 @@ final class AllocationA6ReportService
         $omrChoices = array_values(array_filter((array) ($effectiveChoice?->omr_override_choice_codes ?? $omr?->validated_omr_choice_codes ?? []), fn ($v) => filled($v)));
 
         // The A6 "Effective Choice" lane means the final allocation-ready sequence after all enabled optimization stages.
+        $finalMap = $this->finalChoices->effectiveMap();
         $effectiveChoices = array_values(array_filter((array) (
-            $historicalChoice?->final_choice_codes
+            $finalMap[(int) $registration->id]
+            ?? $historicalChoice?->final_choice_codes
             ?? $effectiveChoice?->effective_choice_codes
             ?? $validatedChoices
         ), fn ($v) => filled($v)));

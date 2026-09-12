@@ -27,7 +27,7 @@ final class AllocationA55DispositionListPrintContractTest extends TestCase
         $listMethod = substr($controller, $listMethodStart, $showMethodStart - $listMethodStart);
 
         self::assertStringContainsString('$statusCadreCodes = AllocationResultDisposition::query()', $listMethod);
-        self::assertStringContainsString("->where('status', $status)", $listMethod);
+        self::assertStringContainsString("->where('status', \$status)", $listMethod);
         self::assertStringContainsString("->distinct()", $listMethod);
         self::assertStringNotContainsString('$reports->cadres($a5)', $listMethod);
 

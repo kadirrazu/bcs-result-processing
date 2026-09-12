@@ -15,12 +15,14 @@
  <div class="col-md-6 eligibility-field"><label class="form-label">Bachelor subject codes</label><select name="bachelor_subject_codes[]" class="form-select" multiple size="9">@foreach($bachelorSubjects as $subject)<option value="{{ $subject->subject_code }}" @selected(in_array((string)$subject->subject_code,$selectedBachelors,true))>{{ $subject->subject_code }} — {{ $subject->subject_name }}</option>@endforeach</select><div class="form-hint">TT rows require one or more. Excel equivalent uses <code>|</code>.</div></div>
  <div class="col-md-6 eligibility-field"><label class="form-label">Post Related Subject (PRS) codes</label><select name="prs_codes[]" class="form-select" multiple size="9">@foreach($prsSubjects as $subject)<option value="{{ $subject->subject_code }}" @selected(in_array((string)$subject->subject_code,$selectedPrs,true))>{{ $subject->subject_code }} — {{ $subject->subject_name }}</option>@endforeach</select><div class="form-hint">Registration PRS remains authoritative downstream.</div></div>
  <div class="col-12"><label class="form-label">Note</label><textarea name="note" class="form-control" rows="3">{{ old('note',$entry->note ?? '') }}</textarea></div>
+ <div class="col-md-3"><label class="form-label">Special Requirement</label><select id="special_requirement" name="special_requirement" class="form-select"><option value="0" @selected((string)old('special_requirement',(int)($entry->special_requirement ?? 0))==='0')>NO</option><option value="1" @selected((string)old('special_requirement',(int)($entry->special_requirement ?? 0))==='1')>YES</option></select><div class="form-hint">Optional UI-only metadata; not imported from Excel.</div></div>
+ <div class="col-md-9"><label class="form-label">Special Requirement Comment</label><textarea id="special_requirement_comment" name="special_requirement_comment" class="form-control" rows="3" placeholder="Describe the qualification or condition to verify manually.">{{ old('special_requirement_comment',$entry->special_requirement_comment ?? '') }}</textarea><div class="form-hint">Required when Special Requirement is YES.</div></div>
  <div class="col-12"><label class="form-label required">{{ isset($entry) ? 'Reason for correction' : 'Reason / administrative note' }}</label><textarea name="correction_reason" class="form-control" rows="3" required>{{ old('correction_reason') }}</textarea><div class="form-hint">Every manual Circular change requires an auditable reason. A no-op update will not create a false audit event.</div></div>
 </div>
 @push('scripts')
 <script>
 (function(){
- const cadre=document.getElementById('cadre_code'), sub=document.getElementById('sub_cadre_code'), identity=document.getElementById('resolved_identity'), type=document.getElementById('resolved_type');
+ const cadre=document.getElementById('cadre_code'), sub=document.getElementById('sub_cadre_code'), identity=document.getElementById('resolved_identity'), type=document.getElementById('resolved_type'), special=document.getElementById('special_requirement'), specialComment=document.getElementById('special_requirement_comment');
  function refresh(){
    const c=cadre.options[cadre.selectedIndex], code=cadre.value;
    [...sub.options].forEach((o,i)=>{if(i===0)return; o.hidden=!!code && o.dataset.parent!==code;});
@@ -29,7 +31,8 @@
    identity.textContent=code ? (c.dataset.name+' — '+(s?.dataset.post || c.dataset.post || '')) : 'Select a Cadre code';
    type.textContent=code ? ('Cadre type: '+c.dataset.type+' · Effective code: '+(s?.value || code)) : '';
  }
- cadre.addEventListener('change',refresh); sub.addEventListener('change',refresh); refresh();
+ function refreshSpecial(){ if(!special||!specialComment)return; specialComment.required=special.value==='1'; }
+ cadre.addEventListener('change',refresh); sub.addEventListener('change',refresh); if(special)special.addEventListener('change',refreshSpecial); refresh(); refreshSpecial();
 })();
 </script>
 @endpush

@@ -14,7 +14,7 @@ final class CircularDatasetHasher
             ->orderBy('cadre_type')->orderBy('cadre_serial')
             ->orderByRaw('sub_serial IS NULL DESC')->orderBy('sub_serial')->orderBy('id')
             ->get()
-            ->map(fn (CircularEntry $entry) => [
+            ->map(fn (CircularEntry $entry) => array_merge([
                 'cadre_serial' => (int) $entry->cadre_serial,
                 'sub_serial' => $entry->sub_serial === null ? null : (int) $entry->sub_serial,
                 'cadre_code' => (int) $entry->cadre_code,
@@ -30,7 +30,10 @@ final class CircularDatasetHasher
                 'note' => $entry->note,
                 'bachelor_subject_codes' => $entry->bachelorSubjects->pluck('subject_code')->map(fn ($v) => (string) $v)->sort()->values()->all(),
                 'prs_codes' => $entry->prsSubjects->pluck('prs_code')->map(fn ($v) => (string) $v)->sort()->values()->all(),
-            ])->values()->all();
+            ], $entry->special_requirement ? [
+                'special_requirement' => true,
+                'special_requirement_comment' => $entry->special_requirement_comment,
+            ] : []))->values()->all();
 
         return hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     }

@@ -9,6 +9,7 @@ use App\Models\MeritResult;
 use App\Models\Registration;
 use App\Models\TabulationResult;
 use App\Services\Reporting\DbfReportWriter;
+use App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService;
 use App\Support\Examinations\ExaminationContext;
 use BackedEnum;
 use Illuminate\Support\Collection;
@@ -20,6 +21,7 @@ final class AllocationA6DbfExportService
     public function __construct(
         private readonly AllocationA6ReportService $reports,
         private readonly AllocationResultDispositionService $dispositions,
+        private readonly FinalAllocationReadyChoiceService $finalChoices,
         private readonly DbfReportWriter $writer,
         private readonly ExaminationContext $context,
     ) {}
@@ -99,6 +101,8 @@ final class AllocationA6DbfExportService
         $optimized = ChoiceOptimizationHistoricalChoice::query()
             ->whereIn('registration_id', $registrationIds)
             ->get()->keyBy('registration_id');
+        $finalChoiceMap = collect($this->finalChoices->effectiveMap())
+            ->only($registrationIds->map(fn ($id) => (int) $id)->all());
         $allocationQuery = AllocationA4Result::query()
             ->where('allocation_a4_run_id', (int) $a5->allocation_a4_run_id)
             ->whereIn('registration_id', $registrationIds);
@@ -111,7 +115,7 @@ final class AllocationA6DbfExportService
             throw new RuntimeException('Finalized Choice Optimization allocation-ready output is incomplete for DBF export.');
         }
 
-        $choiceCodes = $optimized->flatMap(fn ($row) => (array) ($row->final_choice_codes ?? []))
+        $choiceCodes = $finalChoiceMap->flatten()
             ->map(fn ($code) => (int) $code)->filter()->unique()->values();
         $allocationCodes = $allocations->pluck('cadre_code')->map(fn ($code) => (int) $code)->filter()->unique()->values();
 
@@ -120,6 +124,7 @@ final class AllocationA6DbfExportService
             'tabulation' => $tabs,
             'merit' => $merits,
             'optimized' => $optimized,
+            'final_choice' => $finalChoiceMap,
             'allocation' => $allocations,
             'dispositions' => $dispositionMap,
             'abbreviations' => $this->reports->abbreviations($choiceCodes->merge($allocationCodes)->unique()->values()),
@@ -133,13 +138,14 @@ final class AllocationA6DbfExportService
         $tab = $data['tabulation']->get($registrationId);
         $merit = $data['merit']->get($registrationId);
         $optimized = $data['optimized']->get($registrationId);
+        $finalChoice = (array) ($data['final_choice']->get($registrationId, []));
         $allocation = $data['allocation']->get($registrationId);
         $disposition = $data['dispositions']->get($registrationId);
         $dispositionStatus = strtoupper(trim((string) ($disposition?->status ?? '')));
         $withheld = $dispositionStatus === AllocationResultDispositionService::WITHHELD;
         $cancelled = $dispositionStatus === AllocationResultDispositionService::CANCELLED;
         $choices = array_values(array_filter(
-            (array) ($optimized?->final_choice_codes ?? []),
+            $finalChoice !== [] ? $finalChoice : (array) ($optimized?->final_choice_codes ?? []),
             fn ($value) => filled($value)
         ));
 

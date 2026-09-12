@@ -1,0 +1,10 @@
+@extends('layouts.app')
+@section('title','Final Allocation Ready Choice')
+@section('content')
+<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><div class="page-pretitle">Final Allocation Ready Choice</div><h2 class="page-title">{{ $registration->reg }} — {{ $registration->name }}</h2></div><div class="col-auto"><a class="btn btn-outline-secondary" href="{{ route('choice-optimization.final-allocation-ready-choice.index') }}">Back</a></div></div></div></div>
+<div class="page-body"><div class="container-xl">
+<div class="card mb-3"><div class="card-header"><h3 class="card-title">Allocation Ready Choice</h3></div><div class="card-body">@include('choice-optimization.partials.choice-code-lane',['codes'=>$baseCodes,'choiceCodeAbbrMap'=>$choiceCodeAbbrMap,'badgeClass'=>'bg-blue-lt','emptyText'=>'—'])</div></div>
+<div class="card mb-3"><div class="card-header"><h3 class="card-title">Manual Adjustment</h3></div><div class="card-body">@forelse($manualEvents as $event)<div class="border rounded p-3 mb-2"><div><span class="badge bg-red-lt text-red">REMOVED</span> <strong>{{ $event->choice_code }} — {{ $choiceCodeAbbrMap[(int)$event->choice_code] ?? '—' }}</strong></div><div class="mt-1"><strong>Reason:</strong> {{ $event->reason }}</div><div class="small text-secondary mt-1">Audited at {{ $event->created_at?->format('d-m-Y h:i A') }} · Operator ID {{ $event->actor_id ?: 'System' }}</div></div>@empty<div class="text-secondary">No active manual adjustment. Allocation Ready Choice is used unchanged.</div>@endforelse</div></div>
+<div class="card"><div class="card-header"><div><h3 class="card-title">Final Allocation Ready Choice</h3><div class="card-subtitle">Authoritative input used by Allocation and related Reporting.</div></div></div><div class="card-body">@include('choice-optimization.partials.choice-code-lane',['codes'=>$finalCodes,'choiceCodeAbbrMap'=>$choiceCodeAbbrMap,'badgeClass'=>'bg-green-lt','emptyText'=>'No final choices'])</div></div>
+</div></div>
+@endsection

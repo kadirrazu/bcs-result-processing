@@ -20,6 +20,7 @@ use App\Enums\PreliminaryProcessingStatus;
 use App\Enums\WrittenProcessingStatus;
 use App\Enums\VivaProcessingStatus;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalChoiceService;
+use App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService;
 use App\Services\ChoiceValidation\ChoiceValidationFinalizedDatasetService;
 use App\Services\Circular\CircularFinalizedDatasetService;
 use App\Services\Merit\MeritFinalizedDatasetService;
@@ -36,6 +37,7 @@ final class AllocationInputFreezeService
         private readonly MeritFinalizedDatasetService $merit,
         private readonly TabulationFinalizedDatasetService $tabulation,
         private readonly ChoiceOptimizationHistoricalChoiceService $optimizedChoices,
+        private readonly FinalAllocationReadyChoiceService $finalChoices,
         private readonly AllocationSettingsService $settings,
         private readonly AllocationSeatBreakupService $seatBreakup,
         private readonly AllocationRunStaleService $runStale,
@@ -215,7 +217,8 @@ final class AllocationInputFreezeService
         $setting = $this->settings->storedFinalizedSummary();
         $seat = $this->storedSeatSummary();
         $expectedChoiceSource = 'choice_optimization';
-        $expectedChoiceHash = (string) (ChoiceOptimizationProcessingState::query()->first()?->dataset_hash ?? '');
+        $baseChoiceHash = (string) (ChoiceOptimizationProcessingState::query()->first()?->dataset_hash ?? '');
+        $expectedChoiceHash = $baseChoiceHash !== '' ? $this->finalChoices->datasetHash($baseChoiceHash) : '';
 
         if ((string) $freeze->choice_source !== $expectedChoiceSource) {
             throw new RuntimeException('Allocation-ready Choice source changed after input freeze. Re-freeze direct inputs.');
@@ -311,7 +314,7 @@ final class AllocationInputFreezeService
             throw ValidationException::withMessages(['choice_optimization' => 'CHOICE_OPTIMIZATION_HASH_MISMATCH. Reprocess/finalize Choice Optimization.']);
         }
         $choiceSource = 'choice_optimization';
-        $choiceHash = $actual;
+        $choiceHash = $this->finalChoices->datasetHash($actual);
 
         return [
             'circular' => [
@@ -322,11 +325,16 @@ final class AllocationInputFreezeService
                 'validation_version' => (int) $validated['validation_version'],
                 'dataset_hash' => (string) $validated['dataset_hash'],
             ],
-            'choice' => [
+            'choice' => array_filter([
                 'source' => $choiceSource,
                 'optimization_mandatory' => true,
+                // Do not alter the legacy snapshot shape when this optional
+                // layer is unused; existing current A2 freezes stay current.
+                'manual_adjustment_optional' => $this->finalChoices->hasActiveAdjustments() ? true : null,
+                'base_choice_optimization_hash' => $this->finalChoices->hasActiveAdjustments() ? $actual : null,
+                'manual_adjustment_state_hash' => $this->finalChoices->hasActiveAdjustments() ? $this->finalChoices->adjustmentStateHash() : null,
                 'dataset_hash' => $choiceHash,
-            ],
+            ], static fn ($value) => $value !== null),
             'tabulation' => [
                 'processing_run_id' => (int) $tabulation['processing_run_id'],
                 'processing_version' => (int) $tabulation['processing_version'],
@@ -510,12 +518,9 @@ final class AllocationInputFreezeService
     private function allocationReadyChoiceMap(string $source): array
     {
         if ($source === 'choice_optimization') {
-            return ChoiceOptimizationHistoricalChoice::query()
-                ->orderBy('registration_id')
-                ->get(['registration_id', 'final_choice_codes'])
-                ->mapWithKeys(fn ($row): array => [
-                    (int) $row->registration_id => array_values(array_map('strval', (array) $row->final_choice_codes)),
-                ])->all();
+            // Optional Manual Adjustment layer. With no active exclusions this
+            // returns the finalized Allocation-ready Choice unchanged.
+            return $this->finalChoices->effectiveMap();
         }
 
         return $this->choiceValidation->choiceReadyResults()

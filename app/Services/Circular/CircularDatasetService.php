@@ -393,6 +393,8 @@ final class CircularDatasetService
             'post_count' => $data['post_count'],
             'status' => $data['status'],
             'note' => $data['note'],
+            'special_requirement' => (bool) ($data['special_requirement'] ?? false),
+            'special_requirement_comment' => !empty($data['special_requirement']) ? ($data['special_requirement_comment'] ?? null) : null,
             'source' => $source,
             'version' => $version,
         ];
@@ -439,6 +441,8 @@ final class CircularDatasetService
             'post_count' => (int) $entry->post_count,
             'status' => strtolower((string) $entry->status),
             'note' => $entry->note,
+            'special_requirement' => (bool) $entry->special_requirement,
+            'special_requirement_comment' => $entry->special_requirement ? $entry->special_requirement_comment : null,
             'bachelor_subject_codes' => $entry->bachelorSubjects->pluck('subject_code')->map(fn ($value) => (string) $value)->sort()->values()->all(),
             'prs_codes' => $entry->prsSubjects->pluck('prs_code')->map(fn ($value) => (string) $value)->sort()->values()->all(),
         ];
@@ -463,6 +467,8 @@ final class CircularDatasetService
             'post_count' => (int) $data['post_count'],
             'status' => strtolower((string) $data['status']),
             'note' => $data['note'],
+            'special_requirement' => (bool) ($data['special_requirement'] ?? false),
+            'special_requirement_comment' => !empty($data['special_requirement']) ? ($data['special_requirement_comment'] ?? null) : null,
             'bachelor_subject_codes' => $bachelors,
             'prs_codes' => $prs,
         ];
@@ -473,7 +479,7 @@ final class CircularDatasetService
         $fields = [
             'cadre_serial', 'sub_serial', 'cadre_code', 'sub_cadre_code', 'effective_code', 'cadre_type',
             'cadre_name_snapshot', 'cadre_name_bn_snapshot', 'post_name_snapshot', 'post_name_bn_snapshot',
-            'post_count', 'status', 'note',
+            'post_count', 'status', 'note', 'special_requirement', 'special_requirement_comment',
         ];
 
         $changed = [];

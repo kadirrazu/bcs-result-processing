@@ -25,6 +25,8 @@ class StoreCircularEntryRequest extends FormRequest
             'prs_codes' => ['nullable', 'array'],
             'prs_codes.*' => ['string', 'max:20'],
             'note' => ['nullable', 'string', 'max:5000'],
+            'special_requirement' => ['nullable', 'boolean'],
+            'special_requirement_comment' => ['nullable', 'required_if:special_requirement,1', 'string', 'max:5000'],
             'correction_reason' => ['required', 'string', 'min:3', 'max:2000'],
         ];
     }

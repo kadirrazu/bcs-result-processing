@@ -31,11 +31,12 @@ final class AllocationA2FrozenInputQueueContractTest extends TestCase
         self::assertStringContainsString('REGISTRATION_INPUT_HASH_MISMATCH', $service);
         self::assertStringContainsString('ALLOCATION_QUEUE_HASH_MISMATCH', $service);
 
-        // Allocation-ready Choice source is explicit and optimization OFF falls back to finalized CV.
-        self::assertStringContainsString("'choice_optimization'", $service);
-        self::assertStringContainsString("'choice_validation'", $service);
-        self::assertStringContainsString('final_choice_codes', $service);
-        self::assertStringContainsString('validated_choice_codes', $service);
+        // Choice Optimization is mandatory. A2 consumes the optional Final Allocation Ready Choice
+        // overlay; with no active adjustment, the resolver returns the existing Allocation Ready Choice unchanged.
+        self::assertStringContainsString("\$choiceSource = 'choice_optimization';", $service);
+        self::assertStringContainsString('FinalAllocationReadyChoiceService', $service);
+        self::assertStringContainsString('datasetHash($actual)', $service);
+        self::assertStringContainsString('return $this->finalChoices->effectiveMap();', $service);
 
         // Queue membership is choice-only and target merit is authoritative.
         self::assertStringContainsString("'NO_ALLOCATION_READY_CHOICE'", $service);

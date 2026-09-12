@@ -49,6 +49,7 @@
             </div>
         </div>
 
+
         <div class="card mb-3">
             <div class="card-header"><div><h3 class="card-title">Google Form Historical Recommendation</h3><div class="card-subtitle">Optional YES/NO step. reg = current BCS registration; bcs + cadre = previous BCS recommendation.</div></div></div>
             <div class="card-body">
@@ -421,6 +422,26 @@
                         <strong>Re-processing required:</strong> {{ $state->stale_reason }}
                     </div>
                 @endif
+            </div>
+        </div>
+
+        <div class="card mb-3 border-warning-subtle">
+            <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                <div class="flex-fill">
+                    <h3 class="mb-1">Manual Adjustment of Allocation Ready Choice <span class="badge bg-secondary-lt">OPTIONAL</span></h3>
+                    <div class="text-secondary">Optional non-destructive final layer. If unused for a candidate, Allocation Ready Choice remains unchanged. Existing choices may only be excluded/restored with audited reasons; add/reorder is not allowed.</div>
+                </div>
+                <div><a class="btn btn-outline-warning" href="{{ route('choice-optimization.manual-adjustment.index') }}">Open Manual Adjustment</a></div>
+            </div>
+        </div>
+
+        <div class="card mb-3 border-primary-subtle">
+            <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                <div class="flex-fill">
+                    <h3 class="mb-1">Final Allocation Ready Choice</h3>
+                    <div class="text-secondary">Read-only final Allocation input authority. Shows each candidate’s Allocation Ready Choice, any active manual exclusions with reason, and the resulting Final Allocation Ready Choice used by Allocation and related Reporting.</div>
+                </div>
+                <div><a class="btn btn-primary" href="{{ route('choice-optimization.final-allocation-ready-choice.index') }}">View Final Allocation Ready Choice</a></div>
             </div>
         </div>
 

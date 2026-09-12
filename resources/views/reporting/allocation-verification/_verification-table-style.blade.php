@@ -38,3 +38,7 @@ body{font-family:DejaVu Sans,Arial,sans-serif;color:#182433}
   .avr-choice-line{line-height:1.68;margin-bottom:4px}
 }
 </style>
+
+<style>
+.avr-manual-adjustment-note{font-weight:600;white-space:normal}
+</style>

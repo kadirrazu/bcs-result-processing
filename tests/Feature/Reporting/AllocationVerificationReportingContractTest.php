@@ -67,7 +67,7 @@ final class AllocationVerificationReportingContractTest extends TestCase
         $this->assertStringContainsString('input_choice_codes', $service);
         $this->assertStringContainsString('historicalCutoff', $service);
         $this->assertStringContainsString("value('sanctioned_posts')", $service);
-        $this->assertStringContainsString("'total_post' => $totalPost", $service);
+        $this->assertStringContainsString("'total_post' => \$totalPost", $service);
 
         $this->assertStringContainsString('>Choice List</th>', $table);
         $this->assertStringContainsString('Validated Choice', $table);
