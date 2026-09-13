@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Reporting\CadreSectionReportingController;
 use App\Http\Controllers\Reporting\ReportingController;
+use App\Http\Controllers\Reporting\DynamicQueryBuilderController;
 use App\Http\Middleware\ConfigureExaminationConnection;
 use App\Http\Middleware\EnsureExaminationSelected;
 use Illuminate\Support\Facades\Route;
@@ -9,6 +10,16 @@ use Illuminate\Support\Facades\Route;
 Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnection::class])
     ->prefix('reports')->name('examination-reports.')->group(function (): void {
         Route::get('/', [ReportingController::class, 'index'])->name('index');
+        Route::get('/dynamic-query', [DynamicQueryBuilderController::class, 'index'])->name('dynamic-query.index');
+        Route::post('/dynamic-query/preview', [DynamicQueryBuilderController::class, 'preview'])->name('dynamic-query.preview');
+        Route::post('/dynamic-query/saved', [DynamicQueryBuilderController::class, 'save'])->name('dynamic-query.saved.save');
+        Route::get('/dynamic-query/saved/{savedReport}', [DynamicQueryBuilderController::class, 'showSaved'])->whereNumber('savedReport')->name('dynamic-query.saved.show');
+        Route::delete('/dynamic-query/saved/{savedReport}', [DynamicQueryBuilderController::class, 'destroySaved'])->whereNumber('savedReport')->name('dynamic-query.saved.destroy');
+        Route::get('/dynamic-query/history', [DynamicQueryBuilderController::class, 'history'])->name('dynamic-query.history');
+        Route::post('/dynamic-query/export/xlsx', [DynamicQueryBuilderController::class, 'exportXlsx'])->name('dynamic-query.export.xlsx');
+        Route::post('/dynamic-query/export/pdf', [DynamicQueryBuilderController::class, 'exportPdf'])->name('dynamic-query.export.pdf');
+        Route::get('/dynamic-query/export/{exportRun}/status', [DynamicQueryBuilderController::class, 'exportStatus'])->whereNumber('exportRun')->name('dynamic-query.export.status');
+        Route::get('/dynamic-query/export/{exportRun}/download', [DynamicQueryBuilderController::class, 'downloadExport'])->whereNumber('exportRun')->name('dynamic-query.export.download');
         Route::get('/cadre-section', [CadreSectionReportingController::class, 'index'])->name('cadre.index');
 
 

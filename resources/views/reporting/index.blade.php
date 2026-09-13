@@ -17,6 +17,16 @@
 
 <div class="row row-cards">
     <div class="col-lg-4">
+        <div class="card h-100 border-primary">
+            <div class="card-body">
+                <div class="subheader">Cross-Module Reporting</div>
+                <h3 class="card-title mt-2">Dynamic Query Builder</h3>
+                <p class="text-secondary">Build controlled detail or analytical reports from system-approved fields across modules. No database schema or raw SQL is exposed.</p>
+            </div>
+            <div class="card-footer"><a class="btn btn-primary w-100" href="{{ route('examination-reports.dynamic-query.index') }}">Open Dynamic Query Builder</a></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
         <div class="card h-100">
             <div class="card-body">
                 <div class="subheader">Allocation Reporting</div>

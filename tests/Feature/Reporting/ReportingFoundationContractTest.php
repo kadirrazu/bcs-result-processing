@@ -35,6 +35,7 @@ final class ReportingFoundationContractTest extends TestCase
         self::assertStringContainsString("where('preliminary_results.result_status', 'pass')", $overview);
         self::assertStringContainsString("whereNotNull('written_results.written_qualified_track')", $overview);
 
+        self::assertStringContainsString('Dynamic Query Builder', $reporting);
         self::assertStringContainsString('A6 - Allocation Reporting &amp; Export', $reporting);
         self::assertStringContainsString('Cadre Section Reporting', $reporting);
         self::assertStringContainsString('Research &amp; Statistics Section Reporting', $reporting);
