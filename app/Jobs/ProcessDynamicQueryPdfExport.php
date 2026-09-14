@@ -59,8 +59,8 @@ final class ProcessDynamicQueryPdfExport implements ShouldQueue
 
             $dataset = $compiler->exportDataset($definition);
             $expected = (array) $run->source_snapshot;
-            foreach (['preliminary_finalization_run_id', 'written_processing_run_id', 'viva_processing_run_id', 'tabulation_run_id', 'merit_run_id', 'allocation_a5_run_id'] as $key) {
-                if ((int) ($expected[$key] ?? 0) !== (int) ($dataset['authority'][$key] ?? 0)) {
+            foreach (['preliminary_finalization_run_id', 'written_processing_run_id', 'viva_processing_run_id', 'tabulation_run_id', 'merit_run_id', 'allocation_a5_run_id', 'allocation_disposition_revision', 'allocation_disposition_hash', 'choice_validation_finalization_run_id', 'choice_validation_version', 'choice_optimization_hash', 'final_allocation_ready_choice_hash', 'circular_version'] as $key) {
+                if ((string) ($expected[$key] ?? '') !== (string) ($dataset['authority'][$key] ?? '')) {
                     throw new RuntimeException('Queued report source changed before generation. Regenerate the report.');
                 }
             }
@@ -89,6 +89,8 @@ final class ProcessDynamicQueryPdfExport implements ShouldQueue
                 trim((string) $exam->name) ?: 'Selected Examination',
                 $progress,
                 $total,
+                (array) ($dataset['totals'] ?? []),
+                isset($dataset['total_label']) ? (string) $dataset['total_label'] : null,
             );
 
             ReportingExportRun::query()->whereKey($run->id)->update([

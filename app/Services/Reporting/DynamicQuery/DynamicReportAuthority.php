@@ -6,6 +6,10 @@ use App\Enums\PreliminaryProcessingStatus;
 use App\Enums\VivaProcessingStatus;
 use App\Enums\WrittenProcessingStatus;
 use App\Models\AllocationA5Run;
+use App\Models\AllocationResultDispositionState;
+use App\Models\ChoiceOptimizationProcessingState;
+use App\Models\ChoiceValidationProcessingState;
+use App\Models\CircularProcessingState;
 use App\Models\MeritProcessingState;
 use App\Models\PreliminaryProcessingState;
 use App\Models\TabulationProcessingState;
@@ -14,6 +18,8 @@ use App\Models\WrittenProcessingState;
 
 final class DynamicReportAuthority
 {
+    public function __construct(private readonly \App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService $finalChoices) {}
+
     /** @return array<string,mixed> */
     public function resolve(array $sources): array
     {
@@ -25,6 +31,13 @@ final class DynamicReportAuthority
             'tabulation_run_id' => null,
             'merit_run_id' => null,
             'allocation_a5_run_id' => null,
+            'allocation_disposition_revision' => null,
+            'allocation_disposition_hash' => null,
+            'choice_validation_finalization_run_id' => null,
+            'choice_validation_version' => null,
+            'choice_optimization_hash' => null,
+            'final_allocation_ready_choice_hash' => null,
+            'circular_version' => null,
             'warnings' => &$warnings,
         ];
 
@@ -76,10 +89,50 @@ final class DynamicReportAuthority
             }
         }
 
-        if (in_array('allocation', $sources, true)) {
+
+        if (in_array('choice_validation', $sources, true)) {
+            $state = ChoiceValidationProcessingState::query()->find(1);
+            if ($state && (string) $state->status === 'finalized' && ! $state->is_stale && $state->latest_finalization_run_id && $state->finalized_validation_version) {
+                $authority['choice_validation_finalization_run_id'] = (int) $state->latest_finalization_run_id;
+                $authority['choice_validation_version'] = (int) $state->finalized_validation_version;
+            } else {
+                $warnings[] = 'Current finalized Choice Validation authority is unavailable; Choice Validation fields cannot be queried.';
+            }
+        }
+
+        if (in_array('choice_optimization', $sources, true)) {
+            $state = ChoiceOptimizationProcessingState::query()->find(1);
+            if ($state && (string) $state->status === 'finalized' && ! $state->is_stale && $state->dataset_hash) {
+                $authority['choice_optimization_hash'] = (string) $state->dataset_hash;
+                $authority['final_allocation_ready_choice_hash'] = $this->finalChoices->datasetHash((string) $state->dataset_hash);
+            } else {
+                $warnings[] = 'Current finalized Choice Optimization authority is unavailable; Choice Optimization fields cannot be queried.';
+            }
+        }
+
+        if (in_array('circular', $sources, true)) {
+            $state = CircularProcessingState::query()->find(1);
+            $status = $state?->status instanceof \BackedEnum ? $state->status->value : (string) ($state?->status ?? '');
+            if ($state && $status === 'finalized' && ! $state->is_stale && $state->finalized_version) {
+                $authority['circular_version'] = (int) $state->finalized_version;
+            } else {
+                $warnings[] = 'Current finalized Circular authority is unavailable; Circular fields cannot be queried.';
+            }
+        }
+
+        if (in_array('allocation', $sources, true) || in_array('allocation_disposition', $sources, true)) {
             $a5 = AllocationA5Run::query()->where('status', 'finalized')->where('is_stale', false)->latest('version')->first();
             if ($a5) {
                 $authority['allocation_a5_run_id'] = (int) $a5->id;
+
+                if (in_array('allocation_disposition', $sources, true)) {
+                    $disposition = AllocationResultDispositionState::query()
+                        ->where('allocation_a5_run_id', (int) $a5->id)
+                        ->first();
+
+                    $authority['allocation_disposition_revision'] = (int) ($disposition?->revision ?? 0);
+                    $authority['allocation_disposition_hash'] = (string) ($disposition?->disposition_hash ?? '');
+                }
             } else {
                 $warnings[] = 'Current finalized Allocation authority is unavailable; Allocation fields cannot be queried.';
             }

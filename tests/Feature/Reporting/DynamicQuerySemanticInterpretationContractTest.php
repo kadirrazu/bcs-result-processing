@@ -6,15 +6,15 @@ use Tests\TestCase;
 
 final class DynamicQuerySemanticInterpretationContractTest extends TestCase
 {
-    public function test_enum_values_are_formatted_for_human_readable_report_output(): void
+    public function test_master_lookup_values_are_formatted_for_human_readable_report_output(): void
     {
         $config = file_get_contents(config_path('dynamic-reports.php'));
         $formatter = file_get_contents(app_path('Services/Reporting/DynamicQuery/SemanticValueFormatter.php'));
+        $lookups = file_get_contents(app_path('Services/Reporting/DynamicQuery/SemanticLookupRegistry.php'));
         $compiler = file_get_contents(app_path('Services/Reporting/DynamicQuery/DynamicQueryCompiler.php'));
 
-        self::assertStringContainsString("'1' => 'Male'", $config);
-        self::assertStringContainsString("'2' => 'Female'", $config);
-        self::assertStringContainsString("'3' => 'Third Gender'", $config);
+        self::assertStringContainsString("'lookup' => 'gender'", $config);
+        self::assertStringContainsString("'gender' => Gender::query()", $lookups);
         self::assertStringContainsString('formatRows', $formatter);
         self::assertStringContainsString('$this->formatter->formatRows($rows, $fields)', $compiler);
         self::assertStringContainsString('$this->formatter->formatRows($rows, $groups)', $compiler);
@@ -24,13 +24,14 @@ final class DynamicQuerySemanticInterpretationContractTest extends TestCase
     {
         $config = file_get_contents(config_path('dynamic-reports.php'));
         $formatter = file_get_contents(app_path('Services/Reporting/DynamicQuery/SemanticValueFormatter.php'));
+        $lookups = file_get_contents(app_path('Services/Reporting/DynamicQuery/SemanticLookupRegistry.php'));
 
         self::assertStringContainsString("'allocation.cadre'", $config);
         self::assertStringContainsString("'label' => 'Allocated Cadre'", $config);
-        self::assertStringContainsString("'formatter' => 'cadre'", $config);
+        self::assertStringContainsString("'lookup' => 'cadre_effective'", $config);
         self::assertStringContainsString("'allocation.cadre_code'", $config);
-        self::assertStringContainsString('CadreMaster::query()', $formatter);
-        self::assertStringContainsString('CadreSubMaster::query()', $formatter);
+        self::assertStringContainsString('CadreMaster::query()', $lookups);
+        self::assertStringContainsString('CadreSubMaster::query()', $lookups);
         self::assertStringContainsString("return 'Not Allocated';", $formatter);
     }
 }

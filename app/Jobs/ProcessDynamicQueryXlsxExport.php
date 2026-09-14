@@ -53,8 +53,8 @@ final class ProcessDynamicQueryXlsxExport implements ShouldQueue
 
             $dataset = $compiler->exportDataset($definition);
             $expected = (array) $run->source_snapshot;
-            foreach (['preliminary_finalization_run_id','written_processing_run_id','viva_processing_run_id','tabulation_run_id','merit_run_id','allocation_a5_run_id'] as $key) {
-                $queued = (int) ($expected[$key] ?? 0); $current = (int) (($dataset['authority'][$key] ?? 0));
+            foreach (['preliminary_finalization_run_id','written_processing_run_id','viva_processing_run_id','tabulation_run_id','merit_run_id','allocation_a5_run_id','allocation_disposition_revision','allocation_disposition_hash','choice_validation_finalization_run_id','choice_validation_version','choice_optimization_hash','final_allocation_ready_choice_hash','circular_version'] as $key) {
+                $queued = (string) ($expected[$key] ?? ''); $current = (string) ($dataset['authority'][$key] ?? '');
                 if ($queued !== $current) throw new RuntimeException('Queued report source changed before generation. Regenerate the report.');
             }
             $path = $files->outputPath('dynamic-query', (int) $run->id, 'xlsx');
@@ -63,7 +63,16 @@ final class ProcessDynamicQueryXlsxExport implements ShouldQueue
                 $percent = $total > 0 ? 15 + (int) floor(min(1, $current / $total) * 75) : 90;
                 ReportingExportRun::query()->whereKey($run->id)->update(['phase'=>'GENERATING','progress_percent'=>min(90,$percent),'progress_current'=>$current,'progress_total'=>$total,'progress_message'=>'Writing report rows to XLSX.']);
             };
-            $writer->write($path, $definition, $dataset['columns'], $dataset['rows'], $progress, $total);
+            $writer->write(
+                $path,
+                $definition,
+                $dataset['columns'],
+                $dataset['rows'],
+                $progress,
+                $total,
+                (array) ($dataset['totals'] ?? []),
+                isset($dataset['total_label']) ? (string) $dataset['total_label'] : null,
+            );
             $name = 'dynamic-query-report-'.now()->format('Ymd-His').'.xlsx';
             ReportingExportRun::query()->whereKey($run->id)->update(['status'=>'completed','phase'=>'COMPLETED','progress_percent'=>100,'progress_current'=>$total,'progress_total'=>$total,'progress_message'=>'XLSX report completed and is ready to download.','file_path'=>$path,'file_name'=>$name,'file_mime'=>'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','file_hash'=>hash_file('sha256',$path) ?: null,'completed_at'=>now(),'failure_message'=>null]);
 

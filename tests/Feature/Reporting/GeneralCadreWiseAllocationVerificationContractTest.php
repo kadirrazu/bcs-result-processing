@@ -36,6 +36,6 @@ final class GeneralCadreWiseAllocationVerificationContractTest extends TestCase
         self::assertStringContainsString('Search by Cadre Code or Abbreviation', $listing);
 
         self::assertStringContainsString("reportType === 'general-cadre'", $report);
-        self::assertStringContainsString('cadre.verification.general-cadre.pdf', $report);
+        self::assertStringContainsString('$routeBase.\'.general-cadre.pdf\'', $report);
     }
 }

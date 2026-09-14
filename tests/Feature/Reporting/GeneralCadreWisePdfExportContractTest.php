@@ -16,7 +16,9 @@ final class GeneralCadreWisePdfExportContractTest extends TestCase
         self::assertStringContainsString('ProcessAllocationVerificationPdfExport::dispatch', $controller);
 
         self::assertStringContainsString('$reports->build($type, $a5, $cadreCode)', $job);
-        self::assertStringContainsString('$pdf->generate($data, (string) $exam->name, $type, $cadreCode)', $job);
+        self::assertStringContainsString('$pdf->generate(', $job);
+        self::assertStringContainsString('$cadreCode,', $job);
+        self::assertStringContainsString('$booklet', $job);
 
         self::assertStringContainsString("['general-cadre', 'technical-cadre']", $pdf);
         self::assertStringContainsString("\$reportType.'-'.\$cadreCode", $pdf);

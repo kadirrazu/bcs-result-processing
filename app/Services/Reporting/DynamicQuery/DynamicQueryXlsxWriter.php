@@ -9,7 +9,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 final class DynamicQueryXlsxWriter
 {
     /** @param array<int,array{id:string,label:string}> $columns @param iterable<int,array<string,mixed>> $rows */
-    public function write(string $path, array $definition, array $columns, iterable $rows, ?callable $progress = null, ?int $total = null): void
+    public function write(string $path, array $definition, array $columns, iterable $rows, ?callable $progress = null, ?int $total = null, array $totals = [], ?string $totalLabel = null): void
     {
         $showSerial = (bool) ($definition['show_serial'] ?? true);
         $showPage = (bool) ($definition['show_page_number'] ?? true);
@@ -47,6 +47,28 @@ final class DynamicQueryXlsxWriter
             $sheet->fromArray([$values], null, 'A'.($headerRow + 1 + $processed));
             $processed++;
             if ($progress && ($processed % 100 === 0 || ($total !== null && $processed >= $total))) $progress($processed, $total ?? $processed);
+        }
+
+        if ($totals !== [] && $totalLabel) {
+            $footerRow = $headerRow + 1 + $processed;
+            $values = [];
+            if ($showSerial) $values[] = '';
+            $labelPlaced = false;
+            foreach ($columns as $column) {
+                $id = (string) ($column['id'] ?? '');
+                if (array_key_exists($id, $totals)) {
+                    $values[] = $totals[$id];
+                    continue;
+                }
+                if (! $labelPlaced) {
+                    $values[] = $totalLabel;
+                    $labelPlaced = true;
+                } else {
+                    $values[] = '';
+                }
+            }
+            $sheet->fromArray([$values], null, 'A'.$footerRow);
+            $sheet->getStyle('A'.$footerRow.':'.$lastColumn.$footerRow)->getFont()->setBold(true);
         }
 
         for ($column = 1; $column <= count($headers); $column++) {

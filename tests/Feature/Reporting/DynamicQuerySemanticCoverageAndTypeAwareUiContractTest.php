@@ -10,7 +10,7 @@ final class DynamicQuerySemanticCoverageAndTypeAwareUiContractTest extends TestC
     {
         $view = file_get_contents(resource_path('views/reporting/dynamic-query/index.blade.php'));
 
-        self::assertStringContainsString("const typeLabel=t=>String(t||'string').toUpperCase()", $view);
+        self::assertStringContainsString("const typeLabel=t=>String(t||'string').replace(/[-_]+/g,' ').toUpperCase()", $view);
         self::assertStringContainsString('${esc(f.label)} (${esc(typeLabel(f.type))})', $view);
         self::assertStringContainsString('${esc(f.module)} · ${esc(f.label)} (${esc(typeLabel(f.type))})', $view);
     }

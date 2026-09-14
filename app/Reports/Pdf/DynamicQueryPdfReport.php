@@ -23,6 +23,8 @@ final class DynamicQueryPdfReport
         string $examinationName,
         ?callable $progress = null,
         int $total = 0,
+        array $totals = [],
+        ?string $totalLabel = null,
     ): array {
         $generatedAt = now();
         $showSerial = (bool) ($definition['show_serial'] ?? true);
@@ -103,6 +105,31 @@ final class DynamicQueryPdfReport
             $mpdf->WriteHTML('<div class="empty">No matching records.</div>', HTMLParserMode::HTML_BODY);
         }
 
+        if ($totals !== [] && $totalLabel) {
+            $footer = [];
+            if ($showSerial) $footer[] = '';
+            $labelPlaced = false;
+            foreach ($columns as $column) {
+                $id = (string) ($column['id'] ?? '');
+                if (array_key_exists($id, $totals)) {
+                    $footer[] = (string) ($totals[$id] ?? '');
+                    continue;
+                }
+                if (! $labelPlaced) {
+                    $footer[] = $totalLabel;
+                    $labelPlaced = true;
+                } else {
+                    $footer[] = '';
+                }
+            }
+            $html = '<table class="grand-total"><tbody><tr>';
+            foreach ($footer as $value) {
+                $html .= '<td><strong>'.e((string) $value).'</strong></td>';
+            }
+            $html .= '</tr></tbody></table>';
+            $mpdf->WriteHTML($html, HTMLParserMode::HTML_BODY);
+        }
+
         $directory = dirname($path);
         if (! is_dir($directory) && ! mkdir($directory, 0775, true) && ! is_dir($directory)) {
             throw new RuntimeException("PDF output directory [{$directory}] could not be created.");
@@ -154,7 +181,7 @@ final class DynamicQueryPdfReport
 
         return 'body{font-family:DejaVu Sans,sans-serif;color:#182433;font-size:'.$fontSize.'}'
             .'table{width:100%;border-collapse:collapse;table-layout:auto}th,td{border:0.25mm solid #c8ced6;padding:2.2mm 1.6mm;vertical-align:top;word-wrap:break-word}'
-            .'th{font-weight:bold;text-align:center;background:#f1f3f5}.empty{text-align:center;color:#667085;padding:20mm 0}';
+            .'th{font-weight:bold;text-align:center;background:#f1f3f5}.grand-total{margin-top:2mm}.grand-total td{background:#f8f9fa;font-weight:bold}.empty{text-align:center;color:#667085;padding:20mm 0}';
     }
 
     private function tempDirectory(): string

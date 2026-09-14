@@ -41,7 +41,7 @@ final class DynamicQueryBuilderFoundationContractTest extends TestCase
         $compiler = file_get_contents(app_path('Services/Reporting/DynamicQuery/DynamicQueryCompiler.php'));
         $view = file_get_contents(resource_path('views/reporting/dynamic-query/index.blade.php'));
 
-        self::assertStringContainsString("'preview_sizes' => [5, 10, 20]", $config);
+        self::assertStringContainsString("'preview_sizes' => [5, 10, 20, 50, 100]", $config);
         self::assertStringContainsString("'default_preview_size' => 10", $config);
         self::assertStringContainsString('$this->registry->get', $compiler);
         self::assertStringContainsString('->limit($size)', $compiler);

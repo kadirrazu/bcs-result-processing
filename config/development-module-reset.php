@@ -196,6 +196,7 @@ return [
                 'allocation_seat_breakup_versions',
                 'allocation_processing_states',
                 'allocation_settings',
+                'allocation_special_requirement_review_events',
             ],
             'scoped_deletes' => [
                 ['table' => 'reporting_export_runs', 'column' => 'module', 'values' => ['allocation_a6']],

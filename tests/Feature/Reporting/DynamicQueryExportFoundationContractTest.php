@@ -52,7 +52,7 @@ final class DynamicQueryExportFoundationContractTest extends TestCase
         self::assertStringContainsString('Generated:', $writer);
         self::assertStringContainsString('Page &P of &N', $writer);
         self::assertStringContainsString('id="dq-export-xlsx"', $view);
-        self::assertStringContainsString('Download XLSX', $view);
+        self::assertStringContainsString('Download ${format}', $view);
     }
 
     public function test_dynamic_query_pdf_export_reuses_semantic_definition_order_and_shared_queue(): void
@@ -86,7 +86,7 @@ final class DynamicQueryExportFoundationContractTest extends TestCase
 
         self::assertStringContainsString('authoritySnapshot', $controller);
         self::assertStringContainsString("collect(\$authority)->except('warnings')->all()", $controller);
-        foreach (['preliminary_finalization_run_id', 'written_processing_run_id', 'viva_processing_run_id', 'tabulation_run_id', 'merit_run_id', 'allocation_a5_run_id'] as $key) {
+        foreach (['preliminary_finalization_run_id', 'written_processing_run_id', 'viva_processing_run_id', 'tabulation_run_id', 'merit_run_id', 'allocation_a5_run_id', 'choice_validation_finalization_run_id', 'choice_validation_version', 'choice_optimization_hash', 'final_allocation_ready_choice_hash', 'circular_version'] as $key) {
             self::assertStringContainsString($key, $job);
         }
         self::assertStringContainsString('Queued report source changed before generation', $job);

@@ -178,10 +178,16 @@ final class SavedDynamicReportService
             if (! in_array($function, (array) ($meta['aggregates'] ?? []), true)) {
                 throw ValidationException::withMessages(['aggregates' => 'An aggregate is not allowed for its selected field.']);
             }
+            $sortDirection = strtolower((string) ($aggregate['sort_direction'] ?? ''));
+            if (! in_array($sortDirection, ['asc', 'desc'], true)) {
+                $sortDirection = '';
+            }
+
             $aggregates[] = [
                 'field' => (string) $aggregate['field'],
                 'function' => $function,
                 'label' => mb_substr(trim((string) ($aggregate['label'] ?? '')), 0, 120),
+                'sort_direction' => $sortDirection,
             ];
         }
 
@@ -271,7 +277,7 @@ final class SavedDynamicReportService
 
     private function previewSize(int $size): int
     {
-        $allowed = array_map('intval', (array) config('dynamic-reports.preview_sizes', [5, 10, 20]));
+        $allowed = array_map('intval', (array) config('dynamic-reports.preview_sizes', [5, 10, 20, 50, 100]));
         return in_array($size, $allowed, true) ? $size : (int) config('dynamic-reports.default_preview_size', 10);
     }
 

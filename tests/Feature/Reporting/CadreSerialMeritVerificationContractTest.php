@@ -58,8 +58,8 @@ final class CadreSerialMeritVerificationContractTest extends TestCase
         self::assertStringContainsString("'format' => 'A4'", $pdf);
         self::assertStringContainsString("'orientation' => 'P'", $pdf);
         self::assertStringContainsString('cadre-serial-merit-verification', $pdf);
-        self::assertStringContainsString('Allocation Basis', $pdfView);
-        self::assertStringContainsString('Allocation Basis', $pdfPageView);
+        self::assertStringContainsString("reports.pdf.cadre-serial-merit-verification-page", $pdfView);
+        self::assertStringContainsString('Allocation<br>Basis', $pdfPageView);
         self::assertStringContainsString('$groupIndex < 3', $pdfPageView);
         self::assertStringContainsString('table-layout: fixed', $pdfStyleView);
         self::assertStringContainsString('class="gap"', $pdfPageView);

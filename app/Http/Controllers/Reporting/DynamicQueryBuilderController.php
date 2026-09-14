@@ -12,6 +12,10 @@ use App\Services\Reporting\DynamicQuery\SemanticFieldRegistry;
 use App\Support\Examinations\ExaminationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
+use Throwable;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\View\View;
@@ -26,7 +30,7 @@ final class DynamicQueryBuilderController extends Controller
         return view('reporting.dynamic-query.index', [
             'examination' => $context->current(),
             'semanticFields' => $registry->browserFields(),
-            'previewSizes' => config('dynamic-reports.preview_sizes', [5, 10, 20]),
+            'previewSizes' => config('dynamic-reports.preview_sizes', [5, 10, 20, 50, 100]),
             'defaultPreviewSize' => config('dynamic-reports.default_preview_size', 10),
             'savedReports' => $savedReports->list(),
             'recentRuns' => $savedReports->recentRuns(),
@@ -41,7 +45,42 @@ final class DynamicQueryBuilderController extends Controller
         $definition = $this->validatedDefinition($request);
         $savedReportId = $request->integer('saved_report_id') ?: null;
         $startedAt = hrtime(true);
-        $result = $compiler->preview($definition);
+
+        try {
+            $result = $compiler->preview($definition);
+        } catch (QueryException $exception) {
+            $reference = 'DQ-'.strtoupper(substr(hash('sha256', now()->format('c').$exception->getMessage()), 0, 10));
+            Log::error('Dynamic Query preview database failure.', [
+                'error_reference' => $reference,
+                'definition' => $definition,
+                'exception' => $exception,
+            ]);
+
+            $sqlState = isset($exception->errorInfo[0]) ? (string) $exception->errorInfo[0] : null;
+            $driverCode = isset($exception->errorInfo[1]) ? (string) $exception->errorInfo[1] : null;
+
+            return response()->json([
+                'message' => 'Preview query failed while evaluating the selected semantic fields. The error reference can be matched with the server log for the exact technical failure.',
+                'error_reference' => $reference,
+                'error_type' => 'database_query',
+                'database_error_code' => $sqlState,
+                'driver_error_code' => $driverCode,
+            ], 500);
+        } catch (Throwable $exception) {
+            $reference = 'DQ-'.strtoupper(substr(hash('sha256', now()->format('c').$exception->getMessage()), 0, 10));
+            Log::error('Dynamic Query preview failure.', [
+                'error_reference' => $reference,
+                'definition' => $definition,
+                'exception' => $exception,
+            ]);
+
+            return response()->json([
+                'message' => 'Preview failed while processing the semantic report definition.',
+                'error_reference' => $reference,
+                'error_type' => 'preview_processing',
+            ], 500);
+        }
+
         $durationMs = (int) round((hrtime(true) - $startedAt) / 1_000_000);
 
         if ($savedReportId) {
@@ -222,9 +261,9 @@ final class DynamicQueryBuilderController extends Controller
             'conditions' => ['sometimes', 'array'],
             'sorts' => ['sometimes', 'array'], 'sorts.*.field' => ['nullable', 'string'], 'sorts.*.direction' => ['nullable', 'in:asc,desc'],
             'groups' => ['sometimes', 'array'], 'groups.*' => ['string'],
-            'aggregates' => ['sometimes', 'array'], 'aggregates.*.field' => ['nullable', 'string'], 'aggregates.*.function' => ['nullable', 'in:count,count_distinct,sum,avg,min,max'], 'aggregates.*.label' => ['nullable', 'string', 'max:120'],
+            'aggregates' => ['sometimes', 'array'], 'aggregates.*.field' => ['nullable', 'string'], 'aggregates.*.function' => ['nullable', 'in:count,count_distinct,sum,avg,min,max'], 'aggregates.*.label' => ['nullable', 'string', 'max:120'], 'aggregates.*.sort_direction' => ['nullable', 'in:asc,desc'],
             'labels' => ['sometimes', 'array'], 'labels.*' => ['nullable', 'string', 'max:120'],
-            'preview_size' => ['nullable', 'integer', 'in:5,10,20'],
+            'preview_size' => ['nullable', 'integer', Rule::in((array) config('dynamic-reports.preview_sizes', [5, 10, 20, 50, 100]))],
             'report_title' => ['nullable', 'string', 'max:180'],
             'show_serial' => ['nullable', 'boolean'], 'show_page_number' => ['nullable', 'boolean'], 'show_timestamp' => ['nullable', 'boolean'],
             'saved_report_id' => ['nullable', 'integer', 'min:1'],

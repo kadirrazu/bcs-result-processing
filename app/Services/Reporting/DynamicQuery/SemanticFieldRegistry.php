@@ -6,6 +6,7 @@ use Illuminate\Validation\ValidationException;
 
 final class SemanticFieldRegistry
 {
+    public function __construct(private readonly SemanticLookupRegistry $lookups) {}
     /** @return array<string,array<string,mixed>> */
     public function all(): array
     {
@@ -37,7 +38,9 @@ final class SemanticFieldRegistry
                 'module' => (string) ($field['module'] ?? 'Other'),
                 'type' => (string) ($field['type'] ?? 'string'),
                 'operators' => array_values((array) ($field['operators'] ?? [])),
-                'options' => (array) ($field['options'] ?? []),
+                'options' => isset($field['lookup'])
+                    ? $this->lookups->options((string) $field['lookup'])
+                    : (array) ($field['options'] ?? []),
                 'sortable' => (bool) ($field['sortable'] ?? false),
                 'groupable' => (bool) ($field['groupable'] ?? false),
                 'aggregates' => array_values((array) ($field['aggregates'] ?? [])),

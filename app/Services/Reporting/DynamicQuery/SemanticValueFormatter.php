@@ -4,9 +4,18 @@ namespace App\Services\Reporting\DynamicQuery;
 
 use App\Models\CadreMaster;
 use App\Models\CadreSubMaster;
+use App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService;
 
 final class SemanticValueFormatter
 {
+    /** @var array<int,array<string,bool>>|null */
+    private ?array $activeExclusionMap = null;
+
+    public function __construct(
+        private readonly FinalAllocationReadyChoiceService $finalChoices,
+        private readonly SemanticLookupRegistry $lookups,
+    ) {}
+
     /** @var array<string,string>|null */
     private ?array $cadreLabels = null;
 
@@ -55,12 +64,59 @@ final class SemanticValueFormatter
             return $this->cadreLabels()[(string) $value] ?? (string) $value;
         }
 
+        if (isset($meta['lookup'])) {
+            if ((string) $meta['lookup'] === 'cadre_effective' && ($value === null || $value === '')) {
+                return 'Not Allocated';
+            }
+
+            return $this->lookups->label((string) $meta['lookup'], $value);
+        }
+
+        if ($formatter === 'choice_csv') {
+            $codes = array_values(array_filter(array_map('trim', explode(',', (string) $value)), static fn (string $code): bool => $code !== ''));
+            if ($codes === []) return '—';
+            return implode(' > ', array_map(fn ($code): string => $this->cadreLabels()[(string) $code] ?? (string) $code, $codes));
+        }
+
+        if ($formatter === 'choice_codes') {
+            $codes = is_array($value) ? $value : json_decode((string) $value, true);
+            if (! is_array($codes) || $codes === []) return '—';
+            return implode(' > ', array_map(fn ($code): string => $this->cadreLabels()[(string) $code] ?? (string) $code, array_values($codes)));
+        }
+
+        if ($formatter === 'final_choice_codes') {
+            $payload = is_array($value) ? $value : json_decode((string) $value, true);
+            if (! is_array($payload)) return '—';
+            $registrationId = (int) ($payload['registration_id'] ?? 0);
+            $codes = array_values(array_map('strval', (array) ($payload['codes'] ?? [])));
+            if ($registrationId > 0) {
+                $excluded = $this->activeExclusionMap()[$registrationId] ?? [];
+                $codes = array_values(array_filter($codes, static fn ($code): bool => ! isset($excluded[(string) $code])));
+            }
+            if ($codes === []) return '—';
+            return implode(' > ', array_map(fn ($code): string => $this->cadreLabels()[(string) $code] ?? (string) $code, $codes));
+        }
+
         $options = (array) ($meta['options'] ?? []);
         if ($options !== [] && $value !== null && array_key_exists((string) $value, $options)) {
             return (string) $options[(string) $value];
         }
 
         return $value;
+    }
+
+    /** @return array<int,array<string,bool>> */
+    private function activeExclusionMap(): array
+    {
+        if ($this->activeExclusionMap !== null) return $this->activeExclusionMap;
+        $map = [];
+        foreach ($this->finalChoices->activeExclusions() as $registrationId => $codes) {
+            $map[(int) $registrationId] = array_fill_keys(
+                $codes->map(static fn ($code): string => (string) $code)->all(),
+                true
+            );
+        }
+        return $this->activeExclusionMap = $map;
     }
 
     /** @return array<string,string> */
