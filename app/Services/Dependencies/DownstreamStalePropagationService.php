@@ -26,7 +26,7 @@ final class DownstreamStalePropagationService
             'registration', 'preliminary', 'written' => ['tabulation', 'merit'],
             'viva' => ['tabulation', 'choice_validation', 'merit'],
             'circular' => ['choice_validation', 'choice_optimization', 'merit'],
-            'choice_validation' => ['choice_optimization', 'merit'],
+            'choice_validation' => ['choice_optimization'],
             'tabulation' => ['merit'],
             default => [],
         };

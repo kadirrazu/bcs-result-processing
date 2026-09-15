@@ -16,7 +16,7 @@ final class DownstreamStaleDependencyGraphContractTest extends TestCase
         self::assertStringContainsString("'viva' => ['tabulation', 'choice_validation', 'merit']", $service);
         self::assertStringContainsString("'circular' => ['choice_validation', 'choice_optimization', 'merit']", $service);
         self::assertStringNotContainsString("'circular' => ['tabulation'", $service);
-        self::assertStringContainsString("'choice_validation' => ['choice_optimization', 'merit']", $service);
+        self::assertStringContainsString("'choice_validation' => ['choice_optimization']", $service);
         self::assertStringContainsString("'tabulation' => ['merit']", $service);
 
         self::assertStringNotContainsString("'tabulation' => 'Tabulation'", $circular);

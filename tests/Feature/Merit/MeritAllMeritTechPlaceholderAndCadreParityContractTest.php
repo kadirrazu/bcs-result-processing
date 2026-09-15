@@ -39,7 +39,6 @@ final class MeritAllMeritTechPlaceholderAndCadreParityContractTest extends TestC
             'Cadre Merit',
             'Grand Total (G/T)',
             'Source Merit',
-            'Choice Position',
             'Common',
             'General',
             'Technical',
@@ -50,7 +49,6 @@ final class MeritAllMeritTechPlaceholderAndCadreParityContractTest extends TestC
         foreach ([
             'cadre_merit_position',
             'source_merit_position',
-            'choice_position',
             'common_merit_position',
             'general_merit_position',
             'technical_merit_position',

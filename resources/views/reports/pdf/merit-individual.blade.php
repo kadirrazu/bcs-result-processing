@@ -64,7 +64,7 @@ table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dde5;padding
 <table><tr><th>Source</th><th>Version / Run</th><th>Dataset Hash</th></tr>
 <tr><td>Circular</td><td>v{{ data_get($result->run?->source_snapshot,'circular.version','—') }}</td><td class="code">{{ data_get($result->run?->source_snapshot,'circular.dataset_hash','—') }}</td></tr>
 <tr><td>Tabulation</td><td>Run #{{ data_get($result->run?->source_snapshot,'tabulation.processing_run_id','—') }} / v{{ data_get($result->run?->source_snapshot,'tabulation.processing_version','—') }}</td><td class="code">{{ data_get($result->run?->source_snapshot,'tabulation.dataset_hash','—') }}</td></tr>
-<tr><td>Choice Validation</td><td>v{{ data_get($result->run?->source_snapshot,'choice_validation.validation_version','—') }}</td><td class="code">{{ data_get($result->run?->source_snapshot,'choice_validation.dataset_hash','—') }}</td></tr>
+
 </table>
 </div>
 

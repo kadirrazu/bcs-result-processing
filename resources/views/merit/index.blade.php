@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('content')
-<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">Merit Generation</h2><div class="text-secondary">Derived ranking from hash-verified Tabulation, Circular and Choice Validation.</div></div></div></div></div>
+<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">Merit Generation</h2><div class="text-secondary">Derived ranking from hash-verified Tabulation and Circular. Choice Validation is not a Merit dependency.</div></div></div></div></div>
 <div class="page-body"><div class="container-xl">
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 <div class="row row-cards mb-3">@foreach($readiness['checks'] as $check)<div class="col-md-4"><div class="card h-100"><div class="card-body"><div class="d-flex justify-content-between"><strong>{{ $check['label'] }}</strong><span class="badge bg-{{ $check['ready']?'success':'danger' }}-lt">{{ $check['ready']?'HASH_VERIFIED':'NOT_READY' }}</span></div><div class="text-secondary small mt-2">{{ $check['detail'] }}</div></div></div></div>@endforeach</div>

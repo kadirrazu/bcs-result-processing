@@ -27,7 +27,9 @@ use App\Services\Merit\MeritReadinessService;
 use App\Services\Merit\MeritReviewSummaryService;
 use App\Services\Merit\MeritRunService;
 use App\Services\Merit\MeritStaleService;
+use App\Services\Merit\MeritTieReviewService;
 use App\Reports\Pdf\MeritIndividualPdfReport;
+use App\Reports\Pdf\MeritTieReviewPdfReport;
 use App\Support\Examinations\ExaminationContext;
 use App\Support\Registrations\RegistrationReferencePresenter;
 use Illuminate\Http\JsonResponse;
@@ -200,6 +202,7 @@ final class MeritController extends Controller
             'sortBy' => $sortBy,
             'sortDirection' => $sortDirection,
             'reviewSummary' => $summary->forRun($run),
+            'tieReview' => app(MeritTieReviewService::class)->forRun($run),
             'latestFinalization' => MeritFinalizationRun::query()->where('processing_run_id', $runId)->latest('id')->first(),
         ]);
     }
@@ -458,7 +461,6 @@ final class MeritController extends Controller
                     $row->general_grand_total,
                     $row->technical_grand_total,
                     $row->source_merit_position,
-                    $row->choice_position,
                     $row->common_merit_position,
                     $row->general_merit_position,
                     $row->technical_merit_position,
@@ -482,7 +484,6 @@ final class MeritController extends Controller
             'General Grand Total',
             'Technical Grand Total',
             'Source Merit',
-            'Choice Position',
             'Common Merit',
             'General Merit',
             'Technical Merit',
@@ -542,6 +543,35 @@ final class MeritController extends Controller
         $data = $request->validate(['confirmation' => ['required', 'string'], 'notes' => ['nullable', 'string', 'max:4000']]);
         $service->finalize($request->user(), $data['confirmation'], $data['notes'] ?? null);
         return redirect()->route('merit.results')->with('success', 'Merit Generation finalized successfully.');
+    }
+
+
+    public function tieReviewPdf(MeritTieReviewPdfReport $report): Response
+    {
+        $this->authorize('viewAny', MeritResult::class);
+        [, $run] = $this->currentReviewableRun();
+        $pdf = $report->generate($run);
+        return response($pdf['content'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'attachment; filename="'.$pdf['filename'].'"']);
+    }
+
+    public function tieReviewXlsx(MeritTieReviewService $ties, AdministrativeXlsxExportService $exporter): BinaryFileResponse
+    {
+        $this->authorize('viewAny', MeritResult::class);
+        [$state, $run] = $this->currentReviewableRun();
+        $data = $ties->forRun($run);
+        $dir = storage_path('app/private/merit'); File::ensureDirectoryExists($dir);
+        $path = $dir.'/merit-tie-review-v'.$run->processing_version.'-'.now()->format('Ymd-His').'.xlsx';
+        $rows = (function () use ($data) { foreach ($data['groups'] as $group) { foreach ($group['candidates'] as $row) { yield [$group['scope_label'], $group['group_no'], $row['reg'], $row['name'], $row['grand_total'], $row['written_total'], $row['preliminary_mark'], $row['dob'], $row['graduation_year'], $row['final_merit_position']]; } } })();
+        $exporter->create($path, ['Processing Version'=>$run->processing_version,'Dataset Hash'=>$state->dataset_hash,'Common Tie Groups'=>$data['summary']['common']['groups'],'General Tie Groups'=>$data['summary']['general']['groups'],'Technical Tie Groups'=>$data['summary']['technical']['groups']], ['Merit Scope','Tie Group','REG','Name','Grand Total','Written Total','Preliminary Mark','DOB','Graduation Year','Final Merit Position'], $rows);
+        return response()->download($path, basename($path))->deleteFileAfterSend();
+    }
+
+    /** @return array{0:MeritProcessingState,1:MeritProcessingRun} */
+    private function currentReviewableRun(): array
+    {
+        $state = MeritProcessingState::query()->first();
+        abort_unless($state && ! $state->is_stale && $state->latest_run_id && in_array((string) $state->status, ['review_ready', 'finalized'], true), 409, 'Complete the current Merit Generation before Tie Review export.');
+        return [$state, MeritProcessingRun::query()->findOrFail($state->latest_run_id)];
     }
 
     /** @return array{0:MeritProcessingState,1:MeritProcessingRun} */

@@ -17,7 +17,7 @@ final class MeritCadreReportingContractTest extends TestCase
         $this->assertStringContainsString('orderBy(\'merit_cadre_ranks.cadre_merit_position\')', $controller);
         $this->assertStringContainsString("'m.all_merit_tech'", $controller);
         $this->assertStringContainsString('Cadre Merit', $view);
-        $this->assertStringContainsString('Choice Position', $view);
+        $this->assertStringNotContainsString('Choice Position', $view);
         $this->assertStringContainsString('all_merit_tech', $view);
     }
 }

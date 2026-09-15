@@ -5,8 +5,8 @@
     <div class="container-xl">
         <div class="row align-items-center">
             <div class="col">
-                <h2 class="page-title">{{ $meta->cadre_code }} ({{ $meta->cadre_abbr }}) Merit List</h2>
-                <div class="text-secondary">Cadre-wise merit ordered by cadre merit serial.</div>
+                <h2 class="page-title">{{ $meta->cadre_code }} ({{ $meta->cadre_abbr }}) Technical Merit List</h2>
+                <div class="text-secondary">Technical cadre-wise merit ordered by cadre merit serial, derived from eligibility-based Technical Merit order.</div>
             </div>
             <div class="col-auto d-flex gap-2">
                 @if($state?->status==='finalized'&&!$state?->is_stale&&$state?->latest_run_id===$runId)
@@ -46,7 +46,6 @@
                             <th>Candidate</th>
                             <th>Grand Total (G/T)</th>
                             <th class="text-center">Source Merit</th>
-                            <th class="text-center">Choice Position</th>
                             <th class="text-center">Common</th>
                             <th class="text-center">General</th>
                             <th class="text-center">Technical</th>
@@ -64,7 +63,6 @@
                                 <div><span class="text-secondary small">Technical</span> <strong>{{ $r->technical_grand_total !== null ? number_format((float) $r->technical_grand_total, 2) : '—' }}</strong></div>
                             </td>
                             <td class="text-center">{{ $r->source_merit_position }}</td>
-                            <td class="text-center">{{ $r->choice_position }}</td>
                             <td class="text-center">{{ $r->common_merit_position ?? '—' }}</td>
                             <td class="text-center">{{ $r->general_merit_position ?? '—' }}</td>
                             <td class="text-center">{{ $r->technical_merit_position ?? '—' }}</td>
@@ -79,7 +77,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="text-center text-secondary py-4">No candidates match the selected search.</td></tr>
+                        <tr><td colspan="9" class="text-center text-secondary py-4">No candidates match the selected search.</td></tr>
                     @endforelse
                     </tbody>
                 </table>

@@ -10,12 +10,27 @@ final class MeritRankingService
   usort($eligible,fn($a,$b)=>$this->compare($a,$b,$scope));
   $out=[];$rank=0;foreach($eligible as $row){$rank++;$out[(int)$row->id]=$rank;}return $out;
  }
+ /** @return array<int,array<int,object>> */
+ public function businessTieGroups(Collection $rows,string $scope):array
+ {
+  $groups=[];
+  foreach($rows->filter(fn($r)=>$this->eligible($r,$scope)) as $row){$key=json_encode($this->businessTieKey($row,$scope),JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);$groups[$key][]=$row;}
+  return array_values(array_filter($groups,fn(array $members):bool=>count($members)>1));
+ }
+ /** @return array{0:float,1:float} */
+ public function applicableScores(object $r,string $scope):array{return $this->applicable($r,$scope);}
+ private function businessTieKey(object $r,string $scope):array
+ {
+  [$grand,$written]=$this->applicable($r,$scope);
+  return [$grand,$written,(float)($r->preliminary_mark??-INF),(string)($r->birth_date??'9999-12-31')];
+ }
  private function eligible(object $r,string $scope):bool{return match($scope){'general'=>(bool)$r->general_merit_eligible,'technical'=>(bool)$r->technical_merit_eligible,'common'=>(bool)$r->general_merit_eligible||(bool)$r->technical_merit_eligible,default=>false};}
  private function compare(object $a,object $b,string $scope):int
  {
   [$ag,$aw]=$this->applicable($a,$scope);[$bg,$bw]=$this->applicable($b,$scope);
   foreach([[$bg,$ag],[$bw,$aw],[(float)($b->preliminary_mark??-INF),(float)($a->preliminary_mark??-INF)]] as [$left,$right]){if($left!=$right)return $left<=>$right;}
   $ad=(string)($a->birth_date??'9999-12-31');$bd=(string)($b->birth_date??'9999-12-31');if($ad!==$bd)return $ad<=>$bd;
+  // Non-business deterministic fallbacks. A primary-rule tie is still reported for Commission review.
   $ay=$a->graduation_year===null?PHP_INT_MAX:(int)$a->graduation_year;$by=$b->graduation_year===null?PHP_INT_MAX:(int)$b->graduation_year;if($ay!==$by)return $ay<=>$by;
   $areg=(string)$a->reg;$breg=(string)$b->reg;if($areg!==$breg)return $areg<=>$breg;
   return ((int)$a->registration_id)<=>((int)$b->registration_id);

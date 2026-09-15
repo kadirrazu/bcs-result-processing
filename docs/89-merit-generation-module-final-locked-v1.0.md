@@ -1,5 +1,8 @@
 # Merit Generation Module — Final Locked As-Built Specification v1.0
 
+> **SUPERSEDED — 2026-09-15:** The dependency/cadre-wise sections in this historical v1.0 document are superseded by `docs/merit-generation-revised-dependency-and-tie-review-2026-09-15.md`. Merit now depends only on finalized/current Tabulation + Circular; candidate Choice is not a Merit input; General cadre-wise Merit is removed; Technical cadre-wise Merit is eligibility-based and choice-independent.
+
+
 **Status:** COMPLETE / LOCKED  
 **Checkpoint:** 20 August 2026  
 **Scope:** Deterministic common/general/technical/cadre-wise merit generation from finalized Circular + Tabulation + Choice Validation datasets.

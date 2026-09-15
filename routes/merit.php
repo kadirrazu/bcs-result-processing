@@ -15,6 +15,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
     Route::get('/results/{result}/pdf', [MeritController::class, 'pdf'])->name('pdf');
     Route::get('/cadres/{cadreCode}', [MeritController::class, 'cadre'])->name('cadre');
     Route::get('/exports/final.xlsx', [MeritController::class, 'exportAll'])->name('export.xlsx');
+    Route::get('/exports/tie-review.pdf', [MeritController::class, 'tieReviewPdf'])->name('tie-review.pdf');
+    Route::get('/exports/tie-review.xlsx', [MeritController::class, 'tieReviewXlsx'])->name('tie-review.xlsx');
     Route::get('/cadres/{cadreCode}/export.xlsx', [MeritController::class, 'exportCadre'])->name('cadre.export.xlsx');
     Route::post('/finalizations/{finalization}/rollback', [MeritController::class, 'rollback'])->name('rollback');
     Route::post('/finalize', [MeritController::class, 'finalize'])->name('finalize');

@@ -159,7 +159,7 @@
 
             <div class="card-body">
                 <h4 class="mb-2">Validated Choice</h4>
-                <div class="text-secondary small mb-2">Final validated choice sequence consumed by cadre-wise Merit Generation.</div>
+                <div class="text-secondary small mb-2">Choice information is shown for reference only. It is not consumed by Merit Generation.</div>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered text-center align-middle mb-0 merit-choice-position-table">
                         <tbody>
@@ -209,7 +209,7 @@
                     <tbody>
                         <tr><td><strong>Circular</strong></td><td>v{{ data_get($sourceSnapshot,'circular.version','—') }}</td><td><code class="small text-break user-select-all">{{ data_get($sourceSnapshot,'circular.dataset_hash','—') }}</code></td></tr>
                         <tr><td><strong>Tabulation</strong></td><td>Run #{{ data_get($sourceSnapshot,'tabulation.processing_run_id','—') }} / v{{ data_get($sourceSnapshot,'tabulation.processing_version','—') }}</td><td><code class="small text-break user-select-all">{{ data_get($sourceSnapshot,'tabulation.dataset_hash','—') }}</code></td></tr>
-                        <tr><td><strong>Choice Validation</strong></td><td>v{{ data_get($sourceSnapshot,'choice_validation.validation_version','—') }}</td><td><code class="small text-break user-select-all">{{ data_get($sourceSnapshot,'choice_validation.dataset_hash','—') }}</code></td></tr>
+                        
                     </tbody>
                 </table>
             </div>

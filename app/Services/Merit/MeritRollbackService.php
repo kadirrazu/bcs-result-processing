@@ -40,7 +40,7 @@ final class MeritRollbackService
         $ready = $this->readiness->assertReady();
         if (! $this->snapshots->equivalent($target->source_snapshot, $ready['source_snapshot'])) {
             throw ValidationException::withMessages([
-                'confirmation' => 'MERIT_ROLLBACK_SOURCE_MISMATCH: This historical Merit version was produced from different finalized Circular/Tabulation/Choice datasets. Re-generation is mandatory.',
+                'confirmation' => 'MERIT_ROLLBACK_SOURCE_MISMATCH: This historical Merit version was produced from different finalized Circular/Tabulation datasets. Re-generation is mandatory.',
             ]);
         }
 
