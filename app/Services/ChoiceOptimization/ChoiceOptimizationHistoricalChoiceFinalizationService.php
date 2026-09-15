@@ -7,6 +7,7 @@ use App\Models\ChoiceOptimizationHistoricalMatch;
 use App\Models\ChoiceOptimizationProcessingAudit;
 use App\Models\ChoiceOptimizationProcessingState;
 use App\Services\Circular\CircularFinalizedDatasetService;
+use App\Services\Dependencies\DownstreamStalePropagationService;
 use RuntimeException;
 
 final class ChoiceOptimizationHistoricalChoiceFinalizationService
@@ -16,6 +17,7 @@ final class ChoiceOptimizationHistoricalChoiceFinalizationService
         private readonly ChoiceOptimizationHistoricalChoiceService $historical,
         private readonly CircularFinalizedDatasetService $circular,
         private readonly ChoiceOptimizationConsolidatedHistoricalRecommendationService $consolidated,
+        private readonly DownstreamStalePropagationService $downstream,
     ) {}
 
     public function finalize(int $actorId): ChoiceOptimizationProcessingState
@@ -127,7 +129,14 @@ final class ChoiceOptimizationHistoricalChoiceFinalizationService
                 'created_at' => now(),
             ]);
 
-            return $state->refresh();
+            $finalizedState = $state->refresh();
+            $this->downstream->propagate(
+                'choice_optimization',
+                'A new finalized Choice Optimization authority is current. Allocation inputs frozen from an older choice authority must be re-frozen.',
+                $actorId,
+            );
+
+            return $finalizedState;
         } catch (\Throwable $e) {
             $state->update([
                 'status' => 'finalization_failed',

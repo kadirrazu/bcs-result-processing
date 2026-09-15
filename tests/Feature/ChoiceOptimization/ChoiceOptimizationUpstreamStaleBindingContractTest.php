@@ -11,7 +11,7 @@ class ChoiceOptimizationUpstreamStaleBindingContractTest extends TestCase
     public function dependency_graph_propagates_choice_validation_to_optimization(): void
     {
         $service = file_get_contents(app_path('Services/Dependencies/DownstreamStalePropagationService.php'));
-        $this->assertStringContainsString("'choice_validation' => ['choice_optimization']", $service);
+        $this->assertStringContainsString("'choice_validation' => ['choice_optimization', 'allocation']", $service);
         $this->assertStringContainsString('markChoiceOptimization', $service);
     }
 

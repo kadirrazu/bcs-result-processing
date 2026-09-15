@@ -6,14 +6,15 @@ use Tests\TestCase;
 
 final class CadreSectionAllocationVerificationStructureContractTest extends TestCase
 {
-    public function test_allocation_verification_reports_follow_modern_locked_one_to_seven_order(): void
+    public function test_allocation_verification_reports_follow_locked_one_to_eight_order(): void
     {
         $view = file_get_contents(resource_path('views/reporting/cadre-section/index.blade.php'));
 
         $items = [
             'Common Merit Position Allocation Report',
-            'General Cadre Candidate Allocation Report',
-            'Only Technical Cadre Candidate Allocation Report',
+            'General Cadre Candidate Allocation Report (GG + GN + GT)',
+            'Technical Cadre Candidate Allocation Report (TT + T + GT)',
+            'Only Technical Cadre Candidate Allocation Report (TT + T)',
             'Quota Candidate Allocation Verification Report',
             'General Cadre-wise Allocation Verification Reports',
             'Technical Cadre-wise Allocation Verification Reports',

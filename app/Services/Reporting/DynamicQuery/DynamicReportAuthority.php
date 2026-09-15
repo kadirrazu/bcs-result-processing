@@ -18,7 +18,58 @@ use App\Models\WrittenProcessingState;
 
 final class DynamicReportAuthority
 {
-    public function __construct(private readonly \App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService $finalChoices) {}
+    public function __construct(
+        private readonly \App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService $finalChoices,
+        private readonly \App\Services\Allocation\AllocationA6ReadinessService $allocationReadiness,
+    ) {}
+
+
+    /**
+     * Sources that are safe to expose in Step-1 of the Dynamic Query Builder.
+     *
+     * Browser discovery is intentionally fail-closed: a field is discoverable
+     * only when the same authority contract used at query execution is current.
+     * Registration is the candidate-centric base source and has no processing
+     * state in this project. Circular fields describe the allocated post, so
+     * they additionally require current Allocation authority.
+     *
+     * @return array<int,string>
+     */
+    public function browserReadySources(): array
+    {
+        $ready = ['registrations'];
+        $requirements = [
+            'preliminary' => 'preliminary_finalization_run_id',
+            'written' => 'written_processing_run_id',
+            'viva' => 'viva_processing_run_id',
+            'tabulation' => 'tabulation_run_id',
+            'merit' => 'merit_run_id',
+            'choice_validation' => 'choice_validation_finalization_run_id',
+            'choice_optimization' => 'choice_optimization_hash',
+            'allocation' => 'allocation_a5_run_id',
+            'allocation_disposition' => 'allocation_a5_run_id',
+        ];
+
+        // Resolve the complete browser authority snapshot once. This keeps
+        // Step-1 cheap while reusing the exact same currentness checks as
+        // preview/export execution, including the fail-closed Allocation gate.
+        $authority = $this->resolve(array_keys($requirements));
+        foreach ($requirements as $source => $key) {
+            if (! empty($authority[$key])) {
+                $ready[] = $source;
+            }
+        }
+
+        // Candidate-centric Circular fields are joined through the allocated
+        // post. Match DynamicQueryCompiler::normalizeSources(): Circular is
+        // selectable only when both Circular and Allocation are current.
+        $circular = $this->resolve(['circular']);
+        if (! empty($circular['circular_version']) && ! empty($authority['allocation_a5_run_id'])) {
+            $ready[] = 'circular';
+        }
+
+        return array_values(array_unique($ready));
+    }
 
     /** @return array<string,mixed> */
     public function resolve(array $sources): array
@@ -121,8 +172,12 @@ final class DynamicReportAuthority
         }
 
         if (in_array('allocation', $sources, true) || in_array('allocation_disposition', $sources, true)) {
-            $a5 = AllocationA5Run::query()->where('status', 'finalized')->where('is_stale', false)->latest('version')->first();
-            if ($a5) {
+            // Allocation fields are publishable only through the same fail-closed
+            // authority gate used by A6/Cadre Reporting. A locally non-stale A5 row
+            // is not sufficient when Merit/A2/another direct prerequisite is NOT READY.
+            $allocationGate = $this->allocationReadiness->inspect();
+            $a5 = ($allocationGate['ready'] ?? false) ? ($allocationGate['a5'] ?? null) : null;
+            if ($a5 instanceof AllocationA5Run) {
                 $authority['allocation_a5_run_id'] = (int) $a5->id;
 
                 if (in_array('allocation_disposition', $sources, true)) {

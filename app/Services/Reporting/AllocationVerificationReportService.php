@@ -209,12 +209,23 @@ final class AllocationVerificationReportService
             $base->whereNotNull('common_merit_position')
                 ->orderBy('common_merit_position');
         } elseif ($type === 'general') {
-            $title = $includeIdentity ? 'General Cadre Candidate Allocation Booklet Printing Report' : 'General Cadre Candidate Allocation Report';
-            // General-side population is authoritative Merit eligibility (GG + GT in the current normalized model).
+            $title = $includeIdentity
+                ? 'General Cadre Candidate Allocation Report (GG + GN + GT) — Booklet Printing'
+                : 'General Cadre Candidate Allocation Report (GG + GN + GT)';
+            // Population authority is finalized General Merit; choice does not define report membership.
             $base->whereNotNull('general_merit_position')
                 ->orderBy('general_merit_position');
+        } elseif ($type === 'technical') {
+            $title = $includeIdentity
+                ? 'Technical Cadre Candidate Allocation Report (TT + T + GT) — Booklet Printing'
+                : 'Technical Cadre Candidate Allocation Report (TT + T + GT)';
+            // Full finalized Technical Merit population. Candidate choice is not a population filter.
+            $base->whereNotNull('technical_merit_position')
+                ->orderBy('technical_merit_position');
         } elseif ($type === 'technical-only') {
-            $title = $includeIdentity ? 'Only Technical Cadre Candidate Allocation Booklet Printing Report' : 'Only Technical Cadre Candidate Allocation Report';
+            $title = $includeIdentity
+                ? 'Only Technical Cadre Candidate Allocation Report (TT + T) — Booklet Printing'
+                : 'Only Technical Cadre Candidate Allocation Report (TT + T)';
             // Written effective technical-only population is TT + T.
             // T includes candidates who originated as GT but qualified only on the technical side.
             $base->whereIn('written_qualified_track', ['TT', 'T'])
@@ -478,7 +489,7 @@ final class AllocationVerificationReportService
                 'common' => $merit->common_merit_position,
                 'general' => $merit->general_merit_position,
                 'general-cadre' => $merit->general_merit_position,
-                'technical-only' => $merit->technical_merit_position,
+                'technical', 'technical-only' => $merit->technical_merit_position,
                 'quota' => $merit->common_merit_position
                     ?? $merit->general_merit_position
                     ?? $merit->technical_merit_position,
@@ -593,7 +604,7 @@ final class AllocationVerificationReportService
         $meritHeadingLines = match ($type) {
             'common' => ['COMMON MERIT', 'POSITION'],
             'general', 'general-cadre' => ['GENERAL MERIT', 'POSITION'],
-            'technical-only' => ['TECHNICAL MERIT', 'POSITION'],
+            'technical', 'technical-only' => ['TECHNICAL MERIT', 'POSITION'],
             'technical-cadre' => [strtoupper((string) ($cadre['abbr'] ?? 'TECHNICAL')).' MERIT', 'POSITION'],
             'quota' => ['APPLICABLE MERIT', 'POSITION'],
             default => ['MERIT', 'POSITION'],

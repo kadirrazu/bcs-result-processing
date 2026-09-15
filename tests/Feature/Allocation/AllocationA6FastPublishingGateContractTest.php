@@ -11,7 +11,8 @@ final class AllocationA6FastPublishingGateContractTest extends TestCase
         $source = file_get_contents(app_path('Services/Allocation/AllocationA6ReadinessService.php'));
 
         $this->assertStringNotContainsString('inspectStrict(', $source);
-        $this->assertStringNotContainsString('inspectDashboard(', $source);
+        $this->assertStringContainsString('inspectDashboard()', $source);
+        $this->assertStringContainsString('Fail closed on cheap currentness metadata', $source);
         $this->assertStringContainsString("latest('version')", $source);
         $this->assertStringContainsString('allocation_a4_run_id', $source);
         $this->assertStringContainsString('a4_output_hash', $source);

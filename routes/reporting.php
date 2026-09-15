@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Reporting\CadreSectionReportingController;
 use App\Http\Controllers\Reporting\ReportingController;
+use App\Http\Controllers\Reporting\ResearchStatisticsController;
 use App\Http\Controllers\Reporting\DynamicQueryBuilderController;
 use App\Http\Middleware\ConfigureExaminationConnection;
 use App\Http\Middleware\EnsureExaminationSelected;
@@ -10,6 +11,9 @@ use Illuminate\Support\Facades\Route;
 Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnection::class])
     ->prefix('reports')->name('examination-reports.')->group(function (): void {
         Route::get('/', [ReportingController::class, 'index'])->name('index');
+        Route::get('/research-statistics', [ResearchStatisticsController::class, 'index'])->name('research-statistics.index');
+        Route::get('/research-statistics/{report}', [ResearchStatisticsController::class, 'show'])->name('research-statistics.show');
+        Route::get('/research-statistics/{report}/pdf', [ResearchStatisticsController::class, 'pdf'])->name('research-statistics.pdf');
         Route::get('/dynamic-query', [DynamicQueryBuilderController::class, 'index'])->name('dynamic-query.index');
         Route::post('/dynamic-query/preview', [DynamicQueryBuilderController::class, 'preview'])->name('dynamic-query.preview');
         Route::post('/dynamic-query/saved', [DynamicQueryBuilderController::class, 'save'])->name('dynamic-query.saved.save');
@@ -39,9 +43,9 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
             ->whereNumber('cadreCode')->name('cadre.booklet.technical.pdf');
 
         Route::get('/cadre-section/booklet/{type}', [CadreSectionReportingController::class, 'booklet'])
-            ->whereIn('type', ['common','general','technical-only','quota'])->name('cadre.booklet');
+            ->whereIn('type', ['common','general','technical','technical-only','quota'])->name('cadre.booklet');
         Route::post('/cadre-section/booklet/{type}/pdf', [CadreSectionReportingController::class, 'queueBookletPdf'])
-            ->whereIn('type', ['common','general','technical-only','quota'])->name('cadre.booklet.pdf');
+            ->whereIn('type', ['common','general','technical','technical-only','quota'])->name('cadre.booklet.pdf');
 
         Route::get('/cadre-section/booklet/exports/{exportRun}', [CadreSectionReportingController::class, 'exportRun'])
             ->name('cadre.booklet.exports.show');
@@ -66,9 +70,9 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
             ->whereNumber('cadreCode')->name('cadre.verification.general-cadre.pdf');
 
         Route::get('/cadre-section/verification/{type}', [CadreSectionReportingController::class, 'verification'])
-            ->whereIn('type', ['common','general','technical-only','quota'])->name('cadre.verification');
+            ->whereIn('type', ['common','general','technical','technical-only','quota'])->name('cadre.verification');
         Route::post('/cadre-section/verification/{type}/pdf', [CadreSectionReportingController::class, 'queueVerificationPdf'])
-            ->whereIn('type', ['common','general','technical-only','quota'])->name('cadre.verification.pdf');
+            ->whereIn('type', ['common','general','technical','technical-only','quota'])->name('cadre.verification.pdf');
 
         Route::get('/cadre-section/verification/technical-cadre/{cadreCode}', [CadreSectionReportingController::class, 'technicalCadre'])
             ->whereNumber('cadreCode')->name('cadre.verification.technical');

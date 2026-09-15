@@ -1,3 +1,5 @@
+> **SUPERSEDED DEPENDENCY CHECKPOINT:** This 2026-08-20 historical checkpoint predates the locked 2026-09-15 Merit architecture. For current Merit dependencies use `docs/merit-generation-revised-dependency-and-tie-review-2026-09-15.md`.
+
 # BCS Result Processing — Completion & Lock Checkpoint Through Merit
 
 **Checkpoint date:** 20 August 2026  

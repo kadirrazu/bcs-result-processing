@@ -33,3 +33,8 @@ Graduation Year, Registration/Roll and stable identity remain deterministic fall
 - Circular changes stale Merit and Choice Validation/Choice Optimization as applicable.
 - Choice Validation changes stale Choice Optimization, but no longer stale Merit.
 - Final Allocation Ready Choice changes do not stale Merit; they stale Allocation input/downstream according to the existing Allocation chain.
+
+## Allocation stale coupling clarification — 2026-09-15 audit
+Allocation A2 is an immutable frozen intersection of current Merit + Final Allocation Ready Choice + the other direct authorities. Therefore any direct authority change after A2 exists marks that A2 authority stale and marks produced A3/A4/A5 lineage stale without deleting historical evidence. In particular, a new finalized Merit authority or a new finalized Choice Optimization authority invalidates any older frozen Allocation input. A6 remains lightweight and safe because A5/A4 are eagerly marked stale by this coupling rather than requiring A6 to re-hash the full upstream chain.
+
+Choice Validation changes continue to leave Merit current. They stale Choice Optimization and any already-frozen Allocation authority, because the choice side must be reprocessed before Allocation can be current again.

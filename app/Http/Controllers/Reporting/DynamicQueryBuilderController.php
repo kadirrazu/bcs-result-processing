@@ -7,6 +7,7 @@ use App\Jobs\ProcessDynamicQueryPdfExport;
 use App\Jobs\ProcessDynamicQueryXlsxExport;
 use App\Models\ReportingExportRun;
 use App\Services\Reporting\DynamicQuery\DynamicQueryCompiler;
+use App\Services\Reporting\DynamicQuery\DynamicReportAuthority;
 use App\Services\Reporting\DynamicQuery\SavedDynamicReportService;
 use App\Services\Reporting\DynamicQuery\SemanticFieldRegistry;
 use App\Support\Examinations\ExaminationContext;
@@ -25,11 +26,12 @@ final class DynamicQueryBuilderController extends Controller
     public function index(
         ExaminationContext $context,
         SemanticFieldRegistry $registry,
+        DynamicReportAuthority $authority,
         SavedDynamicReportService $savedReports,
     ): View {
         return view('reporting.dynamic-query.index', [
             'examination' => $context->current(),
-            'semanticFields' => $registry->browserFields(),
+            'semanticFields' => $registry->browserFields($authority->browserReadySources()),
             'previewSizes' => config('dynamic-reports.preview_sizes', [5, 10, 20, 50, 100]),
             'defaultPreviewSize' => config('dynamic-reports.default_preview_size', 10),
             'savedReports' => $savedReports->list(),

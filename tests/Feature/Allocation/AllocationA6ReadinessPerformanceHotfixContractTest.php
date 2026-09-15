@@ -14,16 +14,18 @@ final class AllocationA6ReadinessPerformanceHotfixContractTest extends TestCase
         $controller = file_get_contents(app_path('Http/Controllers/AllocationA6Controller.php'));
         $worker = file_get_contents(app_path('Jobs/ProcessAllocationA6Export.php'));
 
-        // A6 trusts finalized A5 assurance and checks only current A5/A4 lineage.
+        // A6 keeps the lightweight A4/A5 source gate and adds a cheap metadata fail-safe
+        // so stale Merit/A2 cannot leave historical Allocation publishable.
         self::assertStringContainsString('private function requireCurrentPublishingSource()', $readiness);
         self::assertStringContainsString('private function resolveCurrentSource()', $readiness);
         self::assertStringContainsString('public function requireReady()', $readiness);
         self::assertStringContainsString('public function requireReadyStrict()', $readiness);
         self::assertSame(2, substr_count($readiness, 'return $this->requireCurrentPublishingSource();'));
 
-        // Removed pre-optimization full-chain rehash entry points must not return.
-        self::assertStringNotContainsString('inspectDashboard()', $readiness);
+        // Cheap stored metadata is allowed; expensive full-chain dataset re-hashing must not return.
+        self::assertStringContainsString('inspectDashboard()', $readiness);
         self::assertStringNotContainsString('inspectStrict()', $readiness);
+        self::assertStringContainsString('Allocation publishing authority is not current:', $readiness);
 
         // Normal report pages and queued export entry points both use the source gate.
         self::assertGreaterThanOrEqual(4, substr_count($controller, '$a5 = $readiness->requireReady();'));

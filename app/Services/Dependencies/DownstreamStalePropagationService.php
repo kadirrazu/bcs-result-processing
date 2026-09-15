@@ -9,10 +9,13 @@ use App\Models\ChoiceOptimizationProcessingAudit;
 use App\Models\ChoiceOptimizationProcessingState;
 use App\Models\TabulationFinalizationRun;
 use App\Models\TabulationProcessingState;
+use App\Services\Allocation\AllocationRunStaleService;
 use Illuminate\Support\Facades\Schema;
 
 final class DownstreamStalePropagationService
 {
+    public function __construct(private readonly AllocationRunStaleService $allocationStale) {}
+
     /**
      * Canonical dependency graph.
      *
@@ -23,11 +26,13 @@ final class DownstreamStalePropagationService
     public function downstreamFor(string $upstream): array
     {
         return match (strtolower(trim($upstream))) {
-            'registration', 'preliminary', 'written' => ['tabulation', 'merit'],
-            'viva' => ['tabulation', 'choice_validation', 'merit'],
-            'circular' => ['choice_validation', 'choice_optimization', 'merit'],
-            'choice_validation' => ['choice_optimization'],
-            'tabulation' => ['merit'],
+            'registration', 'preliminary', 'written' => ['tabulation', 'merit', 'allocation'],
+            'viva' => ['tabulation', 'choice_validation', 'merit', 'allocation'],
+            'circular' => ['choice_validation', 'choice_optimization', 'merit', 'allocation'],
+            'choice_validation' => ['choice_optimization', 'allocation'],
+            'tabulation' => ['merit', 'allocation'],
+            'merit' => ['allocation'],
+            'choice_optimization' => ['allocation'],
             default => [],
         };
     }
@@ -48,6 +53,7 @@ final class DownstreamStalePropagationService
                 'choice_validation' => $this->markChoiceValidation($upstream, $reason, $actorId),
                 'merit' => $this->markMerit($upstream, $reason),
                 'choice_optimization' => $this->markChoiceOptimization($upstream, $reason, $actorId),
+                'allocation' => $this->markAllocation($upstream, $reason, $actorId),
                 default => false,
             };
         }
@@ -183,6 +189,14 @@ final class DownstreamStalePropagationService
         }
 
         return true;
+    }
+
+    public function markAllocation(string $upstream, string $reason, ?int $actorId = null): bool
+    {
+        return $this->allocationStale->staleFromDirectInputChange(
+            strtoupper($upstream).' upstream changed: '.$reason,
+            $actorId,
+        );
     }
 
     public function markMerit(string $upstream, string $reason): bool

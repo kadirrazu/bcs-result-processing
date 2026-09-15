@@ -47,6 +47,19 @@ final class AllocationController extends Controller
         // Defensive metadata reconciliation keeps A3/A4 currentness visible even if an upstream change occurred outside a normal UI path.
         $runStale->reconcileCurrentness();
 
+        // A historical project may contain finalized A3/A4/A5 rows from before a
+        // direct-input stale event was fully coupled. The landing board already
+        // resolves cheap authoritative metadata, so fail closed and repair the
+        // Allocation lineage when any direct prerequisite is no longer current.
+        $dashboardReadiness = $readiness->inspectDashboard();
+        if (! (bool) ($dashboardReadiness['upstream_ready'] ?? false)) {
+            $runStale->staleFromDirectInputChange(
+                'Allocation landing detected one or more direct upstream authorities are NOT READY.'
+            );
+            $runStale->reconcileCurrentness();
+            $dashboardReadiness = $readiness->inspectDashboard();
+        }
+
         $a6Gate = $a6Readiness->inspect();
         $a55Snapshot = ($a6Gate['ready'] ?? false) && $a6Gate['a5']
             ? $dispositions->snapshot($a6Gate['a5'])
@@ -55,7 +68,7 @@ final class AllocationController extends Controller
         return view('allocation.index', [
             // Landing page must stay fast. Strict/expensive re-hashing is reserved
             // for the actual server-side pre-run/finalization gate.
-            'readiness' => $readiness->inspectDashboard(),
+            'readiness' => $dashboardReadiness,
             'settingsInfo' => $settings->dashboard(),
             'settings' => $settings->setting(),
             'state' => AllocationProcessingState::query()->firstOrCreate(['id' => 1], ['status' => 'not_started']),

@@ -99,6 +99,7 @@ return [
                 'circular_entries',
                 'circular_processing_states',
             ],
+            'downstream' => ['Merit, Choice Validation, Choice Optimization and Allocation'],
         ],
 
         'choice_validation' => [
@@ -121,7 +122,7 @@ return [
             'scoped_deletes' => [
                 ['table' => 'import_correction_entries', 'column' => 'module', 'values' => ['choice_validation']],
             ],
-            'downstream' => ['Merit, Choice Optimization and Allocation'],
+            'downstream' => ['Choice Optimization and Allocation'],
         ],
 
         'tabulation' => [
@@ -146,7 +147,7 @@ return [
                 'merit_processing_runs',
                 'merit_processing_states',
             ],
-            'downstream' => ['Choice Optimization and Allocation'],
+            'downstream' => ['Allocation'],
         ],
 
         'choice_optimization' => [

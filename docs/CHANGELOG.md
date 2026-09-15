@@ -1,3 +1,11 @@
+## 2026-09-15 — Revised Merit stale-coupling audit
+
+- Confirmed Merit readiness/generation is Choice-independent and consumes finalized Circular + Tabulation only.
+- Corrected Allocation stale coupling so direct authority changes stale frozen A2 and produced A3/A4/A5 lineage while preserving historical evidence.
+- New finalized Merit and Choice Optimization authorities now invalidate older frozen Allocation input.
+- Corrected Choice Validation finalization wording: Choice Validation changes do not stale Merit; they stale Choice Optimization/Allocation choice-side authority.
+- Corrected development module-reset dependency warnings for Circular, Choice Validation and Merit.
+
 ## 2026-08-24 — Choice Optimization CO4C3.2 Stacked Candidate/Choice UI
 - Replaced wide Historical Choice Optimization result table with full-width stacked candidate records.
 - Added explicit `BCS XX - CADRE` historical match context and red no-historical-data status.

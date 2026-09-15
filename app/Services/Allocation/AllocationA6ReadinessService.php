@@ -24,6 +24,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class AllocationA6ReadinessService
 {
+    public function __construct(private readonly AllocationReadinessService $allocationReadiness) {}
     /** @return array<string,mixed> */
     public function inspect(): array
     {
@@ -85,6 +86,24 @@ final class AllocationA6ReadinessService
      */
     private function resolveCurrentSource(): array
     {
+        // Fail closed on cheap currentness metadata before trusting historical A4/A5 rows.
+        // This deliberately does NOT recompute large dataset hashes; strict hashing remains
+        // an Allocation processing gate. It prevents publication when Merit/A2/another
+        // direct Allocation input is no longer current even if stale propagation metadata
+        // was missed by an older or out-of-band mutation path.
+        $upstream = $this->allocationReadiness->inspectDashboard();
+        if (! (bool) ($upstream['ready'] ?? false)) {
+            $failed = collect($upstream['checks'] ?? [])
+                ->filter(fn (array $check): bool => ! (bool) ($check['ready'] ?? false))
+                ->pluck('label')
+                ->filter()
+                ->values()
+                ->all();
+            $labels = $failed !== [] ? implode(', ', $failed) : 'Allocation prerequisites';
+
+            return [null, null, 'Allocation publishing authority is not current: '.$labels.'. Rebuild/finalize the required upstream authority and re-run Allocation before Reporting.'];
+        }
+
         $a5 = AllocationA5Run::query()
             ->with('a4Run')
             ->latest('version')

@@ -10,6 +10,7 @@ use App\Models\AllocationProcessingState;
 use App\Models\AllocationRun;
 use App\Models\AllocationSeatBreakupVersion;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Central Allocation lineage/currentness service.
@@ -23,6 +24,65 @@ use Illuminate\Support\Facades\DB;
 final class AllocationRunStaleService
 {
     public function __construct(private readonly AllocationSettingsService $settings) {}
+
+    /**
+     * Mark the frozen Allocation authority and every produced downstream phase stale
+     * when a direct authoritative input (Merit, Choice, Circular, Tabulation, etc.) changes.
+     * Historical evidence is preserved; only currentness metadata is changed.
+     */
+    public function staleFromDirectInputChange(string $reason, ?int $actorId = null): bool
+    {
+        if (! Schema::connection('exam')->hasTable('allocation_processing_states')) {
+            return false;
+        }
+
+        $hasCurrentAuthority = false;
+
+        DB::connection('exam')->transaction(function () use ($reason, $actorId, &$hasCurrentAuthority): void {
+            $state = AllocationProcessingState::query()->lockForUpdate()->first();
+            if (! $state) {
+                return;
+            }
+
+            $freezeId = (int) data_get($state->source_snapshot, 'input_freeze_id', 0);
+            $freeze = $freezeId > 0 ? AllocationInputFreeze::query()->lockForUpdate()->find($freezeId) : null;
+            $hasRuns = AllocationRun::query()->exists() || AllocationA4Run::query()->exists() || AllocationA5Run::query()->exists();
+
+            if (! $freeze && ! $hasRuns) {
+                return;
+            }
+
+            $hasCurrentAuthority = true;
+            $token = 'ALLOCATION_DIRECT_INPUT_CHANGED: '.$reason;
+
+            $state->forceFill([
+                'is_stale' => true,
+                'stale_reason' => $token,
+            ])->save();
+
+            if ($freeze && (string) $freeze->status === 'frozen') {
+                $freeze->forceFill(['status' => 'stale'])->save();
+            }
+
+            AllocationProcessingAudit::query()->create([
+                'event' => 'ALLOCATION_DIRECT_INPUT_STALED',
+                'actor_id' => $actorId,
+                'from_status' => (string) $state->status,
+                'to_status' => 'stale',
+                'context' => [
+                    'reason' => $token,
+                    'input_freeze_id' => $freeze?->id,
+                ],
+                'created_at' => now(),
+            ]);
+        });
+
+        if ($hasCurrentAuthority) {
+            $this->staleA3AndA4('ALLOCATION_DIRECT_INPUT_CHANGED: '.$reason, $actorId);
+        }
+
+        return $hasCurrentAuthority;
+    }
 
     public function staleA3AndA4(string $reason, ?int $actorId = null): void
     {

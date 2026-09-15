@@ -215,7 +215,7 @@ final class CadreSectionReportingController extends Controller
         AllocationResultDispositionService $dispositions,
         ExaminationContext $context,
     ): RedirectResponse {
-        abort_unless(in_array($type, ['common', 'general', 'technical-only', 'quota'], true), 404);
+        abort_unless(in_array($type, ['common', 'general', 'technical', 'technical-only', 'quota'], true), 404);
 
         return $this->queuePdf($request, $type, null, $readiness, $dispositions, $context, true);
     }
@@ -276,7 +276,7 @@ final class CadreSectionReportingController extends Controller
         AllocationResultDispositionService $dispositions,
         ExaminationContext $context,
     ): RedirectResponse {
-        abort_unless(in_array($type, ['common', 'general', 'technical-only', 'quota'], true), 404);
+        abort_unless(in_array($type, ['common', 'general', 'technical', 'technical-only', 'quota'], true), 404);
 
         return $this->queuePdf($request, $type, null, $readiness, $dispositions, $context);
     }

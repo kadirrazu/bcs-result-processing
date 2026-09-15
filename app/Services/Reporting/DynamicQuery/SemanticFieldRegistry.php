@@ -25,11 +25,16 @@ final class SemanticFieldRegistry
     }
 
     /** @return array<int,array<string,mixed>> */
-    public function browserFields(): array
+    public function browserFields(?array $readySources = null): array
     {
         $rows = [];
         foreach ($this->all() as $id => $field) {
             if (! ($field['selectable'] ?? false)) {
+                continue;
+            }
+
+            $source = (string) ($field['source'] ?? 'registrations');
+            if ($readySources !== null && ! in_array($source, $readySources, true)) {
                 continue;
             }
             $rows[] = [

@@ -289,7 +289,7 @@ final class ChoiceValidationFinalizationService
 
         $this->downstream->propagate(
             'choice_validation',
-            'Choice Validation v'.$finalization->validation_version.' was finalized. Merit generated from an older Choice Validation must be regenerated.',
+            'Choice Validation v'.$finalization->validation_version.' was finalized. Choice Optimization must be reprocessed and any frozen Allocation input must be re-frozen; Merit remains current.',
             (int) $actor->id,
         );
 

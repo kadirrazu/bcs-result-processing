@@ -39,6 +39,15 @@ final class ReportingFoundationContractTest extends TestCase
         self::assertStringContainsString('A6 - Allocation Reporting &amp; Export', $reporting);
         self::assertStringContainsString('Cadre Section Reporting', $reporting);
         self::assertStringContainsString('Research &amp; Statistics Section Reporting', $reporting);
+
+        $cardOrder = [
+            'A6 - Allocation Reporting &amp; Export',
+            'Dynamic Query Builder',
+            'Cadre Section Reporting',
+            'Research &amp; Statistics Section Reporting',
+        ];
+        $positions = array_map(fn (string $label): int => strpos($reporting, $label), $cardOrder);
+        self::assertSame($positions, collect($positions)->sort()->values()->all());
     }
 
     public function test_completed_exam_guard_allows_read_and_reporting_but_blocks_processing_mutations(): void

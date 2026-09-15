@@ -73,19 +73,22 @@
     $a2SummaryClass = $a2BusySummary ? 'azure' : ($summaryFreeze?->status === 'frozen' && !(bool)$state->is_stale ? 'success' : ((bool)$state->is_stale ? 'warning' : 'secondary'));
     $a2SummaryDetail = $a2BusySummary ? ($state->progress_message ?: 'Frozen input and deterministic queues are being rebuilt.') : ((bool)$state->is_stale ? ($state->stale_reason ?: 'Allocation inputs changed; re-freeze A2.') : ($summaryFreeze ? 'Frozen input v'.$summaryFreeze->version.' · '.number_format($summaryFreeze->total_queue_entries).' deterministic queue entries.' : 'Freeze authoritative inputs and build deterministic queues.'));
 
-    $a3SummaryStale = $summaryA3 && (bool)$summaryA3->is_stale;
+    $effectiveAllocationBlocked = ! (bool)($readiness['ready'] ?? false);
+    $effectiveBlockReason = 'Direct Allocation prerequisites are NOT READY. Rebuild/finalize the required upstream authority, re-freeze A2, then re-run Allocation.';
+
+    $a3SummaryStale = $summaryA3 && ((bool)$summaryA3->is_stale || $effectiveAllocationBlocked);
     $a3SummarySuperseded = $a3SummaryStale && str_contains((string)$summaryA3->stale_reason, 'historical/superseded');
     $a3SummaryStatus = !$summaryA3 ? 'NOT STARTED' : ($a3SummaryStale ? ($a3SummarySuperseded ? 'SUPERSEDED' : 'STALE / OUTDATED') : ($summaryA3->status === 'phase1_complete' ? 'PHASE-1 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA3->status))));
     $a3SummaryClass = !$summaryA3 ? 'secondary' : ($a3SummaryStale ? 'warning' : ($summaryA3->status === 'phase1_complete' ? 'success' : (str_contains((string)$summaryA3->status, 'failed') ? 'danger' : 'azure')));
-    $a3SummaryDetail = !$summaryA3 ? 'Run A3 after A2 is current.' : ($a3SummaryStale ? ($summaryA3->stale_reason ?: 'A1/A2/Seat Breakup changed; re-run Phase-1.') : ($summaryA3->status === 'phase1_complete' ? 'A3 v'.$summaryA3->version.' is current · '.number_format($summaryA3->allocated_count).' allocated.' : ($state->progress_message ?: 'Phase-1 processing is in progress.')));
+    $a3SummaryDetail = !$summaryA3 ? 'Run A3 after A2 is current.' : ($a3SummaryStale ? ($summaryA3->stale_reason ?: $effectiveBlockReason) : ($summaryA3->status === 'phase1_complete' ? 'A3 v'.$summaryA3->version.' is current · '.number_format($summaryA3->allocated_count).' allocated.' : ($state->progress_message ?: 'Phase-1 processing is in progress.')));
 
-    $a4SummaryStale = $summaryA4 && (bool)$summaryA4->is_stale;
+    $a4SummaryStale = $summaryA4 && ((bool)$summaryA4->is_stale || $effectiveAllocationBlocked);
     $a4SummarySuperseded = $a4SummaryStale && str_contains((string)$summaryA4->stale_reason, 'historical/superseded');
     $a4SummaryStatus = !$summaryA4 ? 'NOT STARTED' : ($a4SummaryStale ? ($a4SummarySuperseded ? 'SUPERSEDED' : 'STALE / OUTDATED') : ($summaryA4->status === 'a4_complete' ? 'PHASE-2 COMPLETE' : strtoupper(str_replace('_',' ', (string)$summaryA4->status))));
     $a4SummaryClass = !$summaryA4 ? 'secondary' : ($a4SummaryStale ? 'warning' : ($summaryA4->status === 'a4_complete' ? 'success' : ($summaryA4->status === 'failed' ? 'danger' : 'azure')));
-    $a4SummaryDetail = !$summaryA4 ? 'Run A4 after a current, completed A3 exists.' : ($a4SummaryStale ? ($summaryA4->stale_reason ?: 'A3 or Allocation inputs changed; re-run Phase-2.') : ($summaryA4->status === 'a4_complete' ? 'A4 v'.$summaryA4->version.' is current · '.number_format($summaryA4->allocated_count).' final allocated results after NM/shifting.' : ($summaryA4->progress_message ?: 'Phase-2 processing is in progress.')));
+    $a4SummaryDetail = !$summaryA4 ? 'Run A4 after a current, completed A3 exists.' : ($a4SummaryStale ? ($summaryA4->stale_reason ?: $effectiveBlockReason) : ($summaryA4->status === 'a4_complete' ? 'A4 v'.$summaryA4->version.' is current · '.number_format($summaryA4->allocated_count).' final allocated results after NM/shifting.' : ($summaryA4->progress_message ?: 'Phase-2 processing is in progress.')));
 
-    $a5SummaryStale = $summaryA5 && (bool)$summaryA5->is_stale;
+    $a5SummaryStale = $summaryA5 && ((bool)$summaryA5->is_stale || $effectiveAllocationBlocked);
     $a5SummarySuperseded = $a5SummaryStale && str_contains((string)$summaryA5->stale_reason, 'historical/superseded');
     $a5SummaryStatus = !$summaryA5 ? 'NOT STARTED' : ($a5SummaryStale ? ($a5SummarySuperseded ? 'SUPERSEDED' : 'STALE / OUTDATED') : match((string)$summaryA5->status) {
         'finalized' => 'FINALIZED / REPORTING READY',
@@ -100,7 +103,7 @@
     });
     $a5SummaryDetail = !$summaryA5
         ? 'Run A5 after a current completed A4 to validate final eligibility, quota entitlement and cadre seat limits.'
-        : ($a5SummaryStale ? ($summaryA5->stale_reason ?: 'A4 or authoritative inputs changed; re-run A5.')
+        : ($a5SummaryStale ? ($summaryA5->stale_reason ?: $effectiveBlockReason)
             : ((string)$summaryA5->status === 'finalized'
                 ? 'A5 v'.$summaryA5->version.' is finalized · 100% candidate validity PASS and all cadre seat limits PASS.'
                 : ($summaryA5->progress_message ?: 'Final Allocation Validity Check is awaiting action.')));
