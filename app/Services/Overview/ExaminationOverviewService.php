@@ -90,10 +90,10 @@ final class ExaminationOverviewService
             $this->stateModule('Preliminary', 'preliminary.index', $preliminary, $this->preliminaryStats($preliminary, $preliminaryQuota)),
             $this->stateModule('Written', 'written.index', $written, $this->writtenStats($written, $writtenQuota)),
             $this->stateModule('Viva', 'viva.index', $viva, $this->vivaStats($viva, $vivaFlags)),
-            $this->stateModule('Circular', 'circular.index', $circular, (array) ($circular?->summary ?? [])),
-            $this->stateModule('Choice Validation', 'choice-validation.index', $choice, (array) ($choice?->summary ?? [])),
             $this->stateModule('Tabulation', 'tabulation.index', $tabulation, (array) ($tabulation?->summary ?? [])),
+            $this->stateModule('Circular', 'circular.index', $circular, (array) ($circular?->summary ?? [])),
             $this->stateModule('Merit', 'merit.index', $merit, (array) ($merit?->summary ?? [])),
+            $this->stateModule('Choice Validation', 'choice-validation.index', $choice, (array) ($choice?->summary ?? [])),
             $this->stateModule('Choice Optimization', 'choice-optimization.index', $optimization, $this->choiceOptimizationStats($optimization, $effectiveChoices)),
             $this->stateModule('Allocation', 'allocation.index', $allocation, $this->allocationStats($a6)),
         ];
