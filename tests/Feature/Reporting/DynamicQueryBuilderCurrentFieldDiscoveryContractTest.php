@@ -29,7 +29,7 @@ final class DynamicQueryBuilderCurrentFieldDiscoveryContractTest extends TestCas
 
         self::assertStringContainsString("resolve(['circular'])", $authority);
         self::assertStringContainsString("! empty(\$circular['circular_version'])", $authority);
-        self::assertStringContainsString("! empty(\$circular['allocation_a5_run_id'])", $authority);
+        self::assertStringContainsString("! empty(\$authority['allocation_a5_run_id'])", $authority);
         self::assertStringContainsString("in_array('circular', \$sources, true) && ! in_array('allocation', \$sources, true)", $compiler);
     }
 }

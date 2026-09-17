@@ -24,7 +24,7 @@ final class DynamicQueryBuilderFoundationContractTest extends TestCase
         $config = file_get_contents(config_path('dynamic-reports.php'));
         $controller = file_get_contents(app_path('Http/Controllers/Reporting/DynamicQueryBuilderController.php'));
 
-        self::assertStringContainsString('browserFields()', $registry);
+        self::assertStringContainsString('public function browserFields(?array $readySources = null)', $registry);
         self::assertStringNotContainsString("'expression' =>", substr($registry, strpos($registry, 'public function browserFields')));
         self::assertStringContainsString("'candidate.reg'", $config);
         self::assertStringContainsString("'candidate.birth_date'", $config);
