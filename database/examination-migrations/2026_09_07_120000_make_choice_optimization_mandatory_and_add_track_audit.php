@@ -44,10 +44,21 @@ return new class extends Migration
                 ->update(['status' => 'stale', 'is_stale' => true, 'stale_reason' => $reason, 'updated_at' => $now]);
         }
         if ($schema->hasTable('choice_optimization_processing_states')) {
-            DB::connection('exam')->table('choice_optimization_processing_states')->update([
-                'is_stale' => true, 'stale_reason' => $reason,
-                'finalized_by' => null, 'finalized_at' => null, 'updated_at' => $now,
-            ]);
+            // Upgrade-only invalidation: a pristine installation already has the singleton
+            // NOT STARTED row, but it has never produced Choice Optimization output and
+            // therefore must not become STALE merely because this migration is installed.
+            DB::connection('exam')->table('choice_optimization_processing_states')
+                ->where(function ($query): void {
+                    $query->where('status', '<>', 'not_started')
+                        ->orWhereNotNull('dataset_hash')
+                        ->orWhereNotNull('source_snapshot')
+                        ->orWhereNotNull('summary')
+                        ->orWhereNotNull('finalized_at');
+                })
+                ->update([
+                    'is_stale' => true, 'stale_reason' => $reason,
+                    'finalized_by' => null, 'finalized_at' => null, 'updated_at' => $now,
+                ]);
         }
         if ($schema->hasTable('allocation_processing_states')) {
             DB::connection('exam')->table('allocation_processing_states')
