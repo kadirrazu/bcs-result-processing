@@ -19,6 +19,7 @@ return [
             ['label' => 'Choice Optimization', 'route' => 'choice-optimization.index', 'patterns' => ['choice-optimization.*']],
             ['label' => 'Allocation', 'route' => 'allocation.index', 'patterns' => ['allocation.*']],
             ['label' => 'Reporting', 'route' => 'examination-reports.index', 'patterns' => ['examination-reports.*']],
+            ['label' => 'Non Cadre Processing', 'route' => 'non-cadre.index', 'patterns' => ['non-cadre.*'], 'requires_non_cadre_ready' => true],
         ],
     ],
 ];

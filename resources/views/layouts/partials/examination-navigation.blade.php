@@ -13,12 +13,20 @@
                                 $routeName = $item['route'] ?? null;
                                 $routeAvailable = is_string($routeName) && \Illuminate\Support\Facades\Route::has($routeName);
                                 $isActive = request()->routeIs($item['patterns'] ?? []);
+                                $moduleReady = true;
+                                if (($item['requires_non_cadre_ready'] ?? false) && $routeAvailable) {
+                                    try {
+                                        $moduleReady = (bool) (app(\App\Services\NonCadre\NonCadreReadinessService::class)->inspect()['ready'] ?? false);
+                                    } catch (\Throwable) {
+                                        $moduleReady = false;
+                                    }
+                                }
                             @endphp
                             <li class="nav-item {{ $isActive ? 'active' : '' }}">
-                                @if ($routeAvailable)
+                                @if ($routeAvailable && $moduleReady)
                                     <a class="nav-link" href="{{ route($routeName) }}"><span class="nav-link-title text-nowrap">{{ $item['label'] }}</span></a>
                                 @else
-                                    <span class="nav-link disabled" aria-disabled="true" title="Module will be enabled when its route is added"><span class="nav-link-title text-nowrap">{{ $item['label'] }}</span></span>
+                                    <span class="nav-link disabled" aria-disabled="true" title="Module is unavailable until its required upstream authority is current"><span class="nav-link-title text-nowrap">{{ $item['label'] }}</span></span>
                                 @endif
                             </li>
                         @endforeach

@@ -35,6 +35,7 @@ Route::middleware('auth')->group(function () {
         require __DIR__.'/choice-optimization.php';
         require __DIR__.'/allocation.php';
         require __DIR__.'/reporting.php';
+        require __DIR__.'/non-cadre.php';
     });
 
 });
