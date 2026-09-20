@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'A5.5 — '.$status.' Candidate List')
+@section('title', 'A7 — '.$status.' Candidate List')
 
 @section('content')
 <style>
@@ -18,7 +18,7 @@
     <div class="container-xl">
         <div class="row align-items-center">
             <div class="col">
-                <div class="page-pretitle">A5.5 — Result Disposition / Publication Control</div>
+                <div class="page-pretitle">A7 — Result Disposition / Publication Control</div>
                 <h2 class="page-title">{{ $status }} Candidate List</h2>
                 <div class="text-secondary">
                     {{ $status === 'WITHHELD'
@@ -28,7 +28,7 @@
             </div>
             <div class="col-auto ms-auto d-flex gap-2 no-print">
                 <button type="button" class="btn btn-primary" onclick="window.print()">Print List</button>
-                <a class="btn btn-outline-secondary" href="{{ route('allocation.disposition.index') }}">Back to A5.5</a>
+                <a class="btn btn-outline-secondary" href="{{ route('allocation.disposition.index') }}">Back to A7</a>
             </div>
         </div>
     </div>

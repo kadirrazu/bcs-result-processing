@@ -33,6 +33,7 @@ use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalChoiceFinalizati
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalInputService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationUpstreamStaleService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationSettingsService;
+use App\Services\ChoiceOptimization\FinalAllocationReadyChoiceService;
 use App\Services\ChoiceValidation\ChoiceValidationFinalizedDatasetService;
 use App\Support\Examinations\ExaminationContext;
 use Illuminate\Http\JsonResponse;
@@ -49,6 +50,7 @@ final class ChoiceOptimizationController extends Controller
         ChoiceOptimizationUpstreamStaleService $upstreamStale,
         ChoiceValidationFinalizedDatasetService $finalizedChoices,
         ChoiceOptimizationHistoricalInputService $historicalInput,
+        FinalAllocationReadyChoiceService $finalAllocationReadyChoices,
     ): View
     {
         $setting = $settings->setting();
@@ -147,6 +149,7 @@ final class ChoiceOptimizationController extends Controller
             'processingBoardState' => $processingBoardState,
             'previousBcsRunAvailable' => $previousBcsRunAvailable,
             'googleFormRunAvailable' => $googleFormRunAvailable,
+            'manualAdjustmentSummary' => $finalAllocationReadyChoices->adjustmentSummary(),
         ]);
     }
 
@@ -1044,6 +1047,7 @@ final class ChoiceOptimizationController extends Controller
         ChoiceOptimizationSettingsService $settings,
         ChoiceValidationFinalizedDatasetService $finalizedChoices,
         ChoiceOptimizationHistoricalInputService $historicalInput,
+        FinalAllocationReadyChoiceService $finalAllocationReadyChoices,
     ): View {
         $this->assertOptimizationEnabled($settings);
 

@@ -4,11 +4,11 @@
     <div class="container-xl">
         <div class="row g-2 align-items-center">
             <div class="col">
-                <h2 class="page-title">A6 — In-depth Allocation Summary</h2>
+                <h2 class="page-title">A8 — In-depth Allocation Summary</h2>
                 <div class="text-secondary">Final seat utilization summary in Circular category/serial order from the current finalized A5-bound A4 seat ledger.</div>
             </div>
             <div class="col-auto ms-auto">
-                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 - Allocation Reporting &amp; Export</a>
+                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A8 — Allocation Reporting &amp; Export</a>
             </div>
         </div>
     </div>

@@ -19,7 +19,7 @@
 
 <div class="page-header"><div class="container-xl"><div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
     <div>
-        <h2 class="page-title">Allocation A4 — Phase-2 Seat Ledger · Run v{{ $a4Run->version }}</h2>
+        <h2 class="page-title">Allocation A5 — Phase-2 Seat Ledger · Run v{{ $a4Run->version }}</h2>
         <div class="text-secondary">Circular group/serial order. A3 Run v{{ $a4Run->phase1Run?->version }} remains immutable source evidence.</div>
     </div>
     <div class="d-flex gap-2 flex-wrap">

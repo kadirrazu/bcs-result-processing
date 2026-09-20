@@ -43,6 +43,6 @@ class AllocationA5FinalValidityCheckContractTest extends TestCase
         $this->assertStringContainsString('capacity_failed > 0', $service);
         $this->assertStringContainsString('staleA5ForNewA4', $stale);
         $this->assertStringContainsString('Reporting/Export remains BLOCKED', $view);
-        $this->assertStringContainsString('Finalize A5 — 100% PASS', $view);
+        $this->assertStringContainsString('Finalize A6 — 100% PASS', $view);
     }
 }

@@ -113,6 +113,22 @@ final class FinalAllocationReadyChoiceService
         return hash('sha256', $baseChoiceOptimizationHash.'|manual-adjustment|'.$this->adjustmentStateHash());
     }
 
+    /** @return array{total_candidates:int,adjusted_candidates:int,excluded_choices:int,unchanged_candidates:int} */
+    public function adjustmentSummary(): array
+    {
+        $totalCandidates = ChoiceOptimizationHistoricalChoice::query()->count();
+        $active = $this->activeExclusions();
+        $adjustedCandidates = $active->count();
+        $excludedChoices = $active->sum(fn (Collection $codes): int => $codes->count());
+
+        return [
+            'total_candidates' => $totalCandidates,
+            'adjusted_candidates' => $adjustedCandidates,
+            'excluded_choices' => $excludedChoices,
+            'unchanged_candidates' => max(0, $totalCandidates - $adjustedCandidates),
+        ];
+    }
+
     public function hasActiveAdjustments(): bool
     {
         return $this->activeExclusions()->isNotEmpty();

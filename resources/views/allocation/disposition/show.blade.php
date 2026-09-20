@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('content')
-<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">A5.5 — Candidate Publication Status</h2><div class="text-secondary">Reg: {{ $registration->reg }} · {{ $registration->name }}</div></div><div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.disposition.index') }}">Back to A5.5</a></div></div></div></div>
+<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">A7 — Candidate Publication Status</h2><div class="text-secondary">Reg: {{ $registration->reg }} · {{ $registration->name }}</div></div><div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.disposition.index') }}">Back to A7</a></div></div></div></div>
 <div class="page-body"><div class="container-xl">
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif

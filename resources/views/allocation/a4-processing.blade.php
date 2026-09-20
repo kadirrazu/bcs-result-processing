@@ -2,7 +2,7 @@
 @section('content')
 <div class="page-header"><div class="container-xl"><div class="d-flex justify-content-between align-items-center gap-3">
     <div>
-        <h2 class="page-title">Allocation A4 — Run v{{ $a4Run->version }}</h2>
+        <h2 class="page-title">Allocation A5 — Run v{{ $a4Run->version }}</h2>
         <div class="text-secondary">Dedicated NM + Shifting processing screen. Source A3 v{{ $a4Run->phase1Run?->version ?? '—' }} remains immutable.</div>
     </div>
     <div class="btn-list">

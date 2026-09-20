@@ -20,7 +20,7 @@ final class AllocationA4VisibilityImmutabilityHotfixContractTest extends TestCas
         $this->assertStringNotContainsString("AllocationSeatLedger::query()->where('allocation_run_id'", $service);
 
         $this->assertStringContainsString("'a4Runs' => AllocationA4Run::query()->with('phase1Run')", $controller);
-        $this->assertStringContainsString('A4 — Phase-2 NM + Shifting', $index);
+        $this->assertStringContainsString('A5 — Phase-2 NM + Shifting', $index);
         $this->assertStringContainsString("'Start Phase-2'", $index);
         $this->assertStringContainsString('View Phase-2 Result', $index);
         $this->assertStringContainsString('<th>NM</th><th>SHIFTED</th>', $index);

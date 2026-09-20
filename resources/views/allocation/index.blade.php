@@ -1,5 +1,6 @@
 @extends('layouts.app')
 @section('content')
+{{-- DISPLAY NUMBERING ONLY: A1 Settings, A2 Seat Breakup, A3 internal A2 Freeze, A4 internal A3 Phase-1, A5 internal A4 Phase-2, A6 internal A5 Integrity, A7 Disposition, A8 internal A6 Reporting. Routes/services/schema remain unchanged. --}}
 <style>
 /* Landing-only alignment helpers: preserve Status/Hash/Action readability while centering numeric/value columns. */
 #allocation-seat-breakup-card tbody td:nth-child(1),
@@ -61,7 +62,7 @@
     $seatSummaryClass = $summarySeat?->status === 'finalized' ? 'success' : ($summarySeat ? 'warning' : 'secondary');
     $seatSummaryDetail = $summarySeat?->status === 'finalized'
         ? 'Seat Breakup v'.$summarySeat->version.' is the current finalized capacity authority.'
-        : ($summarySeat ? 'Seat Breakup v'.$summarySeat->version.' requires finalization before A2.' : 'Generate/upload and finalize the Circular-authoritative Seat Breakup.');
+        : ($summarySeat ? 'Seat Breakup v'.$summarySeat->version.' requires finalization before A3.' : 'Generate/upload and finalize the Circular-authoritative Seat Breakup.');
 
     $a1SummaryReady = (bool)($settingsInfo['matches_frozen'] ?? false);
     $a1SummaryStatus = $a1SummaryReady ? 'FROZEN & CURRENT' : 'FREEZE REQUIRED';
@@ -117,35 +118,19 @@
         <div class="ms-auto text-end"><span class="badge bg-{{ $readiness['ready'] ? 'success' : 'danger' }}-lt">PRE-RUN GATE {{ $readiness['ready'] ? 'READY' : 'BLOCKED' }}</span></div>
     </div>
     <div class="card-body py-2">
-        <div class="summary-row"><div class="summary-name">Seat Breakup</div><div class="summary-detail">{{ $seatSummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $seatSummaryClass }}-lt">{{ $seatSummaryStatus }}</span></div></div>
         <div class="summary-row"><div class="summary-name">A1 — Allocation Settings</div><div class="summary-detail">{{ $a1SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a1SummaryClass }}-lt">{{ $a1SummaryStatus }}</span></div></div>
-        <div class="summary-row"><div class="summary-name">A2 — Frozen Input</div><div class="summary-detail">{{ $a2SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a2SummaryClass }}-lt">{{ $a2SummaryStatus }}</span></div></div>
-        <div class="summary-row"><div class="summary-name">A3 — Phase-1</div><div class="summary-detail">{{ $a3SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a3SummaryClass }}-lt">{{ $a3SummaryStatus }}</span></div></div>
-        <div class="summary-row"><div class="summary-name">A4 — Phase-2</div><div class="summary-detail">{{ $a4SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a4SummaryClass }}-lt">{{ $a4SummaryStatus }}</span></div></div>
-        <div class="summary-row"><div class="summary-name">A5 — Final Validity Check</div><div class="summary-detail">{{ $a5SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a5SummaryClass }}-lt">{{ $a5SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A2 — Seat Breakup</div><div class="summary-detail">{{ $seatSummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $seatSummaryClass }}-lt">{{ $seatSummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A3 — Frozen Input</div><div class="summary-detail">{{ $a2SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a2SummaryClass }}-lt">{{ $a2SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A4 — Phase-1</div><div class="summary-detail">{{ $a3SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a3SummaryClass }}-lt">{{ $a3SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A5 — Phase-2</div><div class="summary-detail">{{ $a4SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a4SummaryClass }}-lt">{{ $a4SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A6 — Integrity & Finalization</div><div class="summary-detail">{{ $a5SummaryDetail }}</div><div class="summary-status"><span class="badge bg-{{ $a5SummaryClass }}-lt">{{ $a5SummaryStatus }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A7 — Result Disposition</div><div class="summary-detail">Publication control becomes available after A6 is finalized at 100% PASS.</div><div class="summary-status"><span class="badge bg-{{ ($a6Gate['ready'] ?? false) ? 'success' : 'secondary' }}-lt">{{ ($a6Gate['ready'] ?? false) ? 'READY' : 'BLOCKED' }}</span></div></div>
+        <div class="summary-row"><div class="summary-name">A8 — Reporting &amp; Export</div><div class="summary-detail">Final Allocation reporting/export from the current A6/A7 publication authority.</div><div class="summary-status"><span class="badge bg-{{ ($a6Gate['ready'] ?? false) ? 'success' : 'secondary' }}-lt">{{ ($a6Gate['ready'] ?? false) ? 'READY' : 'BLOCKED' }}</span></div></div>
     </div>
 </div>
-<div class="card mb-3" id="allocation-seat-breakup-card">
-    <div class="card-header"><div><h3 class="card-title">Seat Breakup</h3><div class="card-subtitle">Initial Allocation preparation: generate, edit and validate the Circular-authoritative MQ/CFF/EM/PHC breakup before freezing A1/A2 inputs.</div></div></div>
-    <div class="card-body">
-        <div class="mb-2"><code>sl | cadre_code | total_post | mq | cff | em | phc</code></div>
-        <div class="small text-secondary">sl, cadre_code and total_post are copied from finalized Circular. For total_post 1-9, MQ must equal total_post and all other quotas must be zero.</div>
-        <form class="mt-3" method="POST" enctype="multipart/form-data" action="{{ route('allocation.seat-breakup.upload') }}">@csrf
-            <div class="d-flex gap-2 flex-wrap align-items-center">
-                <input class="form-control" style="max-width:440px" type="file" name="file" accept=".xlsx,.xls" required>
-                <button class="btn btn-primary">Validate Upload</button>
-                <a class="btn btn-outline-secondary" href="{{ route('allocation.seat-breakup.template') }}">Generate Excel</a>
-            </div>
-        </form>
-    </div>
-    @if($seatVersions->isNotEmpty())
-    <div class="table-responsive border-top"><table class="table table-vcenter mb-0"><thead><tr><th class="text-center">Version</th><th>Status</th><th class="text-center">Rows</th><th class="text-center">Total</th><th class="text-center">MQ</th><th class="text-center">CFF</th><th class="text-center">EM</th><th class="text-center">PHC</th><th>Hash</th><th></th></tr></thead><tbody>@foreach($seatVersions as $v)<tr><td>v{{ $v->version }}</td><td><span class="badge bg-{{ $v->status==='finalized'?'success':($v->status==='validated'?'azure':'secondary') }}-lt">{{ strtoupper($v->status) }}</span></td><td>{{ $v->total_rows }}</td><td>{{ $v->total_posts }}</td><td>{{ $v->mq_posts }}</td><td>{{ $v->cff_posts }}</td><td>{{ $v->em_posts }}</td><td>{{ $v->phc_posts }}</td><td class="small text-break" style="max-width:220px"><code>{{ $v->dataset_hash ?: '—' }}</code></td><td><div class="btn-list flex-nowrap"><a class="btn btn-sm btn-outline-primary" href="{{ route('allocation.seat-breakup.show',$v) }}">View Data</a><a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.seat-breakup.pdf',$v) }}">PDF</a>@if($v->status==='validated')<form method="POST" action="{{ route('allocation.seat-breakup.finalize',$v) }}">@csrf<button class="btn btn-sm btn-success">Finalize / Freeze</button></form>@endif</div></td></tr>@endforeach</tbody></table></div>
-    @endif
-</div>
-
 <div class="card mb-3" id="allocation-settings-card">
     <div class="card-header">
-        <div><h3 class="card-title">A1 — Allocation Settings</h3><div class="card-subtitle">Read-only operational settings. Configure in <code>{{ $settingsInfo['config_file'] }}</code>, then freeze the current configuration before A2.</div></div>
+        <div><h3 class="card-title">A1 — Allocation Settings</h3><div class="card-subtitle">First Allocation preparation step. Configure in <code>{{ $settingsInfo['config_file'] }}</code>, then freeze the current configuration before generating/uploading Seat Breakup and before A3.</div></div>
         <div class="ms-auto text-end">
             <div class="small text-secondary mb-1">Configuration Status</div>
             <span class="badge bg-{{ $settingsInfo['matches_frozen'] ? 'success' : 'warning' }}-lt">{{ $settingsInfo['matches_frozen'] ? 'FROZEN & CURRENT' : 'REVIEW / FREEZE REQUIRED' }}</span>
@@ -162,6 +147,28 @@
     </div>
     <div class="card-footer"><form method="POST" action="{{ route('allocation.settings.finalize') }}">@csrf<button class="btn btn-primary">{{ $settingsInfo['matches_frozen'] ? 'Re-freeze Current Config' : 'Finalize / Freeze Current Config' }}</button></form></div>
 </div>
+
+<div class="card mb-3" id="allocation-seat-breakup-card">
+    <div class="card-header"><div><h3 class="card-title">A2 — Seat Breakup</h3><div class="card-subtitle">After A1 is frozen/current, generate, edit and validate the Circular-authoritative MQ/CFF/EM/PHC breakup. Seat Breakup cannot be generated or uploaded before A1 Allocation Settings is frozen.</div></div></div>
+    <div class="card-body">
+        @if(!($settingsInfo['matches_frozen'] ?? false))
+            <div class="alert alert-warning py-2"><strong>A1 required first.</strong> Freeze the current Allocation Settings above before generating or uploading Seat Breakup.</div>
+        @endif
+        <div class="mb-2"><code>sl | cadre_code | total_post | mq | cff | em | phc</code></div>
+        <div class="small text-secondary">sl, cadre_code and total_post are copied from finalized Circular. For total_post 1-9, MQ must equal total_post and all other quotas must be zero.</div>
+        <form class="mt-3" method="POST" enctype="multipart/form-data" action="{{ route('allocation.seat-breakup.upload') }}">@csrf
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <input class="form-control" style="max-width:440px" type="file" name="file" accept=".xlsx,.xls" required>
+                <button class="btn btn-primary" {{ ($settingsInfo['matches_frozen'] ?? false) ? '' : 'disabled' }}>Validate Upload</button>
+                @if($settingsInfo['matches_frozen'] ?? false)<a class="btn btn-outline-secondary" href="{{ route('allocation.seat-breakup.template') }}">Generate Excel</a>@else<span class="btn btn-outline-secondary disabled" aria-disabled="true">Generate Excel</span>@endif
+            </div>
+        </form>
+    </div>
+    @if($seatVersions->isNotEmpty())
+    <div class="table-responsive border-top"><table class="table table-vcenter mb-0"><thead><tr><th class="text-center">Version</th><th>Status</th><th class="text-center">Rows</th><th class="text-center">Total</th><th class="text-center">MQ</th><th class="text-center">CFF</th><th class="text-center">EM</th><th class="text-center">PHC</th><th>Hash</th><th></th></tr></thead><tbody>@foreach($seatVersions as $v)<tr><td>v{{ $v->version }}</td><td><span class="badge bg-{{ $v->status==='finalized'?'success':($v->status==='validated'?'azure':'secondary') }}-lt">{{ strtoupper($v->status) }}</span></td><td>{{ $v->total_rows }}</td><td>{{ $v->total_posts }}</td><td>{{ $v->mq_posts }}</td><td>{{ $v->cff_posts }}</td><td>{{ $v->em_posts }}</td><td>{{ $v->phc_posts }}</td><td class="small text-break" style="max-width:220px"><code>{{ $v->dataset_hash ?: '—' }}</code></td><td><div class="btn-list flex-nowrap"><a class="btn btn-sm btn-outline-primary" href="{{ route('allocation.seat-breakup.show',$v) }}">View Data</a><a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.seat-breakup.pdf',$v) }}">PDF</a>@if($v->status==='validated')<form method="POST" action="{{ route('allocation.seat-breakup.finalize',$v) }}">@csrf<button class="btn btn-sm btn-success">Finalize / Freeze</button></form>@endif</div></td></tr>@endforeach</tbody></table></div>
+    @endif
+</div>
+
 @php
     $hasCurrentFreeze = $inputFreezes->contains(fn($f) => $f->status === 'frozen');
     $hasPriorFreeze = $inputFreezes->isNotEmpty();
@@ -171,7 +178,7 @@
 <div class="card mb-3" id="allocation-input-freeze-card">
     <div class="card-header">
         <div>
-            <h3 class="card-title">A2 — Frozen Allocation Input & Deterministic Queues</h3>
+            <h3 class="card-title">A3 — Frozen Allocation Input & Deterministic Queues</h3>
             <div class="card-subtitle">Strictly verify direct authoritative inputs, freeze an immutable fingerprint, then build choice-only merit queues. No allocation decision is made in this step.</div>
         </div>
     </div>
@@ -235,7 +242,7 @@
 <div class="card mb-3" id="allocation-phase1-card">
     <div class="card-header">
         <div>
-            <h3 class="card-title">A3 — Phase-1 MQ + Quota Allocation</h3>
+            <h3 class="card-title">A4 — Phase-1 MQ + Quota Allocation</h3>
             <div class="card-subtitle">Deterministic deferred allocation against frozen MQ/CFF/EM/PHC capacity. Phase-1 reaches a fixed point; quota-vacancy conversion and NM/shifting remain reserved for A4.</div>
         </div>
     </div>
@@ -319,7 +326,7 @@
 <div class="card mb-3" id="allocation-a4-card">
     <div class="card-header">
         <div>
-            <h3 class="card-title">A4 — Phase-2 NM + Shifting</h3>
+            <h3 class="card-title">A5 — Phase-2 NM + Shifting</h3>
             <div class="card-subtitle">Consumes an immutable completed A3 run. Vacant/released quota capacity becomes pure merit/NM capacity; A3 evidence remains unchanged.</div>
         </div>
     </div>
@@ -420,7 +427,7 @@
 <div class="card mb-3" id="allocation-a5-card">
     <div class="card-header">
         <div>
-            <h3 class="card-title">A5 — Final Allocation Validity Check</h3>
+            <h3 class="card-title">A6 — Integrity & Finalization</h3>
             <div class="card-subtitle">Read-only assurance gate over final A4 allocation: Circular bachelor/PRS requirements, technical eligibility, quota entitlement, and final cadre seat-limit validation.</div>
         </div>
     </div>
@@ -428,25 +435,25 @@
         <div class="row g-3 align-items-center">
             <div class="col-md-8">
                 @if($latestA5 && (bool)$latestA5->is_stale)
-                    <div class="alert alert-warning py-2 px-3 mb-2"><strong>A5 STALE / OUTDATED.</strong> {{ $latestA5->stale_reason ?: 'A4 or authoritative Allocation inputs changed. Re-run A5.' }}</div>
+                    <div class="alert alert-warning py-2 px-3 mb-2"><strong>A6 STALE / OUTDATED.</strong> {{ $latestA5->stale_reason ?: 'A4 or authoritative Allocation inputs changed. Re-run A6.' }}</div>
                 @endif
                 @if($latestCurrentA4)
-                    <div>Current A4 source: <strong>v{{ $latestCurrentA4->version }}</strong> · Final Allocated {{ number_format($latestCurrentA4->allocated_count) }}</div>
-                    <div class="small text-secondary mt-1">A5 never changes A4 allocation. Any mismatch blocks downstream Reporting/Export and must be corrected upstream.</div>
+                    <div>Current A5 source: <strong>v{{ $latestCurrentA4->version }}</strong> · Final Allocated {{ number_format($latestCurrentA4->allocated_count) }}</div>
+                    <div class="small text-secondary mt-1">A6 never changes A5 allocation. Any mismatch blocks downstream Reporting/Export and must be corrected upstream.</div>
                 @else
-                    <div class="text-secondary">Complete a current, non-stale A4 Phase-2 result before running A5.</div>
+                    <div class="text-secondary">Complete a current, non-stale A5 Phase-2 result before running A6.</div>
                 @endif
             </div>
             <div class="col-md-4 text-md-end">
                 @if($a5Busy)
-                    <a class="btn btn-sm btn-warning text-uppercase" href="{{ route('allocation.a5.processing',$latestA5) }}">View A5 Processing</a>
+                    <a class="btn btn-sm btn-warning text-uppercase" href="{{ route('allocation.a5.processing',$latestA5) }}">View A6 Processing</a>
                 @elseif($latestCurrentA4)
                     <div class="d-inline-flex gap-2 align-items-center flex-nowrap">
                         <form method="POST" action="{{ route('allocation.a5.start') }}" class="m-0">@csrf
-                            <button class="btn btn-sm btn-primary text-uppercase text-nowrap" type="submit">{{ $latestA5 ? 'Re-run A5 Check' : 'Run A5 Check' }}</button>
+                            <button class="btn btn-sm btn-primary text-uppercase text-nowrap" type="submit">{{ $latestA5 ? 'Re-run A6 Check' : 'Run A6 Check' }}</button>
                         </form>
                         @if($latestA5 && in_array((string)$latestA5->status,['validated_ok','validated_failed','finalized'],true))
-                            <a class="btn btn-sm btn-success text-uppercase text-nowrap" href="{{ route('allocation.a5.show',$latestA5) }}">View A5 Report</a>
+                            <a class="btn btn-sm btn-success text-uppercase text-nowrap" href="{{ route('allocation.a5.show',$latestA5) }}">View A6 Report</a>
                         @endif
                     </div>
                 @endif
@@ -464,12 +471,12 @@
     @if($a5Runs->isNotEmpty())
     <div class="table-responsive">
         <table class="table table-vcenter mb-0">
-            <thead><tr><th class="text-center">Run</th><th class="text-center">A4 Source</th><th>Status</th><th class="text-center">Allocated</th><th class="text-center">Candidate Fail</th><th class="text-center">Capacity Fail</th><th></th></tr></thead>
+            <thead><tr><th class="text-center">Run</th><th class="text-center">A5 Source</th><th>Status</th><th class="text-center">Allocated</th><th class="text-center">Candidate Fail</th><th class="text-center">Capacity Fail</th><th></th></tr></thead>
             <tbody>
             @foreach($a5Runs as $a5)
                 <tr>
                     <td class="text-center">v{{ $a5->version }}</td>
-                    <td class="text-center">A4 v{{ $a5->a4Run?->version ?? '—' }}</td>
+                    <td class="text-center">A5 v{{ $a5->a4Run?->version ?? '—' }}</td>
                     <td>
                         @if((bool)$a5->is_stale)
                             @if(str_contains((string)$a5->stale_reason, 'historical/superseded'))
@@ -484,7 +491,7 @@
                     <td class="text-center">{{ number_format($a5->total_allocated) }}</td>
                     <td class="text-center">{{ number_format($a5->candidate_failed) }}</td>
                     <td class="text-center">{{ number_format($a5->capacity_failed) }}</td>
-                    <td class="text-end">@if(in_array((string)$a5->status,['validated_ok','validated_failed','finalized'],true))<a class="btn btn-sm btn-secondary" href="{{ route('allocation.a5.show',$a5) }}">View A5 Report</a>@elseif(in_array((string)$a5->status,['queued','running','failed'],true))<a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.a5.processing',$a5) }}">View A5 Run</a>@endif</td>
+                    <td class="text-end">@if(in_array((string)$a5->status,['validated_ok','validated_failed','finalized'],true))<a class="btn btn-sm btn-secondary" href="{{ route('allocation.a5.show',$a5) }}">View A6 Report</a>@elseif(in_array((string)$a5->status,['queued','running','failed'],true))<a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.a5.processing',$a5) }}">View A6 Run</a>@endif</td>
                 </tr>
             @endforeach
             </tbody>
@@ -672,11 +679,11 @@
 })();
 </script>
 
-{{-- A5.5 is a publication-control layer over finalized A5. It never releases seats or mutates Allocation evidence. --}}
+{{-- A7 display stage uses the existing disposition implementation over the finalized internal A5 authority; no routes/services/schema are renamed. --}}
 <div class="container-xl">
 <div class="card mt-3 mb-3" id="allocation-a55-card">
     <div class="card-header">
-        <div><h3 class="card-title">A5.5 — Result Disposition / Publication Control</h3><div class="card-subtitle">Operator-controlled ACTIVE / WITHHELD / CANCELLED publication status after final Allocation. No seat release and no reallocation.</div></div>
+        <div><h3 class="card-title">A7 — Result Disposition / Publication Control</h3><div class="card-subtitle">Operator-controlled ACTIVE / WITHHELD / CANCELLED publication status after final Allocation. No seat release and no reallocation.</div></div>
         <div class="ms-auto"><span class="badge bg-{{ ($a6Gate['ready'] ?? false) ? 'success' : 'secondary' }}-lt">{{ ($a6Gate['ready'] ?? false) ? 'ACTIVE / READY' : 'INACTIVE / BLOCKED' }}</span></div>
     </div>
     <div class="card-body">
@@ -685,7 +692,7 @@
                 <div class="col-lg">
                     <div class="table-responsive">
                         <table class="table table-sm table-vcenter text-center mb-0">
-                            <thead><tr><th>A5 Allocated</th><th>Active</th><th>Withheld</th><th>Cancelled</th></tr></thead>
+                            <thead><tr><th>A6 Allocated</th><th>Active</th><th>Withheld</th><th>Cancelled</th></tr></thead>
                             <tbody><tr>
                                 <td><span class="fw-bold text-blue">{{ number_format($a6Gate['a5']?->total_allocated ?? 0) }}</span></td>
                                 <td><span class="fw-bold text-success">{{ number_format($a55Snapshot['active']) }}</span></td>
@@ -696,29 +703,29 @@
                     </div>
                 </div>
                 <div class="col-lg-auto">
-                    <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.disposition.index') : '#' }}">Open A5.5 Publication Control</a>
+                    <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.disposition.index') : '#' }}">Open A7 Publication Control</a>
                 </div>
             </div>
         @else
             <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
-                <div class="text-secondary">Finalize a current 100% PASS A5 result before publication disposition control.</div>
-                <a class="btn btn-primary disabled" href="#">Open A5.5 Publication Control</a>
+                <div class="text-secondary">Finalize a current 100% PASS A6 result before publication disposition control.</div>
+                <a class="btn btn-primary disabled" href="#">Open A7 Publication Control</a>
             </div>
         @endif
     </div>
 </div>
 </div>
 
-{{-- A6 is a read-only downstream publishing layer. It stays visibly locked until A1-A5 are current and A5 is finalized at 100% PASS. --}}
+{{-- A8 display stage uses the existing A6 reporting implementation; internal workflow authority and readiness logic remain unchanged. --}}
 <div class="container-xl">
 <div class="card mt-3 mb-3" id="allocation-a6-card">
     <div class="card-header">
-        <div><h3 class="card-title">A6 - Allocation Reporting &amp; Export</h3><div class="card-subtitle">Candidate reporting, cadre drill-down, TXT/XLSX export and DOCX publishing from the final validated Allocation result.</div></div>
+        <div><h3 class="card-title">A8 — Allocation Reporting &amp; Export</h3><div class="card-subtitle">Candidate reporting, cadre drill-down, TXT/XLSX export and DOCX publishing from the final validated Allocation result.</div></div>
         <div class="ms-auto"><span class="badge bg-{{ ($a6Gate['ready'] ?? false) ? 'success' : 'secondary' }}-lt">{{ ($a6Gate['ready'] ?? false) ? 'ACTIVE / READY' : 'INACTIVE / BLOCKED' }}</span></div>
     </div>
     <div class="card-body d-flex align-items-center justify-content-between gap-3 flex-wrap">
-        <div class="text-secondary">@if($a6Gate['ready'] ?? false)A5 v{{ $a6Gate['a5_version'] }} finalized 100% PASS · A4 v{{ $a6Gate['a4_version'] }} · Circular v{{ $a6Gate['circular_version'] }}@else{{ $a6Gate['reason'] ?? 'Complete and finalize A1-A5 before Reporting & Export.' }}@endif</div>
-        <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.a6.index') : '#' }}">Open A6 - Allocation Reporting &amp; Export</a>
+        <div class="text-secondary">@if($a6Gate['ready'] ?? false)A6 v{{ $a6Gate['a5_version'] }} finalized 100% PASS · A5 v{{ $a6Gate['a4_version'] }} · Circular v{{ $a6Gate['circular_version'] }}@else{{ $a6Gate['reason'] ?? 'Complete and finalize A1-A7 before Reporting & Export.' }}@endif</div>
+        <a class="btn btn-primary {{ ($a6Gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($a6Gate['ready'] ?? false) ? route('allocation.a6.index') : '#' }}">Open A8 — Allocation Reporting &amp; Export</a>
     </div>
 </div>
 </div>

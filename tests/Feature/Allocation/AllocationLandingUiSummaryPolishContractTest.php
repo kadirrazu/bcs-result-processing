@@ -15,9 +15,16 @@ class AllocationLandingUiSummaryPolishContractTest extends TestCase
         $this->assertStringContainsString('Allocation Processing Summary', $view);
         $this->assertStringContainsString('Seat Breakup</div><div class="summary-detail"', $view);
         $this->assertStringContainsString('A1 — Allocation Settings</div><div class="summary-detail"', $view);
-        $this->assertStringContainsString('A2 — Frozen Input</div><div class="summary-detail"', $view);
-        $this->assertStringContainsString('A3 — Phase-1</div><div class="summary-detail"', $view);
-        $this->assertStringContainsString('A4 — Phase-2</div><div class="summary-detail"', $view);
+        $this->assertStringContainsString('A2 — Seat Breakup</div><div class="summary-detail"', $view);
+        $this->assertLessThan(strpos($view, 'Seat Breakup</div><div class="summary-detail"'), strpos($view, 'A1 — Allocation Settings</div><div class="summary-detail"'));
+        $this->assertLessThan(strpos($view, 'id="allocation-seat-breakup-card"'), strpos($view, 'id="allocation-settings-card"'));
+        $this->assertStringContainsString('A1 required first.', $view);
+        $this->assertStringContainsString('A3 — Frozen Input</div><div class="summary-detail"', $view);
+        $this->assertStringContainsString('A4 — Phase-1</div><div class="summary-detail"', $view);
+        $this->assertStringContainsString('A5 — Phase-2</div><div class="summary-detail"', $view);
+        $this->assertStringContainsString('A6 — Integrity & Finalization</div><div class="summary-detail"', $view);
+        $this->assertStringContainsString('A7 — Result Disposition</div><div class="summary-detail"', $view);
+        $this->assertStringContainsString('A8 — Reporting &amp; Export</div><div class="summary-detail"', $view);
         $this->assertStringNotContainsString('<h3 class="card-title">Processing State</h3>', $view);
     }
 

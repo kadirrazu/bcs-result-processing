@@ -18,9 +18,9 @@ final class AllocationA3A4UiConsistencyPolishContractTest extends TestCase
         $a2 = strpos($index, 'id="allocation-input-freeze-card"');
         $a3Card = strpos($index, 'id="allocation-phase1-card"');
         $a4Card = strpos($index, 'id="allocation-a4-card"');
-        $this->assertTrue($seat < $a1 && $a1 < $a2 && $a2 < $a3Card && $a3Card < $a4Card);
+        $this->assertTrue($a1 < $seat && $seat < $a2 && $a2 < $a3Card && $a3Card < $a4Card);
         $this->assertStringContainsString('A1 — Allocation Settings', $index);
-        $this->assertStringContainsString('A4 — Phase-2 NM + Shifting', $index);
+        $this->assertStringContainsString('A5 — Phase-2 NM + Shifting', $index);
         $this->assertStringContainsString('View Phase-1 Result', $index);
         $this->assertStringContainsString('View Phase-2 Result', $index);
         $this->assertStringContainsString('btn btn-sm btn-success', $index);

@@ -430,6 +430,13 @@
                 <div class="flex-fill">
                     <h3 class="mb-1">Manual Adjustment of Allocation Ready Choice <span class="badge bg-secondary-lt">OPTIONAL</span></h3>
                     <div class="text-secondary">Optional non-destructive final layer. If unused for a candidate, Allocation Ready Choice remains unchanged. Existing choices may only be excluded/restored with audited reasons; add/reorder is not allowed.</div>
+                    <div class="row g-2 mt-2">
+                        <div class="col-6 col-md-3"><div class="border rounded p-2 h-100"><div class="small text-secondary">Allocation Ready Candidates</div><div class="h3 mb-0">{{ number_format($manualAdjustmentSummary['total_candidates']) }}</div></div></div>
+                        <div class="col-6 col-md-3"><div class="border rounded p-2 h-100"><div class="small text-secondary">Adjusted Candidates</div><div class="h3 mb-0">{{ number_format($manualAdjustmentSummary['adjusted_candidates']) }}</div></div></div>
+                        <div class="col-6 col-md-3"><div class="border rounded p-2 h-100"><div class="small text-secondary">Choices Excluded</div><div class="h3 mb-0">{{ number_format($manualAdjustmentSummary['excluded_choices']) }}</div></div></div>
+                        <div class="col-6 col-md-3"><div class="border rounded p-2 h-100"><div class="small text-secondary">Unchanged Candidates</div><div class="h3 mb-0">{{ number_format($manualAdjustmentSummary['unchanged_candidates']) }}</div></div></div>
+                    </div>
+                    <div class="small text-secondary mt-2">Counts reflect the current effective manual-adjustment state. Restored choices are not counted as current exclusions; their audit history remains preserved.</div>
                 </div>
                 <div><a class="btn btn-outline-warning" href="{{ route('choice-optimization.manual-adjustment.index') }}">Open Manual Adjustment</a></div>
             </div>

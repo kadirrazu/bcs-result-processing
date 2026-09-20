@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('content')
-<div class="page-header"><div class="container-xl"><div class="d-flex justify-content-between align-items-center"><div><h2 class="page-title">A5 — Final Allocation Validity Check</h2><div class="text-secondary">Run v{{ $a5Run->version }} · Source A4 v{{ $a5Run->a4Run?->version }}</div></div><a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a></div></div></div>
+<div class="page-header"><div class="container-xl"><div class="d-flex justify-content-between align-items-center"><div><h2 class="page-title">A6 — Integrity & Finalization</h2><div class="text-secondary">Run v{{ $a5Run->version }} · Source A5 v{{ $a5Run->a4Run?->version }}</div></div><a class="btn btn-sm btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a></div></div></div>
 <div class="page-body"><div class="container-xl"><div class="card" id="a5-processing" data-status-url="{{ route('allocation.a5.status',$a5Run) }}"><div class="card-body">
 <div class="d-flex justify-content-between mb-2"><strong id="a5-phase">{{ strtoupper(str_replace('_',' ',$a5Run->phase)) }}</strong><span><span id="a5-percent">{{ $a5Run->progress_percent }}</span>%</span></div>
 <div class="progress"><div id="a5-bar" class="progress-bar" style="width:{{ $a5Run->progress_percent }}%"></div></div>

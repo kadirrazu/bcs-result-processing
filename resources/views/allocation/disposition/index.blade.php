@@ -1,13 +1,13 @@
 @extends('layouts.app')
 @section('content')
-<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">A5.5 — Result Disposition / Publication Control</h2><div class="text-secondary">Post-allocation publication control. WITHHELD/CANCELLED never releases a seat and never reruns Allocation.</div></div><div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a></div></div></div></div>
+<div class="page-header"><div class="container-xl"><div class="row align-items-center"><div class="col"><h2 class="page-title">A7 — Result Disposition / Publication Control</h2><div class="text-secondary">Post-allocation publication control. WITHHELD/CANCELLED never releases a seat and never reruns Allocation.</div></div><div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a></div></div></div></div>
 <div class="page-body"><div class="container-xl">
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 <div class="card mb-3">
 <div class="table-responsive">
 <table class="table table-vcenter card-table text-center mb-0">
-<thead><tr><th>A5 Allocated</th><th>Active</th><th>Withheld</th><th>Cancelled</th></tr></thead>
+<thead><tr><th>A6 Allocated</th><th>Active</th><th>Withheld</th><th>Cancelled</th></tr></thead>
 <tbody><tr>
 <td><span class="fs-2 fw-bold text-blue">{{ number_format($a5->total_allocated) }}</span></td>
 <td><span class="fs-2 fw-bold text-success">{{ number_format($snapshot['active']) }}</span></td>

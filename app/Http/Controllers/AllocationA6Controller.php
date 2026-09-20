@@ -477,7 +477,7 @@ final class AllocationA6Controller extends Controller
         abort_if(
             (string) ($snapshot['disposition_hash'] ?? '') === '' || ! hash_equals((string) $snapshot['disposition_hash'], (string) $currentDisposition['hash']),
             409,
-            'This A6 export is OUTDATED because A5.5 publication status changed. Regenerate the report before download.'
+            'This A8 export is OUTDATED because A7 publication status changed. Regenerate the report before download.'
         );
         abort_unless($exportRun->file_path && File::isFile($exportRun->file_path), 404, 'Generated export file is missing.');
 

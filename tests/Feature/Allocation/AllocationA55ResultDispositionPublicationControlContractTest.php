@@ -24,7 +24,7 @@ final class AllocationA55ResultDispositionPublicationControlContractTest extends
         self::assertStringNotContainsString('AllocationA4SeatLedger', $service);
         self::assertStringNotContainsString('AllocationSeatLedger', $service);
         self::assertStringContainsString("Route::get('/a5-5'", $routes);
-        self::assertStringContainsString('A5.5 — Result Disposition / Publication Control', $view);
+        self::assertStringContainsString('A7 — Result Disposition / Publication Control', $view);
         self::assertStringContainsString('name="cadre_code"', $view);
         self::assertStringContainsString('All Cadres', $view);
         self::assertStringContainsString('text-warning', $view);
@@ -34,7 +34,7 @@ final class AllocationA55ResultDispositionPublicationControlContractTest extends
         $landing = file_get_contents(resource_path('views/allocation/index.blade.php'));
         self::assertStringContainsString("request->query('cadre_code', 0)", $controller);
         self::assertStringContainsString("where('allocation_a4_results.cadre_code', \$cadreCode)", $controller);
-        self::assertStringContainsString('A5 Allocated', $landing);
+        self::assertStringContainsString('A6 Allocated', $landing);
         self::assertStringContainsString('text-blue', $landing);
         self::assertStringContainsString('text-success', $landing);
         self::assertStringContainsString('text-warning', $landing);
@@ -74,8 +74,8 @@ final class AllocationA55ResultDispositionPublicationControlContractTest extends
 
         self::assertStringContainsString("'disposition_revision' => \$disposition['revision']", $controller);
         self::assertStringContainsString("'disposition_hash' => \$disposition['hash']", $controller);
-        self::assertStringContainsString('This A6 export is OUTDATED because A5.5 publication status changed.', $controller);
-        self::assertStringContainsString('A5.5 publication disposition changed after export was queued.', $job);
+        self::assertStringContainsString('This A8 export is OUTDATED because A7 publication status changed.', $controller);
+        self::assertStringContainsString('A7 publication disposition changed after export was queued.', $job);
         self::assertStringContainsString("'withheld_count'", $summary);
         self::assertStringContainsString("'cancelled_count'", $summary);
         self::assertStringContainsString("'published_active'", $summary);

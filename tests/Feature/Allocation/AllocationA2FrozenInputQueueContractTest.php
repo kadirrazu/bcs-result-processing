@@ -29,6 +29,8 @@ final class AllocationA2FrozenInputQueueContractTest extends TestCase
         }
         self::assertStringContainsString('DIRECT_INPUT_CHANGED_DURING_FREEZE', $service);
         self::assertStringContainsString('REGISTRATION_INPUT_HASH_MISMATCH', $service);
+        self::assertStringContainsString('RegistrationStatus::Active->value', $service);
+        self::assertStringContainsString("'registration_status'", $service);
         self::assertStringContainsString('ALLOCATION_QUEUE_HASH_MISMATCH', $service);
 
         // Choice Optimization is mandatory. A2 consumes the optional Final Allocation Ready Choice

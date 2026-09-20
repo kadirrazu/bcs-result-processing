@@ -55,7 +55,7 @@ final class ProcessAllocationVerificationPdfExport implements ShouldQueue
 
             $booklet = $run->module === 'cadre_booklet';
 
-            $this->update($run, 'running', 'VERIFYING_SOURCE', 5, 'Confirming current finalized A5 and A5.5 publication state.');
+            $this->update($run, 'running', 'VERIFYING_SOURCE', 5, 'Confirming current finalized A6 and A7 publication state.');
 
             $a5 = $readiness->requireReadyStrict();
             $this->assertFrozenSource($run, $a5, $dispositions);
@@ -186,7 +186,7 @@ final class ProcessAllocationVerificationPdfExport implements ShouldQueue
         $expectedDisposition = (string) ($snapshot['disposition_hash'] ?? '');
 
         if ($expectedDisposition === '' || ! hash_equals($expectedDisposition, (string) $currentDisposition['hash'])) {
-            throw new RuntimeException('A5.5 publication status changed before verification PDF generation.');
+            throw new RuntimeException('A7 publication status changed before verification PDF generation.');
         }
     }
 

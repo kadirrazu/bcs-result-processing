@@ -32,7 +32,7 @@
 @if($outdated)
     <div class="alert alert-warning">
         <strong>OUTDATED:</strong>
-        A5/A5.5 publication authority changed after this PDF was generated. Regenerate the report.
+        A6/A7 publication authority changed after this PDF was generated. Regenerate the report.
     </div>
 @endif
 

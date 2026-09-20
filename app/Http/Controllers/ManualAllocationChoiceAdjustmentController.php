@@ -17,7 +17,7 @@ use Illuminate\View\View;
 
 final class ManualAllocationChoiceAdjustmentController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, FinalAllocationReadyChoiceService $finalChoices): View
     {
         $search = trim((string) $request->query('search', ''));
         $status = strtolower(trim((string) $request->query('status', 'all')));
@@ -46,9 +46,10 @@ final class ManualAllocationChoiceAdjustmentController extends Controller
 
         $rows = $query->orderBy('r.reg')->paginate(100)->withQueryString();
         $choiceCodeAbbrMap = $this->choiceCodeAbbrMap();
+        $manualAdjustmentSummary = $finalChoices->adjustmentSummary();
 
         return view('choice-optimization.manual-adjustment.index', compact(
-            'rows','search','status','adjustedIds','choiceCodeAbbrMap'
+            'rows','search','status','adjustedIds','choiceCodeAbbrMap','manualAdjustmentSummary'
         ));
     }
 
@@ -65,6 +66,7 @@ final class ManualAllocationChoiceAdjustmentController extends Controller
         $entries = CircularEntry::query()->where('version', $version)->whereIn('effective_code', $baseCodes)->get()->keyBy('effective_code');
         $history = ManualAllocationChoiceAdjustmentEvent::query()->where('registration_id', $registrationId)->orderByDesc('id')->get();
         $choiceCodeAbbrMap = $this->choiceCodeAbbrMap();
+        $manualAdjustmentSummary = $finalChoices->adjustmentSummary();
 
         return view('choice-optimization.manual-adjustment.show', compact('registration','choice','baseCodes','excluded','entries','history','choiceCodeAbbrMap'));
     }
@@ -96,6 +98,7 @@ final class ManualAllocationChoiceAdjustmentController extends Controller
         $rows = $query->orderBy('r.reg')->paginate(100)->withQueryString();
         $effectiveMap = $finalChoices->effectiveMap();
         $choiceCodeAbbrMap = $this->choiceCodeAbbrMap();
+        $manualAdjustmentSummary = $finalChoices->adjustmentSummary();
 
         return view('choice-optimization.final-allocation-ready-choice.index', compact(
             'rows','search','status','activeExclusions','effectiveMap','choiceCodeAbbrMap'
@@ -113,6 +116,7 @@ final class ManualAllocationChoiceAdjustmentController extends Controller
         $excludedCodes = $manualEvents->pluck('choice_code')->map(fn ($v) => (int) $v)->all();
         $finalCodes = array_values(array_filter($baseCodes, fn ($code) => ! in_array((int) $code, $excludedCodes, true)));
         $choiceCodeAbbrMap = $this->choiceCodeAbbrMap();
+        $manualAdjustmentSummary = $finalChoices->adjustmentSummary();
 
         return view('choice-optimization.final-allocation-ready-choice.show', compact(
             'registration','choice','baseCodes','manualEvents','excludedCodes','finalCodes','choiceCodeAbbrMap'

@@ -20,10 +20,10 @@
         <div class="card h-100">
             <div class="card-body">
                 <div class="subheader">Allocation Reporting</div>
-                <h3 class="card-title mt-2">A6 - Allocation Reporting &amp; Export</h3>
+                <h3 class="card-title mt-2">A8 — Allocation Reporting &amp; Export</h3>
                 <p class="text-secondary">Existing finalized Allocation reporting, candidate/cadre drill-down and TXT/XLSX/DOCX/DBF/PDF export capabilities.</p>
             </div>
-            <div class="card-footer"><a class="btn btn-primary w-100 {{ ($gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($gate['ready'] ?? false) ? route('allocation.a6.index') : '#' }}">Open A6 - Allocation Reporting &amp; Export</a></div>
+            <div class="card-footer"><a class="btn btn-primary w-100 {{ ($gate['ready'] ?? false) ? '' : 'disabled' }}" href="{{ ($gate['ready'] ?? false) ? route('allocation.a6.index') : '#' }}">Open A8 — Allocation Reporting &amp; Export</a></div>
         </div>
     </div>
     <div class="col-lg-4">

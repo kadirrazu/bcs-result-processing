@@ -251,7 +251,7 @@ final class ProcessAllocationA6Export implements ShouldQueue
     {
         $snapshot = (array) $run->source_snapshot;
         if ((int) ($snapshot['allocation_a5_run_id'] ?? 0) !== (int) $a5->id || (int) $a5->id !== $this->a5RunId) {
-            throw new RuntimeException('A6_EXPORT_SOURCE_CHANGED: Current finalized A5 run differs from the queued export source.');
+            throw new RuntimeException('A8_EXPORT_SOURCE_CHANGED: Current finalized A5 run differs from the queued export source.');
         }
 
         foreach ([
@@ -268,7 +268,7 @@ final class ProcessAllocationA6Export implements ShouldQueue
         $disposition = $dispositions->snapshot($a5);
         $storedDispositionHash = (string) ($snapshot['disposition_hash'] ?? '');
         if ($storedDispositionHash === '' || ! hash_equals($storedDispositionHash, (string) $disposition['hash'])) {
-            throw new RuntimeException('A6_EXPORT_SOURCE_CHANGED: A5.5 publication disposition changed after export was queued. Regenerate the report.');
+            throw new RuntimeException('A8_EXPORT_SOURCE_CHANGED: A7 publication disposition changed after export was queued. Regenerate the report.');
         }
     }
 

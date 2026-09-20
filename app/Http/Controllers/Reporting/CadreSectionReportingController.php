@@ -361,7 +361,7 @@ final class CadreSectionReportingController extends Controller
         abort_if(
             $expectedHash === '' || ! hash_equals($expectedHash, (string) $current['hash']),
             409,
-            'This report PDF is OUTDATED because A5.5 publication status changed. Regenerate it before download.'
+            'This report PDF is OUTDATED because A7 publication status changed. Regenerate it before download.'
         );
 
         abort_unless($exportRun->file_path && File::isFile($exportRun->file_path), 404, 'Generated PDF file is missing.');

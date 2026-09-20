@@ -4,7 +4,7 @@
     <div class="container-xl">
         <div class="row g-2 align-items-center">
             <div class="col">
-                <h2 class="page-title">A6 - Allocation Reporting &amp; Export</h2>
+                <h2 class="page-title">A8 — Allocation Reporting &amp; Export</h2>
                 <div class="text-secondary">Final read-only publishing layer bound to the current A5 100% PASS result.</div>
             </div>
             <div class="col-auto ms-auto"><a class="btn btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a></div>
@@ -30,7 +30,7 @@
             <div class="col-md-3"><div class="text-secondary">A5 Finalized</div><div class="fw-bold">{{ $gate['a5_finalized_at']?->format('d-m-Y h:i A') }}</div></div>
         </div>
         @if($dispositionSnapshot)
-        <hr class="my-3"><div class="row g-3 align-items-center"><div class="col-md-8"><strong>A5.5 Publication State</strong><div class="text-secondary small">ACTIVE {{ number_format($dispositionSnapshot['active']) }} · WITHHELD {{ number_format($dispositionSnapshot['withheld']) }} · CANCELLED {{ number_format($dispositionSnapshot['cancelled']) }} · Revision {{ number_format($dispositionSnapshot['revision']) }}</div></div><div class="col-md-4 text-md-end"><a class="btn btn-outline-primary" href="{{ route('allocation.disposition.index') }}">Open A5.5 Control</a></div></div>
+        <hr class="my-3"><div class="row g-3 align-items-center"><div class="col-md-8"><strong>A7 Publication State</strong><div class="text-secondary small">ACTIVE {{ number_format($dispositionSnapshot['active']) }} · WITHHELD {{ number_format($dispositionSnapshot['withheld']) }} · CANCELLED {{ number_format($dispositionSnapshot['cancelled']) }} · Revision {{ number_format($dispositionSnapshot['revision']) }}</div></div><div class="col-md-4 text-md-end"><a class="btn btn-outline-primary" href="{{ route('allocation.disposition.index') }}">Open A7 Control</a></div></div>
         <div class="alert alert-warning mt-3 mb-0 py-2"><strong>Publication safety:</strong> public TXT/DOCX and default cadre publication views contain ACTIVE candidates only. WITHHELD/CANCELLED remain internal allocation evidence and are exposed only through explicit internal reporting/status fields.</div>
         @endif
         @else
@@ -125,7 +125,7 @@
             <div class="col-md-6">
                 <div class="border rounded p-3 h-100 d-flex flex-column">
                     <div class="fw-bold mb-1">Allocated DBF</div>
-                    <div class="text-secondary small mb-3">Only final ACTIVE / published allocated candidates from the current A5/A5.5 state.</div>
+                    <div class="text-secondary small mb-3">Only final ACTIVE / published allocated candidates from the current A6/A7 state.</div>
                     <form method="POST" action="{{ route('allocation.a6.exports.dbf') }}" class="mt-auto">
                         @csrf
                         <input type="hidden" name="scope" value="allocated">

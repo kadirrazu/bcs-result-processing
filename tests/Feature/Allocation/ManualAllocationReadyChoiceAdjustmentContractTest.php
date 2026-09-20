@@ -48,6 +48,10 @@ final class ManualAllocationReadyChoiceAdjustmentContractTest extends TestCase
         );
         self::assertStringContainsString('choice-code-lane', $manualIndex);
         self::assertStringContainsString('<th>Post Abbreviation</th>', $manualShow);
+        self::assertStringContainsString('Adjusted Candidates', $landing);
+        self::assertStringContainsString('Choices Excluded', $landing);
+        self::assertStringContainsString('Unchanged Candidates', $manualIndex);
+        self::assertStringContainsString('adjustmentSummary()', file_get_contents(app_path('Services/ChoiceOptimization/FinalAllocationReadyChoiceService.php')));
         self::assertStringContainsString('Manual Adjustment', $finalIndex);
         self::assertStringContainsString('Final Allocation Ready Choice', $finalIndex);
         self::assertStringContainsString('Manual Choice Removal:', $reportService);

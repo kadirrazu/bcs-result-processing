@@ -5,14 +5,14 @@
     <div class="container-xl">
         <div class="row g-2 align-items-center">
             <div class="col">
-                <h2 class="page-title">A6 — Export Job #{{ $run->id }}</h2>
+                <h2 class="page-title">A8 — Export Job #{{ $run->id }}</h2>
                 <div class="text-secondary">
                     {{ $run->export_type }} · {{ $run->scope ?: '—' }}
                 </div>
             </div>
             <div class="col-auto ms-auto">
                 <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">
-                    Back to A6 - Allocation Reporting &amp; Export
+                    Back to A8 — Allocation Reporting &amp; Export
                 </a>
             </div>
         </div>
@@ -25,7 +25,7 @@
             <div class="alert alert-success">{{ session('success') }}</div>
         @endif
         @if($outdated)
-            <div class="alert alert-warning"><strong>OUTDATED:</strong> A5.5 publication status changed after this export was generated. Download is blocked; regenerate the report from the current publication state.</div>
+            <div class="alert alert-warning"><strong>OUTDATED:</strong> A7 publication status changed after this export was generated. Download is blocked; regenerate the report from the current publication state.</div>
         @endif
 
         @php

@@ -17,7 +17,7 @@
     <div class="a5-header-actions">
         <a class="btn btn-primary" href="{{ route('allocation.a5.candidates',$a5Run) }}">Candidate Validity Report</a>
         @if($a5Run->status === 'validated_ok' && !(bool)$a5Run->is_stale)
-            <form method="POST" action="{{ route('allocation.a5.finalize',$a5Run) }}" class="m-0">@csrf<button class="btn btn-success" type="submit">Finalize A5 — 100% PASS</button></form>
+            <form method="POST" action="{{ route('allocation.a5.finalize',$a5Run) }}" class="m-0">@csrf<button class="btn btn-success" type="submit">Finalize A6 — 100% PASS</button></form>
         @endif
         <a class="btn btn-outline-secondary" href="{{ route('allocation.index') }}">Back to Allocation</a>
     </div>

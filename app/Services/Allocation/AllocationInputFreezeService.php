@@ -13,6 +13,7 @@ use App\Models\ChoiceOptimizationSetting;
 use App\Models\MeritCadreRank;
 use App\Models\MeritResult;
 use App\Models\Registration;
+use App\Enums\RegistrationStatus;
 use App\Models\PreliminaryProcessingState;
 use App\Models\WrittenProcessingState;
 use App\Models\VivaProcessingState;
@@ -361,8 +362,14 @@ final class AllocationInputFreezeService
     private function buildRows(array $sources, ?callable $progress = null): array
     {
         $runId = (int) $sources['merit']['processing_run_id'];
+        // Allocation authority includes ONLY candidates whose current Registration
+        // lifecycle status is ACTIVE. Cancelled/withheld registrations must never
+        // enter the frozen candidate snapshot or any deterministic cadre queue.
         $meritRows = MeritResult::query()
             ->where('processing_run_id', $runId)
+            ->whereIn('registration_id', Registration::query()
+                ->where('status', RegistrationStatus::Active->value)
+                ->select('id'))
             ->orderBy('registration_id')
             ->get();
 
@@ -531,7 +538,13 @@ final class AllocationInputFreezeService
 
     private function registrationHashForMeritRun(int $runId): string
     {
-        $meritRows = MeritResult::query()->where('processing_run_id', $runId)->orderBy('registration_id')->get(['id','registration_id','user_id','reg']);
+        $meritRows = MeritResult::query()
+            ->where('processing_run_id', $runId)
+            ->whereIn('registration_id', Registration::query()
+                ->where('status', RegistrationStatus::Active->value)
+                ->select('id'))
+            ->orderBy('registration_id')
+            ->get(['id','registration_id','user_id','reg']);
         $ids = $meritRows->pluck('registration_id')->map(fn ($v) => (int) $v)->all();
         $registrations = Registration::query()->whereIn('id', $ids)->get()->keyBy('id');
         if ($registrations->count() !== count($ids)) {
@@ -549,6 +562,7 @@ final class AllocationInputFreezeService
                 'registration_id' => (int) $r->id,
                 'user_id' => (string) $r->user_id,
                 'reg' => (string) $r->reg,
+                'registration_status' => $r->status instanceof \BackedEnum ? $r->status->value : (string) $r->status,
                 'cadre_category' => $r->cadre_category instanceof \BackedEnum ? $r->cadre_category->value : $r->cadre_category,
                 'has_ff_quota' => (bool) $r->has_ff_quota,
                 'has_em_quota' => (bool) $r->has_em_quota,

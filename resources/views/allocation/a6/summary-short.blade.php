@@ -4,12 +4,12 @@
     <div class="container-xl">
         <div class="row g-2 align-items-center">
             <div class="col">
-                <h2 class="page-title">A6 — Short Allocation Summary</h2>
+                <h2 class="page-title">A8 — Short Allocation Summary</h2>
                 <div class="text-secondary">Concise final allocation overview in Circular category/serial order. Detailed quota/NM movement remains available in the In-depth Summary.</div>
             </div>
             <div class="col-auto ms-auto d-flex gap-2 flex-wrap">
                 <a class="btn btn-outline-primary" href="{{ route('allocation.a6.summary') }}">Open In-depth Summary</a>
-                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A6 - Allocation Reporting &amp; Export</a>
+                <a class="btn btn-outline-secondary" href="{{ route('allocation.a6.index') }}">Back to A8 — Allocation Reporting &amp; Export</a>
             </div>
         </div>
     </div>
