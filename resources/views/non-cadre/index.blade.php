@@ -62,6 +62,12 @@
             <div class="card-footer">
                 @if($stage['key'] === 'circular' && $upstreamReady)
                     <a href="{{ route('non-cadre.circular.index') }}" class="btn btn-outline-primary w-100">Open NC1 — Circular</a>
+                @elseif($stage['key'] === 'seat_breakup' && $upstreamReady && $effectiveCircular)
+                    <a href="{{ route('non-cadre.seat-breakup.index') }}" class="btn btn-outline-primary w-100">Open NC2 — Seat Breakup</a>
+                @elseif($stage['key'] === 'choice' && $upstreamReady && $effectiveCircular && $effectiveSeatBreakup)
+                    <a href="{{ route('non-cadre.choice.index') }}" class="btn btn-outline-primary w-100">Open NC3 — Choice Validation & Adjustment</a>
+                @elseif($stage['key'] === 'allocation' && $upstreamReady && $effectiveCircular && $effectiveSeatBreakup && $effectiveChoice)
+                    <a href="{{ route('non-cadre.allocation.index') }}" class="btn btn-outline-primary w-100">Open NC4 — Non-Cadre Allocation</a>
                 @else
                     <button type="button" class="btn btn-outline-primary w-100" disabled>{{ $upstreamReady ? 'Available after previous stage is finalized' : 'Unavailable until Cadre Allocation is current' }}</button>
                 @endif

@@ -14,6 +14,9 @@ final class NonCadreController extends Controller
     {
         $gate = $readiness->inspect();
         $state = DB::connection('exam')->table('non_cadre_processing_states')->where('id', 1)->first();
+        $effectiveCircular = DB::connection('exam')->table('non_cadre_circular_versions')->where('status', 'finalized')->where('is_stale', false)->orderByDesc('version')->first();
+        $effectiveSeatBreakup = DB::connection('exam')->table('non_cadre_seat_breakup_versions')->where('status', 'finalized')->where('is_stale', false)->orderByDesc('version')->first();
+        $effectiveChoice = DB::connection('exam')->table('non_cadre_choice_imports')->where('status', 'finalized')->where('is_stale', false)->orderByDesc('version')->first();
 
         $stages = [
             ['key' => 'circular', 'code' => 'NC1', 'title' => 'Non-Cadre Circular', 'status' => $state?->circular_status ?? 'not_started'],
@@ -28,6 +31,9 @@ final class NonCadreController extends Controller
             'gate' => $gate,
             'state' => $state,
             'stages' => $stages,
+            'effectiveCircular' => $effectiveCircular,
+            'effectiveSeatBreakup' => $effectiveSeatBreakup,
+            'effectiveChoice' => $effectiveChoice,
         ]);
     }
 }

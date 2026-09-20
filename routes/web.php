@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\UserController;
 use App\Http\Middleware\EnsureExaminationProcessingOpen;
+use App\Http\Middleware\ConfigureSelectedExaminationConnection;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -9,6 +10,7 @@ Route::redirect('/', '/dashboard');
 Route::middleware('auth')->group(function () {
 
     Route::view('/dashboard', 'dashboard.index')
+        ->middleware(ConfigureSelectedExaminationConnection::class)
         ->name('dashboard');
 
     Route::resource('users', UserController::class)
