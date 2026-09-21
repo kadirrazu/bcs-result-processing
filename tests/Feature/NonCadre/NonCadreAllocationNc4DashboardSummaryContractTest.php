@@ -16,6 +16,9 @@ final class NonCadreAllocationNc4DashboardSummaryContractTest extends TestCase
         $this->assertStringContainsString('Quota Allocated',$index);
         $this->assertStringContainsString('Post-wise Allocation Summary',$run);
         $this->assertStringContainsString('Candidate Search',$run);
+        $this->assertStringContainsString("'post_code' => \$p->post_code",$run);
+        $this->assertStringContainsString("'allocation' => 'allocated'",$run);
+        $this->assertStringContainsString('#current-stage-result',$run);
         $this->assertStringContainsString("paginate(20)",$service);
         $this->assertStringContainsString('postWiseSummary',$service);
         $this->assertStringContainsString('quota_allocated_count',$service);

@@ -68,6 +68,11 @@
                     <a href="{{ route('non-cadre.choice.index') }}" class="btn btn-outline-primary w-100">Open NC3 — Choice Validation & Adjustment</a>
                 @elseif($stage['key'] === 'allocation' && $upstreamReady && $effectiveCircular && $effectiveSeatBreakup && $effectiveChoice)
                     <a href="{{ route('non-cadre.allocation.index') }}" class="btn btn-outline-primary w-100">Open NC4 — Non-Cadre Allocation</a>
+                @elseif($stage['key'] === 'reporting' && $stage['status'] !== 'not_started')
+                    <a href="{{ route('non-cadre.reporting.index') }}" class="btn btn-outline-primary w-100">Open NC5 — Non-Cadre Reporting</a>
+                @elseif($stage['key'] === 'reporting')
+                    @php($nc4Final = \Illuminate\Support\Facades\DB::connection('exam')->table('non_cadre_allocation_runs')->where('status','finalized')->where('phase','FINALIZED')->where('is_stale',false)->exists())
+                    @if($nc4Final)<a href="{{ route('non-cadre.reporting.index') }}" class="btn btn-outline-primary w-100">Open NC5 — Non-Cadre Reporting</a>@else<button type="button" class="btn btn-outline-primary w-100" disabled>Available after NC4 is finalized</button>@endif
                 @else
                     <button type="button" class="btn btn-outline-primary w-100" disabled>{{ $upstreamReady ? 'Available after previous stage is finalized' : 'Unavailable until Cadre Allocation is current' }}</button>
                 @endif
