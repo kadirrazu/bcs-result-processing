@@ -5,6 +5,7 @@ namespace App\Http\Controllers\NonCadre\Reporting;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessNonCadreReportingExport;
 use App\Models\ReportingExportRun;
+use App\Models\User;
 use App\Services\Documents\DocxPlaceholderTemplateService;
 use App\Services\NonCadre\Reporting\NonCadreDocxSampleTemplateService;
 use App\Services\NonCadre\Reporting\NonCadreReportingService;
@@ -19,7 +20,23 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class NonCadreReportingController extends Controller
 {
-    public function index(NonCadreReportingService $s):View{$gate=$s->gate();$posts=$gate['ready']?$s->posts():collect();$exports=ReportingExportRun::query()->where('module','non_cadre_reporting')->latest('id')->limit(10)->get();return view('non-cadre.reporting.index',compact('gate','posts','exports'));}
+    public function index(NonCadreReportingService $s): View
+    {
+        $gate = $s->gate();
+        $posts = $gate['ready'] ? $s->posts() : collect();
+        $exports = ReportingExportRun::query()
+            ->where('module', 'non_cadre_reporting')
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get();
+
+        $operatorUsers = User::query()
+            ->whereIn('id', $exports->pluck('generated_by')->filter()->unique()->values())
+            ->get(['id', 'name'])
+            ->keyBy('id');
+
+        return view('non-cadre.reporting.index', compact('gate', 'posts', 'exports', 'operatorUsers'));
+    }
     public function common(string $mode,NonCadreReportingService $s):View{$this->mode($mode);return view('non-cadre.reporting.common',['mode'=>$mode,'rows'=>$s->commonMerit($mode==='booklet'),'gate'=>$s->gate()]);}
     public function posts(string $mode,NonCadreReportingService $s):View{$this->mode($mode);return view('non-cadre.reporting.posts',['mode'=>$mode,'posts'=>$s->posts()]);}
     public function serialMerit(NonCadreReportingService $s,ExaminationContext $c):View{$data=$s->serialMeritReport();return view('non-cadre.reporting.serial-merit',[...$data,'examination'=>$c->current()]);}
@@ -28,6 +45,7 @@ final class NonCadreReportingController extends Controller
     public function docx(NonCadreReportingService $s,ExaminationContext $c):View{$s->requireReady();return view('non-cadre.reporting.docx',['examination'=>$c->current()]);}
     public function downloadDocxSample(NonCadreReportingService $s,NonCadreDocxSampleTemplateService $samples,ExaminationContext $c):BinaryFileResponse{$run=$s->requireReady();[$path,$name]=$samples->build($run,(string)($c->current()?->name??''));return response()->download($path,$name,['Content-Type'=>'application/vnd.openxmlformats-officedocument.wordprocessingml.document'])->deleteFileAfterSend(true);}
     public function queuePdf(Request $r,string $mode,NonCadreReportingService $s,ExaminationContext $c,?string $postCode=null):RedirectResponse{$this->mode($mode);$run=$s->requireReady();$scope=(string)$r->route('scope');$params=['mode'=>$mode];if($postCode!==null)$params['post_code']=$postCode;$x=$this->createRun($run,'PDF',$scope,$params,$r,$c);return redirect()->route('non-cadre.reporting.exports.show',$x)->with('success','Non-Cadre PDF export queued.');}
+    public function candidateExport(Request $r,string $scope,string $format,NonCadreReportingService $s,ExaminationContext $c):RedirectResponse{$scope=strtolower($scope);$format=strtoupper($format);abort_unless(in_array($scope,['eligible','allocated'],true)&&in_array($format,['XLSX','DBF'],true),404);$run=$s->requireReady();$x=$this->createRun($run,$format,'candidate-'.$scope,['candidate_scope'=>$scope],$r,$c);return redirect()->route('non-cadre.reporting.exports.show',$x)->with('success','Non-Cadre candidate '.$format.' export queued.');}
     public function txt(Request $r,NonCadreReportingService $s,ExaminationContext $c):RedirectResponse{$run=$s->requireReady();$v=$r->validate(['registrations_per_line'=>['required','integer','min:1','max:20'],'report_title'=>['required','string','max:200']]);$x=$this->createRun($run,'TXT','consolidated',$v,$r,$c);return redirect()->route('non-cadre.reporting.exports.show',$x)->with('success','Non-Cadre TXT export queued.');}
     public function generateDocx(Request $r,NonCadreReportingService $s,ExaminationContext $c,ReportExportFileStore $files):RedirectResponse{$run=$s->requireReady();$v=$r->validate(['template_file'=>['required','file','mimes:docx','max:20480'],'result_date'=>['required','date'],'registrations_per_line'=>['required','integer','min:1','max:20']]);$x=$this->createRun($run,'DOCX','template',['result_date'=>date('d-m-Y',strtotime($v['result_date'])),'registrations_per_line'=>(int)$v['registrations_per_line'],'template_name'=>$r->file('template_file')->getClientOriginalName()],$r,$c,false);$p=(array)$x->parameters;$p['template_path']=$files->storeUploadedSource('non-cadre-reporting',$x->id,$r->file('template_file'));$x->forceFill(['parameters'=>$p])->save();$this->dispatch($x,$run,$c);return redirect()->route('non-cadre.reporting.exports.show',$x)->with('success','Non-Cadre DOCX generation queued.');}
     public function exportRun(ReportingExportRun $exportRun):View{$this->assertRun($exportRun);return view('non-cadre.reporting.export-show',['run'=>$exportRun]);}

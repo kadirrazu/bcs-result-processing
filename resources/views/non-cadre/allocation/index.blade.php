@@ -20,6 +20,31 @@
         <div class="card-body"><div class="d-flex justify-content-between align-items-center gap-3 flex-wrap"><div><div class="text-secondary">NC4 Readiness</div><div class="mt-1">@if($prerequisites['ready'])<span class="badge bg-green-lt">READY</span>@else<span class="badge bg-red-lt">BLOCKED</span><span class="text-secondary ms-2">{{ $prerequisites['reason'] }}</span>@endif</div></div>@if($prerequisites['ready'])<form method="post" action="{{ route('non-cadre.allocation.freeze') }}">@csrf<button class="btn btn-primary">NC4.1 — Freeze Allocation Input</button></form>@endif</div></div>
     </div>
 
+    @if($population)
+    <div class="card mb-4">
+        <div class="card-header"><h3 class="card-title">Candidate Population Breakdown — Latest Input Freeze</h3></div>
+        <div class="card-body"><div class="row g-3">
+            @foreach([
+                ['Base / Frozen Source Population',$population['source_population'],'secondary'],
+                ['Previous BCS Positive',$population['previous_bcs_positive'],'orange'],
+                ['Google Form Positive',$population['google_form_positive'],'azure'],
+                ['Positive in Both Sources',$population['both_sources_positive'],'purple'],
+                ['Total Historically Excluded',$population['historically_excluded'],'red'],
+                ['Final Allocation Eligible',$population['allocation_eligible'],'green'],
+            ] as [$label,$value,$color])
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="border rounded p-3 h-100 text-center d-flex flex-column justify-content-between">
+                    <div class="text-secondary small fw-medium d-flex align-items-center justify-content-center" style="min-height: 2.5rem; line-height: 1.25;">
+                        {{ $label }}
+                    </div>
+                    <div class="fs-2 fw-bold text-{{ $color }} mt-2 lh-1">{{ number_format($value) }}</div>
+                </div>
+            </div>
+            @endforeach
+        </div><div class="text-secondary small mt-3">Historical-positive candidates remain preserved in the frozen input; they are excluded only from allocation consideration.</div></div>
+    </div>
+    @endif
+
     <div class="card">
         <div class="card-header"><h3 class="card-title">Allocation Runs</h3></div>
         <div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>Version</th><th>Stage</th><th>Status</th><th class="text-center">Candidates</th><th class="text-center">Allocated</th><th class="text-center">Quota Allocated</th><th class="text-center">CFF</th><th class="text-center">EM</th><th class="text-center">PHC</th><th class="text-center">NM</th><th class="text-center">Shifted</th><th></th></tr></thead><tbody>

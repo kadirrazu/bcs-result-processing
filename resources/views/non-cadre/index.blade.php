@@ -47,7 +47,7 @@
                         <div class="subheader">{{ $stage['code'] }}</div>
                         <h3 class="card-title mt-2">{{ $stage['title'] }}</h3>
                     </div>
-                    <span class="badge {{ $stage['status'] === 'finalized' ? 'bg-green-lt' : ($stage['status'] === 'stale' ? 'bg-red-lt' : 'bg-secondary-lt') }}">{{ $status }}</span>
+                    <span class="badge {{ in_array($stage['status'], ['finalized', 'available'], true) ? 'bg-green-lt' : ($stage['status'] === 'stale' ? 'bg-red-lt' : 'bg-secondary-lt') }}">{{ $status }}</span>
                 </div>
                 <p class="text-secondary mb-0">
                     @switch($stage['key'])
@@ -55,7 +55,7 @@
                         @case('seat_breakup') Generate and finalize MQ/CFF/EM/PHC seat breakup from the effective circular. @break
                         @case('choice') Preserve original choices, validate post codes/subjects, review removals and manage audited adjustments. @break
                         @case('allocation') Allocate by Common Merit Position and effective choice, including quota and special-requirement review. @break
-                        @default Publish reports only from the finalized/current Non-Cadre allocation authority.
+                        @default {{ $nc4Final ? 'NC4 allocation is finalized/current. Interactive reports and publishing exports are available.' : 'Reporting becomes available after NC4 allocation is finalized/current.' }}
                     @endswitch
                 </p>
             </div>
@@ -68,11 +68,10 @@
                     <a href="{{ route('non-cadre.choice.index') }}" class="btn btn-outline-primary w-100">Open NC3 — Choice Validation & Adjustment</a>
                 @elseif($stage['key'] === 'allocation' && $upstreamReady && $effectiveCircular && $effectiveSeatBreakup && $effectiveChoice)
                     <a href="{{ route('non-cadre.allocation.index') }}" class="btn btn-outline-primary w-100">Open NC4 — Non-Cadre Allocation</a>
-                @elseif($stage['key'] === 'reporting' && $stage['status'] !== 'not_started')
+                @elseif($stage['key'] === 'reporting' && $nc4Final)
                     <a href="{{ route('non-cadre.reporting.index') }}" class="btn btn-outline-primary w-100">Open NC5 — Non-Cadre Reporting</a>
                 @elseif($stage['key'] === 'reporting')
-                    @php($nc4Final = \Illuminate\Support\Facades\DB::connection('exam')->table('non_cadre_allocation_runs')->where('status','finalized')->where('phase','FINALIZED')->where('is_stale',false)->exists())
-                    @if($nc4Final)<a href="{{ route('non-cadre.reporting.index') }}" class="btn btn-outline-primary w-100">Open NC5 — Non-Cadre Reporting</a>@else<button type="button" class="btn btn-outline-primary w-100" disabled>Available after NC4 is finalized</button>@endif
+                    <button type="button" class="btn btn-outline-primary w-100" disabled>Available after NC4 is finalized</button>
                 @else
                     <button type="button" class="btn btn-outline-primary w-100" disabled>{{ $upstreamReady ? 'Available after previous stage is finalized' : 'Unavailable until Cadre Allocation is current' }}</button>
                 @endif

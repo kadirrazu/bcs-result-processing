@@ -6,6 +6,8 @@ use App\Models\AllocationA5CandidateResult;
 use App\Models\AllocationA5Run;
 use App\Models\BachelorSubject;
 use App\Models\Gender;
+use App\Models\ChoiceOptimizationProcessingState;
+use App\Models\ChoiceOptimizationConsolidatedHistoricalRecommendation;
 use App\Services\Merit\MeritFinalizedDatasetService;
 use App\Services\NonCadre\NonCadreReadinessService;
 use Illuminate\Support\Collection;
@@ -23,6 +25,7 @@ final class NonCadreAllocationService
         $c=$this->current('non_cadre_circular_versions'); if(!$c)return ['ready'=>false,'reason'=>'Finalize NC1 — Non-Cadre Circular.'];
         $s=$this->current('non_cadre_seat_breakup_versions'); if(!$s||(int)$s->circular_version_id!==(int)$c->id)return ['ready'=>false,'reason'=>'Finalize/current NC2 — Seat Breakup is required.'];
         $q=$this->current('non_cadre_choice_imports'); if(!$q||(int)$q->circular_version_id!==(int)$c->id)return ['ready'=>false,'reason'=>'Finalize/current NC3 — Allocation Ready Choice is required.'];
+        $historicalState=ChoiceOptimizationProcessingState::query()->whereKey(1)->where('status','finalized')->where('is_stale',false)->first(); if(!$historicalState)return ['ready'=>false,'reason'=>'Current finalized Choice Optimization historical authority is required for NC4 historical eligibility screening.'];
         return ['ready'=>true,'reason'=>null,'gate'=>$g,'circular'=>$c,'seat'=>$s,'choice'=>$q];
     }
 
@@ -53,9 +56,9 @@ final class NonCadreAllocationService
         if((int)$run->circular_version_id!==(int)$p['circular']->id||(int)$run->seat_breakup_version_id!==(int)$p['seat']->id||(int)$run->choice_import_id!==(int)$p['choice']->id||!hash_equals((string)$run->input_hash,$this->sourceHash($p,$a5))) throw ValidationException::withMessages(['allocation'=>'NC4 upstream authority changed before Input Freeze worker started. Start a new freeze.']);
         $this->markProcessing($runId,'INPUT_FREEZE');
         DB::connection('exam')->table('non_cadre_allocation_input_candidates')->where('allocation_run_id',$runId)->delete();
-        $this->materializeInput($runId,$p,$a5); $hash=$this->inputHash($runId);
-        DB::connection('exam')->table('non_cadre_allocation_runs')->where('id',$runId)->update(['status'=>'frozen','phase'=>'INPUT_FREEZE','queue_stage'=>null,'progress_percent'=>100,'freeze_hash'=>$hash,'total_candidates'=>DB::connection('exam')->table('non_cadre_allocation_input_candidates')->where('allocation_run_id',$runId)->count(),'processing_finished_at'=>now(),'updated_at'=>now()]);
-        $this->audit('input_frozen',$runId,null,['freeze_hash'=>$hash],$actor); return $this->run($runId);
+        $this->materializeInput($runId,$p,$a5); $hash=$this->inputHash($runId); $population=$this->populationBreakdown($runId);
+        DB::connection('exam')->table('non_cadre_allocation_runs')->where('id',$runId)->update(['status'=>'frozen','phase'=>'INPUT_FREEZE','queue_stage'=>null,'progress_percent'=>100,'freeze_hash'=>$hash,'total_candidates'=>$population['allocation_eligible'],'processing_finished_at'=>now(),'updated_at'=>now()]);
+        $this->audit('input_frozen',$runId,null,['freeze_hash'=>$hash,'population_breakdown'=>$population],$actor); return $this->run($runId);
     }
 
     /** NC4.2: MQ + CFF/EM/PHC. Same higher-choice quota philosophy as Cadre A3. */
@@ -90,8 +93,9 @@ final class NonCadreAllocationService
         $add('UNIQUE_CANDIDATE',$allocated->pluck('registration_id')->duplicates()->isEmpty(),'One allocation maximum per candidate.');
         $seat=$this->seatMap($run); $over=[]; foreach($allocated->groupBy('post_code') as $code=>$g)if($g->count()>array_sum($seat[$code]??[]))$over[$code]=[$g->count(),array_sum($seat[$code]??[])]; $add('SEAT_CONSERVATION',$over===[],'No post exceeds finalized NC2 capacity.',$over);
         $a5=AllocationA5Run::query()->whereKey($run->cadre_allocation_a5_run_id)->where('status','finalized')->where('is_stale',false)->first(); $cadre=[]; if($a5)$cadre=AllocationA5CandidateResult::query()->where('allocation_a5_run_id',$a5->id)->where('overall_status','PASS')->pluck('registration_id')->map(fn($x)=>(int)$x)->all(); $conf=$allocated->whereIn('registration_id',$cadre)->pluck('reg')->all(); $add('NO_CADRE_ALLOCATED_CANDIDATE',$a5&&hash_equals((string)$run->cadre_allocation_candidate_hash,(string)$a5->candidate_result_hash)&&$conf===[],'Cadre authority is current and no Cadre-allocated candidate leaked into NC4.',$conf);
-
         $inputByCandidate=DB::connection('exam')->table('non_cadre_allocation_input_candidates')->where('allocation_run_id',$runId)->get()->keyBy('registration_id');
+        $historicalConf=$allocated->filter(fn($r)=>(bool)($inputByCandidate->get($r->registration_id)?->historical_excluded??false))->map(fn($r)=>['reg'=>$r->reg,'evidence'=>json_decode((string)($inputByCandidate->get($r->registration_id)?->historical_exclusion_evidence??'[]'),true)?:[]])->values()->all(); $add('NO_PRIOR_CADRE_RECOMMENDATION_OR_DISQUALIFYING_EMPLOYMENT',$historicalConf===[],'No allocated candidate has a confirmed positive history in an included Previous BCS or accepted Google Form source.',$historicalConf);
+
         $choiceBad=[]; foreach($allocated as $r){$i=$inputByCandidate->get($r->registration_id);$ch=$i?$this->choices($i):[];if(($ch[(int)$r->choice_position-1]??null)!==$r->post_code)$choiceBad[]=['reg'=>$r->reg,'post_code'=>$r->post_code,'choice_position'=>$r->choice_position];} $add('ALLOCATION_READY_CHOICE',$choiceBad===[],'Every allocated post code is present at the recorded position in the frozen Allocation Ready Choice list.',$choiceBad);
 
         $registrations=DB::connection('exam')->table('registrations')->whereIn('id',$allocated->pluck('registration_id')->all())->get(['id','reg','bachelor_subject_code'])->keyBy('id');
@@ -101,6 +105,7 @@ final class NonCadreAllocationService
         $finalByCandidate=$p2->keyBy('registration_id'); $meritBad=[];
         foreach($allocated->where('allocation_basis','MQ') as $seatHolder){
             foreach($inputByCandidate as $higher){
+                if((bool)($higher->historical_excluded??false)) continue;
                 if((int)$higher->common_merit_position >= (int)$seatHolder->common_merit_position) continue;
                 $higherChoices=$this->choices($higher); $targetIndex=array_search($seatHolder->post_code,$higherChoices,true); if($targetIndex===false) continue;
                 $higherResult=$finalByCandidate->get($higher->registration_id); $higherFinalPosition=$higherResult?->post_code?(int)$higherResult->choice_position:PHP_INT_MAX;
@@ -147,7 +152,7 @@ final class NonCadreAllocationService
     public function finalize(int $runId,?int $actor): object
     {
         $run=$this->stageRun($runId,['VALIDATION']); if($run->status!=='validated')throw ValidationException::withMessages(['allocation'=>'NC4 Validation must PASS before finalization.']); $this->assertFreeze($run);
-        $required=['UNIQUE_CANDIDATE','SEAT_CONSERVATION','NO_CADRE_ALLOCATED_CANDIDATE','ALLOCATION_READY_CHOICE','BACHELOR_SUBJECT_ELIGIBILITY','COMMON_MERIT_INTEGRITY'];
+        $required=['UNIQUE_CANDIDATE','SEAT_CONSERVATION','NO_CADRE_ALLOCATED_CANDIDATE','NO_PRIOR_CADRE_RECOMMENDATION_OR_DISQUALIFYING_EMPLOYMENT','ALLOCATION_READY_CHOICE','BACHELOR_SUBJECT_ELIGIBILITY','COMMON_MERIT_INTEGRITY'];
         $passed=DB::connection('exam')->table('non_cadre_allocation_validation_checks')->where('allocation_run_id',$runId)->where('status','PASS')->whereIn('check_code',$required)->pluck('check_code')->all();
         $missing=array_values(array_diff($required,$passed));
         if($missing!==[]||DB::connection('exam')->table('non_cadre_allocation_validation_checks')->where('allocation_run_id',$runId)->where('status','FAIL')->exists())throw ValidationException::withMessages(['allocation'=>'NC4 critical validation whitelist is incomplete or contains FAIL: '.implode(', ',$missing)]);
@@ -238,8 +243,22 @@ final class NonCadreAllocationService
 
     public function statusBoard(?object $run,array $prerequisites):array
     {
-        $done=fn(string $phase)=>$run && in_array($run->phase,[$phase,'PHASE1','PHASE2','VALIDATION','FINALIZED'],true);
         if(!$run)return [['label'=>'Readiness','status'=>$prerequisites['ready']?'READY':'BLOCKED'],['label'=>'Input Freeze','status'=>'NOT STARTED'],['label'=>'Phase-1','status'=>'WAITING'],['label'=>'Phase-2','status'=>'WAITING'],['label'=>'Validation','status'=>'WAITING'],['label'=>'Finalization','status'=>'WAITING']];
+
+        // A stale run is historical only. Its former phase/status must never make
+        // the current Processing Status Board look completed/finalized.
+        if((bool)($run->is_stale??false)){
+            return [
+                ['label'=>'Readiness','status'=>$prerequisites['ready']?'READY':'BLOCKED'],
+                ['label'=>'Input Freeze','status'=>'STALE'],
+                ['label'=>'Phase-1','status'=>'OUTDATED'],
+                ['label'=>'Phase-2','status'=>'OUTDATED'],
+                ['label'=>'Validation','status'=>'OUTDATED'],
+                ['label'=>'Finalization','status'=>'OUTDATED'],
+            ];
+        }
+
+        $done=fn(string $phase)=>in_array($run->phase,[$phase,'PHASE1','PHASE2','VALIDATION','FINALIZED'],true);
         return [
             ['label'=>'Readiness','status'=>$prerequisites['ready']?'READY':'BLOCKED'],
             ['label'=>'Input Freeze','status'=>$done('INPUT_FREEZE')?'COMPLETED':strtoupper((string)$run->status)],
@@ -255,11 +274,54 @@ final class NonCadreAllocationService
     private function resultTable(object $run):string{return $run->phase==='FINALIZED'?'non_cadre_allocation_results':($run->phase==='PHASE1'?'non_cadre_allocation_phase1_results':'non_cadre_allocation_phase2_results');}
     private function basisCounts(int $id):array{$run=$this->run($id);$table=$this->resultTable($run);$rows=DB::connection('exam')->table($table)->where('allocation_run_id',$id)->whereNotNull('post_code')->selectRaw('allocation_basis, COUNT(*) c')->groupBy('allocation_basis')->pluck('c','allocation_basis');$out=['MQ'=>(int)($rows['MQ']??0),'CFF'=>(int)($rows['CFF']??0),'EM'=>(int)($rows['EM']??0),'PHC'=>(int)($rows['PHC']??0)];$out['quota']=$out['CFF']+$out['EM']+$out['PHC'];return$out;}
 
-    private function materializeInput(int $id,array $p,AllocationA5Run $a5):void{$m=$this->merit->verifiedSummary();$cadre=AllocationA5CandidateResult::query()->where('allocation_a5_run_id',$a5->id)->where('overall_status','PASS')->pluck('registration_id')->map(fn($x)=>(int)$x)->flip();$items=DB::connection('exam')->table('non_cadre_choice_items as i')->join('merit_results as m','m.registration_id','=','i.registration_id')->join('registrations as g','g.id','=','i.registration_id')->where('i.choice_import_id',$p['choice']->id)->where('i.validation_status','valid')->where('m.processing_run_id',(int)$m['processing_run_id'])->whereNotNull('m.common_merit_position')->select('i.*','m.common_merit_position','g.has_ff_quota','g.has_em_quota','g.has_phc_quota')->orderBy('m.common_merit_position')->get()->unique('registration_id');$rows=[];foreach($items as $x){$sum=json_decode((string)$x->validation_summary,true)?:[];if(($sum['population_status']??null)!=='ALLOCATION_ELIGIBLE'||isset($cadre[(int)$x->registration_id]))continue;$ch=array_values(array_filter(json_decode((string)$x->effective_choices,true)?:[],fn($v)=>trim((string)$v)!==''));if(!$ch)continue;$rows[]=['allocation_run_id'=>$id,'registration_id'=>$x->registration_id,'reg'=>$x->reg,'common_merit_position'=>$x->common_merit_position,'has_cff'=>(bool)$x->has_ff_quota,'has_em'=>(bool)$x->has_em_quota,'has_phc'=>(bool)$x->has_phc_quota,'allocation_ready_choices'=>json_encode($ch),'created_at'=>now(),'updated_at'=>now()];}if($rows)DB::connection('exam')->table('non_cadre_allocation_input_candidates')->insert($rows);}
+    private function materializeInput(int $id,array $p,AllocationA5Run $a5):void
+    {
+        $m=$this->merit->verifiedSummary();
+        $cadre=AllocationA5CandidateResult::query()->where('allocation_a5_run_id',$a5->id)->where('overall_status','PASS')->pluck('registration_id')->map(fn($x)=>(int)$x)->flip();
+        $historical=$this->historicalExclusions();
+        $items=DB::connection('exam')->table('non_cadre_choice_items as i')->join('merit_results as m','m.registration_id','=','i.registration_id')->join('registrations as g','g.id','=','i.registration_id')->where('i.choice_import_id',$p['choice']->id)->where('i.validation_status','valid')->where('m.processing_run_id',(int)$m['processing_run_id'])->whereNotNull('m.common_merit_position')->select('i.*','m.common_merit_position','g.has_ff_quota','g.has_em_quota','g.has_phc_quota')->orderBy('m.common_merit_position')->get()->unique('registration_id');
+        $rows=[];
+        foreach($items as $x){
+            $sum=json_decode((string)$x->validation_summary,true)?:[];
+            if(($sum['population_status']??null)!=='ALLOCATION_ELIGIBLE'||isset($cadre[(int)$x->registration_id]))continue;
+            $ch=array_values(array_filter(json_decode((string)$x->effective_choices,true)?:[],fn($v)=>trim((string)$v)!=='')); if(!$ch)continue;
+            $ev=$historical->get((int)$x->registration_id,[]); $excluded=$ev!==[];
+            $rows[]=['allocation_run_id'=>$id,'registration_id'=>$x->registration_id,'reg'=>$x->reg,'common_merit_position'=>$x->common_merit_position,'has_cff'=>(bool)$x->has_ff_quota,'has_em'=>(bool)$x->has_em_quota,'has_phc'=>(bool)$x->has_phc_quota,'allocation_ready_choices'=>json_encode($ch),'historical_excluded'=>$excluded,'historical_exclusion_reason'=>$excluded?$this->historicalRemark($ev):null,'historical_exclusion_evidence'=>$excluded?json_encode($ev,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):null,'created_at'=>now(),'updated_at'=>now()];
+        }
+        if($rows)foreach(array_chunk($rows,500) as $chunk)DB::connection('exam')->table('non_cadre_allocation_input_candidates')->insert($chunk);
+    }
+
+    private function historicalExclusions(): Collection
+    {
+        $state=ChoiceOptimizationProcessingState::query()->whereKey(1)->where('status','finalized')->where('is_stale',false)->first();
+        if(!$state)return collect();
+        $components=(array)(($state->source_snapshot??[])['optimization_components']??[]);
+        $allowPrevious=(bool)($components['previous_bcs']??false); $allowGoogle=(bool)($components['google_form']??false);
+        if(!$allowPrevious&&!$allowGoogle)return collect();
+        return ChoiceOptimizationConsolidatedHistoricalRecommendation::query()->where('consolidation_status','resolved')->orderBy('previous_bcs_number')->get()->groupBy('registration_id')->map(function($rows)use($allowPrevious,$allowGoogle){
+            $evidence=[];
+            foreach($rows as $row){foreach((array)$row->sources as $source){$type=(string)($source['source']??'');if(($type==='previous_bcs_repository'&&!$allowPrevious)||($type==='google_form'&&!$allowGoogle))continue;$cadre=trim((string)($source['cadre']??$row->cadre??''));$evidence[]=['source'=>$type,'previous_bcs_number'=>(int)$row->previous_bcs_number,'cadre'=>$cadre?:null,'historical_source_id'=>$source['historical_source_id']??null,'source_batch_id'=>$source['source_batch_id']??null];}}
+            return array_values($evidence);
+        })->filter(fn($x)=>$x!==[]);
+    }
+
+    private function historicalRemark(array $evidence): string
+    {
+        $parts=[]; foreach($evidence as $e){$bcs=($e['previous_bcs_number']??null)?((int)$e['previous_bcs_number'].'th BCS'):'Previous BCS';$cadre=trim((string)($e['cadre']??''));$src=($e['source']??'')==='google_form'?'Google Form':'Previous BCS Cadre Recommendation';$parts[]=$src.' ('.$bcs.($cadre!==''?' — '.$cadre:'').')';}
+        return 'Not Allocated — Excluded from NC4: '.implode('; ',array_values(array_unique($parts)));
+    }
+
+    public function populationBreakdown(int $runId): array
+    {
+        $q=DB::connection('exam')->table('non_cadre_allocation_input_candidates')->where('allocation_run_id',$runId); $rows=$q->get(['historical_excluded','historical_exclusion_evidence']);
+        $prev=$google=$both=$excluded=0; foreach($rows as $r){if(!(bool)$r->historical_excluded)continue;$excluded++;$ev=json_decode((string)$r->historical_exclusion_evidence,true)?:[];$types=array_unique(array_column($ev,'source'));$p=in_array('previous_bcs_repository',$types,true);$g=in_array('google_form',$types,true);if($p)$prev++;if($g)$google++;if($p&&$g)$both++;}
+        return ['source_population'=>$rows->count(),'previous_bcs_positive'=>$prev,'google_form_positive'=>$google,'both_sources_positive'=>$both,'historically_excluded'=>$excluded,'allocation_eligible'=>$rows->count()-$excluded];
+    }
+
     private function pickPhase1(object $c,array $seats):array{$ch=$this->choices($c);$mq=null;foreach($ch as $i=>$code)if(($seats[$code]['MQ']??0)>0){$mq=$i;break;}$limit=$mq===null?count($ch):$mq;foreach($ch as $i=>$code){if($i>=$limit)break;foreach(['CFF'=>'has_cff','EM'=>'has_em','PHC'=>'has_phc'] as $q=>$f)if($c->$f&&($seats[$code][$q]??0)>0)return[$code,$q,$i+1];}if($mq!==null)return[$ch[$mq],'MQ',$mq+1];foreach($ch as $i=>$code)foreach(['CFF'=>'has_cff','EM'=>'has_em','PHC'=>'has_phc'] as $q=>$f)if($c->$f&&($seats[$code][$q]??0)>0)return[$code,$q,$i+1];return[null,null,null];}
     private function convertedQuota(array $seat,array $assign):array{$used=[];foreach($assign as $a)if(in_array($a->allocation_basis,['CFF','EM','PHC'],true))$used[$a->post_code][$a->allocation_basis]=($used[$a->post_code][$a->allocation_basis]??0)+1;$out=[];foreach($seat as $code=>$s)$out[$code]=max(0,$s['CFF']-($used[$code]['CFF']??0))+max(0,$s['EM']-($used[$code]['EM']??0))+max(0,$s['PHC']-($used[$code]['PHC']??0));return$out;}
     private function seatMap(object $r):array{$rows=DB::connection('exam')->table('non_cadre_seat_breakup_rows')->where('seat_breakup_version_id',$r->seat_breakup_version_id)->get();$x=[];foreach($rows as $s)$x[$s->post_code]=['MQ'=>(int)$s->mq_post,'CFF'=>(int)$s->cff_post,'EM'=>(int)$s->em_post,'PHC'=>(int)$s->phc_post];return$x;}
-    private function inputs(int $id):Collection{return DB::connection('exam')->table('non_cadre_allocation_input_candidates')->where('allocation_run_id',$id)->orderBy('common_merit_position')->orderBy('registration_id')->get();}
+    private function inputs(int $id):Collection{return DB::connection('exam')->table('non_cadre_allocation_input_candidates')->where('allocation_run_id',$id)->where('historical_excluded',false)->orderBy('common_merit_position')->orderBy('registration_id')->get();}
     private function choices(object $c):array{$x=array_values(json_decode((string)$c->allocation_ready_choices,true)?:[]);$rejected=DB::connection('exam')->table('non_cadre_special_requirement_reviews')->where('allocation_run_id',$c->allocation_run_id)->where('registration_id',$c->registration_id)->where('decision','REJECTED')->pluck('post_code')->all();return array_values(array_filter($x,fn($code)=>!in_array($code,$rejected,true)));}
     private function syncSpecialReviews(int $runId,object $run,array $rows):void{$posts=DB::connection('exam')->table('non_cadre_circular_posts')->where('circular_version_id',$run->circular_version_id)->where('special_requirement',true)->get()->keyBy('post_code');$needed=[];foreach($rows as $r){if(!$r['post_code']||!isset($posts[$r['post_code']]))continue;$key=$r['registration_id'].'|'.$r['post_code'];$needed[$key]=true;$exists=DB::connection('exam')->table('non_cadre_special_requirement_reviews')->where('allocation_run_id',$runId)->where('registration_id',$r['registration_id'])->where('post_code',$r['post_code'])->exists();if(!$exists)DB::connection('exam')->table('non_cadre_special_requirement_reviews')->insert(['allocation_run_id'=>$runId,'registration_id'=>$r['registration_id'],'reg'=>$r['reg'],'circular_post_id'=>$posts[$r['post_code']]->id,'post_code'=>$r['post_code'],'decision'=>'PENDING','created_at'=>now(),'updated_at'=>now()]);}DB::connection('exam')->table('non_cadre_special_requirement_reviews')->where('allocation_run_id',$runId)->where('decision','PENDING')->get()->each(function($r)use($needed){if(!isset($needed[$r->registration_id.'|'.$r->post_code]))DB::connection('exam')->table('non_cadre_special_requirement_reviews')->where('id',$r->id)->delete();});}
     private function phaseRow(int $id,object $c,?string $code,?string $basis,?int $pos,?string $movement,string $reason):array{$post=$code?DB::connection('exam')->table('non_cadre_circular_posts')->where('post_code',$code)->first():null;return['allocation_run_id'=>$id,'registration_id'=>$c->registration_id,'reg'=>$c->reg,'common_merit_position'=>$c->common_merit_position,'circular_post_id'=>$post?->id,'post_code'=>$code,'choice_position'=>$pos,'allocation_basis'=>$basis,'movement_type'=>$movement,'decision_reason'=>$reason,'created_at'=>now(),'updated_at'=>now()];}
@@ -274,12 +336,12 @@ final class NonCadreAllocationService
     }
     private function rowsHash(string $t,int $id):string{return hash('sha256',json_encode(DB::connection('exam')->table($t)->where('allocation_run_id',$id)->orderBy('common_merit_position')->get()->map(fn($r)=>[$r->registration_id,$r->post_code,$r->choice_position,$r->allocation_basis,$r->movement_type])->all()));}
     private function assignmentSignature(array $a):string{ksort($a);return hash('sha256',json_encode(array_map(fn($r)=>[$r->post_code,$r->choice_position,$r->allocation_basis],$a)));}
-    private function inputHash(int $id):string{return hash('sha256',json_encode($this->inputs($id)->map(fn($r)=>[$r->registration_id,$r->common_merit_position,$r->has_cff,$r->has_em,$r->has_phc,$r->allocation_ready_choices])->all()));}
-    private function assertFreeze(object $r):void{if(!hash_equals((string)$r->freeze_hash,$this->inputHash($r->id)))throw ValidationException::withMessages(['allocation'=>'NC4 frozen input hash mismatch. Re-freeze inputs.']);}
+    private function inputHash(int $id):string{return hash('sha256',json_encode(DB::connection('exam')->table('non_cadre_allocation_input_candidates')->where('allocation_run_id',$id)->orderBy('common_merit_position')->orderBy('registration_id')->get()->map(fn($r)=>[$r->registration_id,$r->common_merit_position,$r->has_cff,$r->has_em,$r->has_phc,$r->allocation_ready_choices,(bool)$r->historical_excluded,$r->historical_exclusion_reason,$r->historical_exclusion_evidence])->all()));}
+    private function assertFreeze(object $r):void{$p=$this->requirePrerequisites();$a5=AllocationA5Run::query()->whereKey($r->cadre_allocation_a5_run_id)->where('status','finalized')->where('is_stale',false)->first();if(!$a5||!hash_equals((string)$r->input_hash,$this->sourceHash($p,$a5)))throw ValidationException::withMessages(['allocation'=>'NC4 upstream/historical authority changed. Start a new Input Freeze.']);if(!hash_equals((string)$r->freeze_hash,$this->inputHash($r->id)))throw ValidationException::withMessages(['allocation'=>'NC4 frozen input hash mismatch. Re-freeze inputs.']);}
     private function stageRun(int $id,array $phases):object{$r=$this->run($id);if($r->is_stale||$r->status==='finalized'||!in_array($r->phase,$phases,true))throw ValidationException::withMessages(['allocation'=>'NC4 stage order/currentness check failed.']);return$r;}
     private function current(string $t):?object{return DB::connection('exam')->table($t)->where('status','finalized')->where('is_stale',false)->orderByDesc('version')->first();}
     private function requirePrerequisites():array{$p=$this->prerequisites();if(!$p['ready'])throw ValidationException::withMessages(['allocation'=>$p['reason']]);return$p;}
-    private function sourceHash(array $p,AllocationA5Run $a5):string{return hash('sha256',implode('|',[$a5->candidate_result_hash,$p['circular']->dataset_hash,$p['seat']->dataset_hash,$p['choice']->dataset_hash]));}
+    private function sourceHash(array $p,AllocationA5Run $a5):string{$state=ChoiceOptimizationProcessingState::query()->whereKey(1)->where('status','finalized')->where('is_stale',false)->first();$historical=$state?hash('sha256',json_encode([$state->dataset_hash,$state->source_snapshot],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)):'NO_FINAL_HISTORICAL_AUTHORITY';return hash('sha256',implode('|',[$a5->candidate_result_hash,$p['circular']->dataset_hash,$p['seat']->dataset_hash,$p['choice']->dataset_hash,$historical]));}
     private function resultHash(int $id):string{return hash('sha256',json_encode(DB::connection('exam')->table('non_cadre_allocation_results')->where('allocation_run_id',$id)->orderBy('common_merit_position')->get()->map(fn($r)=>[$r->registration_id,$r->post_code,$r->choice_position,$r->allocation_basis])->all()));}
     private function audit(string $a,int $id,?array $b,?array $n,?int $actor):void{DB::connection('exam')->table('non_cadre_processing_audits')->insert(['stage'=>'allocation','action'=>$a,'entity_type'=>'allocation','entity_id'=>$id,'before_payload'=>$b?json_encode($b):null,'after_payload'=>$n?json_encode($n):null,'actor_id'=>$actor,'created_at'=>now()]);}
 }

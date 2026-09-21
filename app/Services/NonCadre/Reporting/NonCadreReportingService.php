@@ -36,7 +36,7 @@ final class NonCadreReportingService
             ->leftJoin('registrations as r','r.id','=','i.registration_id')
             ->leftJoin('non_cadre_circular_posts as p','p.id','=','a.circular_post_id')
             ->where('i.allocation_run_id',$run->id)
-            ->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','a.post_code','a.choice_position','a.allocation_basis','a.decision_status','a.decision_reason','p.post_title',
+            ->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','i.historical_excluded','i.historical_exclusion_reason','a.post_code','a.choice_position','a.allocation_basis','a.decision_status','a.decision_reason','p.post_title',
                 ...($identity?['r.user_id','r.name','r.birth_date']:[])])
             ->orderBy('i.common_merit_position')->orderBy('i.registration_id')->paginate($perPage)->withQueryString();
     }
@@ -72,7 +72,7 @@ final class NonCadreReportingService
             ->leftJoin('registrations as r','r.id','=','i.registration_id')
             ->where('i.allocation_run_id',$run->id)
             ->whereJsonContains('i.allocation_ready_choices',$postCode)
-            ->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','a.post_code as allocated_post_code','a.choice_position as allocated_choice_position','a.allocation_basis','a.decision_status',
+            ->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','i.historical_excluded','i.historical_exclusion_reason','a.post_code as allocated_post_code','a.choice_position as allocated_choice_position','a.allocation_basis','a.decision_status',
                 ...($identity?['r.user_id','r.name','r.birth_date']:[])])
             ->orderBy('i.common_merit_position')->paginate($perPage)->withQueryString();
         $rows->getCollection()->transform(function($row)use($postCode){$choices=json_decode((string)$row->allocation_ready_choices,true)?:[];$pos=array_search($postCode,$choices,true);$row->report_choice_position=$pos===false?null:$pos+1;return$row;});
@@ -89,7 +89,7 @@ final class NonCadreReportingService
             ->join('non_cadre_allocation_input_candidates as i',function($j){$j->on('i.registration_id','=','a.registration_id')->on('i.allocation_run_id','=','a.allocation_run_id');})
             ->leftJoin('registrations as r','r.id','=','a.registration_id')
             ->where('a.allocation_run_id',$run->id)->where('a.post_code',$postCode)
-            ->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','a.post_code as allocated_post_code','a.choice_position as allocated_choice_position','a.allocation_basis','a.decision_status',
+            ->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','i.historical_excluded','i.historical_exclusion_reason','a.post_code as allocated_post_code','a.choice_position as allocated_choice_position','a.allocation_basis','a.decision_status',
                 ...($identity?['r.user_id','r.name','r.birth_date']:[])])
             ->orderBy('i.common_merit_position')->orderBy('i.registration_id')->paginate($perPage)->withQueryString();
         $rows->getCollection()->transform(function($row)use($postCode){$choices=json_decode((string)$row->allocation_ready_choices,true)?:[];$pos=array_search($postCode,$choices,true);$row->report_choice_position=$pos===false?null:$pos+1;return$row;});
@@ -105,7 +105,7 @@ final class NonCadreReportingService
             ->leftJoin('registrations as r','r.id','=','i.registration_id')
             ->leftJoin('non_cadre_circular_posts as p','p.id','=','a.circular_post_id')
             ->where('i.allocation_run_id',$run->id)
-            ->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','a.post_code','a.choice_position','a.allocation_basis','a.decision_status','a.decision_reason','p.post_title',...($identity?['r.name','r.birth_date']:[])])
+            ->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','i.historical_excluded','i.historical_exclusion_reason','a.post_code','a.choice_position','a.allocation_basis','a.decision_status','a.decision_reason','p.post_title',...($identity?['r.name','r.birth_date']:[])])
             ->orderBy('i.common_merit_position')->orderBy('i.registration_id')->get();
     }
 
@@ -119,7 +119,7 @@ final class NonCadreReportingService
             ->leftJoin('registrations as r','r.id','=','i.registration_id')
             ->where('i.allocation_run_id',$run->id);
         if($allocatedOnly){$q->where('a.post_code',$postCode);}else{$q->whereJsonContains('i.allocation_ready_choices',$postCode);}
-        $rows=$q->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','a.post_code as allocated_post_code','a.choice_position as allocated_choice_position','a.allocation_basis','a.decision_status',...($identity?['r.name','r.birth_date']:[])])
+        $rows=$q->select(['i.registration_id','i.reg','i.common_merit_position','i.has_cff','i.has_em','i.has_phc','i.allocation_ready_choices','i.historical_excluded','i.historical_exclusion_reason','a.post_code as allocated_post_code','a.choice_position as allocated_choice_position','a.allocation_basis','a.decision_status',...($identity?['r.name','r.birth_date']:[])])
             ->orderBy('i.common_merit_position')->orderBy('i.registration_id')->get();
         $rows->transform(function($row)use($postCode){$choices=json_decode((string)$row->allocation_ready_choices,true)?:[];$pos=array_search($postCode,$choices,true);$row->report_choice_position=$pos===false?null:$pos+1;return$row;});
         $post->allocated_post=DB::connection('exam')->table('non_cadre_allocation_results')->where('allocation_run_id',$run->id)->where('post_code',$postCode)->count();

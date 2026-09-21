@@ -34,7 +34,12 @@
         </div>
     @endif
 
-    <div class="card mb-4">
+    <div class="card mb-4"><div class="card-header"><h3 class="card-title">Input Freeze Candidate Population</h3></div><div class="card-body"><div class="row g-3">
+@foreach([['Source Population',$population['source_population']],['Previous BCS Positive',$population['previous_bcs_positive']],['Google Form Positive',$population['google_form_positive']],['Both Sources',$population['both_sources_positive']],['Historically Excluded',$population['historically_excluded']],['Allocation Eligible',$population['allocation_eligible']]] as [$label,$value])
+<div class="col-6 col-md-4 col-xl-2"><div class="border rounded p-2 h-100"><div class="text-secondary small">{{ $label }}</div><div class="fw-bold fs-3">{{ number_format($value) }}</div></div></div>
+@endforeach
+</div></div></div>
+<div class="card mb-4">
         <div class="card-header"><h3 class="card-title">Allocation Summary</h3></div>
         <div class="card-body">
             <div class="row g-4">

@@ -26,7 +26,7 @@ h2{font-size:12px;margin:0 0 4px}
             <th>Choice Position</th>
             <th>Candidate Quota</th>
             <th>Final Allocation</th>
-            <th>Basis</th>
+            <th>Basis</th><th>Remarks</th>
         </tr>
     </thead>
     <tbody>
@@ -60,7 +60,7 @@ h2{font-size:12px;margin:0 0 4px}
                 <td class="c">{{ $r->report_choice_position ?: '—' }}</td>
                 <td class="c">{{ collect(['CFF' => $r->has_cff, 'EM' => $r->has_em, 'PHC' => $r->has_phc])->filter()->keys()->implode(', ') ?: 'Non Quota' }}</td>
                 <td class="c {{ (string) $r->allocated_post_code === (string) $post->post_code ? 'alloc' : '' }}">{{ $r->allocated_post_code ?: 'Unallocated' }}</td>
-                <td class="c">{{ $r->allocation_basis ?: '—' }}</td>
+                <td class="c">{{ $r->allocation_basis ?: '—' }}</td><td>{{ $r->historical_exclusion_reason ?: '—' }}</td>
             </tr>
         @endforeach
     </tbody>

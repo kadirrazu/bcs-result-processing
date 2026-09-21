@@ -64,6 +64,7 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
             Route::post('/{mode}/posts/{postCode}/allocated/pdf', [NonCadreReportingController::class, 'queuePdf'])->whereIn('mode', ['verification','booklet'])->defaults('scope', 'post-allocated')->name('post.allocated.pdf');
             Route::get('/{mode}/posts/{postCode}', [NonCadreReportingController::class, 'post'])->whereIn('mode', ['verification','booklet'])->name('post');
             Route::post('/{mode}/posts/{postCode}/pdf', [NonCadreReportingController::class, 'queuePdf'])->whereIn('mode', ['verification','booklet'])->defaults('scope', 'post')->name('post.pdf');
+            Route::post('/exports/candidates/{scope}/{format}', [NonCadreReportingController::class, 'candidateExport'])->whereIn('scope', ['eligible','allocated'])->whereIn('format', ['xlsx','dbf'])->name('exports.candidates');
             Route::post('/exports/txt', [NonCadreReportingController::class, 'txt'])->name('exports.txt');
             Route::get('/docx', [NonCadreReportingController::class, 'docx'])->name('docx');
             Route::get('/docx/sample-template', [NonCadreReportingController::class, 'downloadDocxSample'])->name('docx.sample');
