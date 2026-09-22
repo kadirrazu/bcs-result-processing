@@ -27,7 +27,7 @@ final class NonCadreDashboardNavigationReadinessContractTest extends TestCase
         self::assertStringContainsString("->where('phase', 'FINALIZED')", $controller);
         self::assertStringContainsString("->where('is_stale', false)", $controller);
         self::assertStringContainsString("\$reportingStatus = \$nc4Final ? 'available' : 'not_started';", $controller);
-        self::assertStringContainsString("'status' => $reportingStatus", $controller);
+        self::assertStringContainsString("'status' => \$reportingStatus", $controller);
         self::assertStringContainsString("['finalized', 'available']", $view);
         self::assertStringContainsString('NC4 allocation is finalized/current. Interactive reports and publishing exports are available.', $view);
     }

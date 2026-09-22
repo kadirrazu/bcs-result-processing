@@ -23,7 +23,7 @@ final class NonCadreAllocationNc4QueueContractTest extends TestCase
         $this->assertStringContainsString("'VALIDATION'", $controller);
         $this->assertStringContainsString("'RECOMPUTE'", $controller);
         $this->assertStringContainsString("/run/{run}/progress", $routes);
-        $this->assertStringContainsString("array_chunk($r,500)", $service);
+        $this->assertStringContainsString('array_chunk($r,500)', $service);
         $this->assertStringContainsString("'movement_type'", $service);
     }
 }

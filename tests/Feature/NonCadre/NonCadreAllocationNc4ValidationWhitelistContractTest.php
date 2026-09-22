@@ -21,7 +21,7 @@ class NonCadreAllocationNc4ValidationWhitelistContractTest extends TestCase
             $this->assertStringContainsString("'{$check}'", $source);
         }
 
-        $this->assertStringContainsString("whereIn('check_code',$required)", $source);
+        $this->assertStringContainsString("whereIn('check_code',\$required)", $source);
         $this->assertStringContainsString('critical validation whitelist is incomplete', $source);
     }
 }

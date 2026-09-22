@@ -90,7 +90,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="mt-3 small text-secondary"><strong>Fields:</strong> user, reg, name, cff, em, phc, allocation_ready_choice, common_merit_position, allocation_status, allocated_post_code, allocation_basis</div>
+                <div class="mt-3 small text-secondary"><strong>Fields:</strong> user, reg, name, cff, em, phc, allocation_ready_choice, common_merit_position, allocation_status, allocated_post_code, allocated_post_name, allocation_basis</div>
             </div>
         </div>
     </div>

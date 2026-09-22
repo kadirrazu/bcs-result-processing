@@ -151,7 +151,15 @@ final class NonCadreReportingService
         $posts=DB::connection('exam')->table('non_cadre_circular_posts')->where('circular_version_id',$run->circular_version_id)->where('status','ACTIVE')->orderByRaw('CAST(post_grade AS UNSIGNED)')->orderByRaw('CAST(post_serial AS UNSIGNED)')->orderByRaw('CAST(COALESCE(post_sub_serial,0) AS UNSIGNED)')->get();
         $allocated=DB::connection('exam')->table('non_cadre_allocation_results')->where('allocation_run_id',$run->id)->whereNotNull('post_code')->orderBy('common_merit_position')->get()->groupBy('post_code');
         $lines=[$examName,$title,'Generation Time: '.now()->format('d-m-Y h:i A'),'TOTAL ALLOCATED = '.str_pad((string)$allocated->flatten(1)->count(),4,'0',STR_PAD_LEFT),''];
-        foreach($posts as $post){$lines[]='#'.$post->post_code.' - '.$post->post_title;$lines[]='---------';$regs=$allocated->get($post->post_code,collect())->pluck('reg')->values();foreach($regs->chunk($perLine) as $chunk)$lines[]=$chunk->implode('   ');$lines[]='TOTAL = '.$regs->count();$lines[]='';$lines[]='';}
+        foreach($posts as $post){
+            $lines[]='#'.$post->post_code.' - '.$post->post_title;
+            $lines[]='Organization: '.(trim((string)($post->entity ?? '')) !== '' ? trim((string)$post->entity) : '—');
+            $lines[]='Ministry: '.(trim((string)($post->ministry ?? '')) !== '' ? trim((string)$post->ministry) : '—');
+            $lines[]=str_repeat('-',60);
+            $regs=$allocated->get($post->post_code,collect())->pluck('reg')->values();
+            foreach($regs->chunk($perLine) as $chunk)$lines[]=$chunk->implode('   ');
+            $lines[]='TOTAL = '.$regs->count();$lines[]='';$lines[]='';
+        }
         return implode("\r\n",$lines);
     }
 

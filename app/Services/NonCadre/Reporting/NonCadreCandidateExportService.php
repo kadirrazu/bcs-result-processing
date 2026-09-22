@@ -34,6 +34,10 @@ final class NonCadreCandidateExportService
                     ->where('a.allocation_run_id', '=', $run->id);
             })
             ->leftJoin('registrations as r', 'r.id', '=', 'i.registration_id')
+            ->leftJoin('non_cadre_circular_posts as p', function ($join) use ($run): void {
+                $join->on('p.id', '=', 'a.circular_post_id')
+                    ->where('p.circular_version_id', '=', $run->circular_version_id);
+            })
             ->where('i.allocation_run_id', $run->id)
             ->where('i.historical_excluded', false);
 
@@ -44,13 +48,14 @@ final class NonCadreCandidateExportService
         $rows = $query->select([
             'r.user_id', 'i.reg', 'r.name', 'i.has_cff', 'i.has_em', 'i.has_phc',
             'i.allocation_ready_choices', 'i.common_merit_position', 'a.post_code', 'a.allocation_basis',
+            'p.post_title', 'p.entity', 'p.ministry',
         ])->orderBy('i.common_merit_position')->orderBy('i.registration_id')->get();
 
         $normalized = $rows->map(fn (object $row): array => $this->normalize($row));
         $label = $scope === 'allocated' ? 'Allocated Candidates' : 'Allocation Eligible Candidates';
 
         if ($format === 'xlsx') {
-            $headers = ['user','reg','name','cff','em','phc','allocation_ready_choice','common_merit_position','allocation_status','allocated_post_code','allocation_basis'];
+            $headers = ['user','reg','name','cff','em','phc','allocation_ready_choice','common_merit_position','allocation_status','allocated_post_code','allocated_post_name','allocation_basis'];
             $values = $normalized->map(fn (array $row): array => array_values($row));
             $this->xlsx->write(
                 $outputPath,
@@ -73,6 +78,7 @@ final class NonCadreCandidateExportService
                 'COM_MERIT' => $row['common_merit_position'],
                 'ALOC_STAT' => $row['allocation_status'],
                 'POST_CODE' => $row['allocated_post_code'],
+                'POST_NAME' => $row['allocated_post_name'],
                 'ALOC_BASIS' => $row['allocation_basis'],
             ]);
             $this->dbf->write(
@@ -92,6 +98,11 @@ final class NonCadreCandidateExportService
         $choices = json_decode((string) ($row->allocation_ready_choices ?? '[]'), true);
         if (! is_array($choices)) $choices = [];
         $postCode = trim((string) ($row->post_code ?? ''));
+        $postNameParts = array_values(array_filter([
+            trim((string) ($row->post_title ?? '')),
+            trim((string) ($row->entity ?? '')),
+            trim((string) ($row->ministry ?? '')),
+        ], fn (string $value): bool => $value !== ''));
 
         return [
             'user' => (string) ($row->user_id ?? ''),
@@ -104,6 +115,7 @@ final class NonCadreCandidateExportService
             'common_merit_position' => $row->common_merit_position === null ? null : (int) $row->common_merit_position,
             'allocation_status' => $postCode !== '' ? 'ALLOCATED' : 'UNALLOCATED',
             'allocated_post_code' => $postCode,
+            'allocated_post_name' => $postCode !== '' ? implode(', ', $postNameParts) : '',
             'allocation_basis' => strtoupper(trim((string) ($row->allocation_basis ?? ''))),
         ];
     }
@@ -123,6 +135,7 @@ final class NonCadreCandidateExportService
             ['name'=>'COM_MERIT','type'=>'N','length'=>8],
             ['name'=>'ALOC_STAT','type'=>'C','length'=>12],
             ['name'=>'POST_CODE','type'=>'C','length'=>50],
+            ['name'=>'POST_NAME','type'=>'C','length'=>254],
             ['name'=>'ALOC_BASIS','type'=>'C','length'=>10],
         ];
     }
