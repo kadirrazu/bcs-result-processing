@@ -37,6 +37,19 @@ final class NonCadreReportingController extends Controller
 
         return view('non-cadre.reporting.index', compact('gate', 'posts', 'exports', 'operatorUsers'));
     }
+    public function candidates(Request $request, NonCadreReportingService $s): View
+    {
+        $search = trim((string) $request->query('search', ''));
+        $data = $s->candidateSearch($search);
+
+        return view('non-cadre.reporting.candidates', [...$data, 'search' => $search]);
+    }
+
+    public function candidate(string $reg, NonCadreReportingService $s): View
+    {
+        return view('non-cadre.reporting.candidate-show', ['data' => $s->candidateDetail($reg)]);
+    }
+
     public function common(string $mode,NonCadreReportingService $s):View{$this->mode($mode);return view('non-cadre.reporting.common',['mode'=>$mode,'rows'=>$s->commonMerit($mode==='booklet'),'gate'=>$s->gate()]);}
     public function posts(string $mode,NonCadreReportingService $s):View{$this->mode($mode);return view('non-cadre.reporting.posts',['mode'=>$mode,'posts'=>$s->posts()]);}
     public function serialMerit(NonCadreReportingService $s,ExaminationContext $c):View{$data=$s->serialMeritReport();return view('non-cadre.reporting.serial-merit',[...$data,'examination'=>$c->current()]);}

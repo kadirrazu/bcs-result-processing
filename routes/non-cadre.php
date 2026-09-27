@@ -54,6 +54,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         });
         Route::prefix('reporting')->name('reporting.')->group(function (): void {
             Route::get('/', [NonCadreReportingController::class, 'index'])->name('index');
+            Route::get('/candidates', [NonCadreReportingController::class, 'candidates'])->name('candidates');
+            Route::get('/candidates/{reg}', [NonCadreReportingController::class, 'candidate'])->name('candidate');
             Route::get('/{mode}/common-merit', [NonCadreReportingController::class, 'common'])->whereIn('mode', ['verification','booklet'])->name('common');
             Route::post('/{mode}/common-merit/pdf', [NonCadreReportingController::class, 'queuePdf'])->whereIn('mode', ['verification','booklet'])->defaults('scope', 'common')->name('common.pdf');
             Route::get('/verification/post-serial-merit', [NonCadreReportingController::class, 'serialMerit'])->name('serial-merit');

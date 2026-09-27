@@ -22,6 +22,10 @@
         <div class="card h-100">
             <div class="card-header"><h3 class="card-title">Interactive Reporting</h3></div>
             <div class="card-body">
+                <div class="fw-bold mb-2">Candidate Reporting</div>
+                <div class="btn-list mb-4">
+                    <a class="btn btn-outline-azure {{ $gate['ready']?'':'disabled' }}" href="{{ $gate['ready']?route('non-cadre.reporting.candidates'):'#' }}">Candidate Search</a>
+                </div>
                 <div class="fw-bold mb-2">Allocation Verification Reports</div>
                 <div class="btn-list mb-4">
                     <a class="btn btn-outline-primary {{ $gate['ready']?'':'disabled' }}" href="{{ $gate['ready']?route('non-cadre.reporting.common','verification'):'#' }}">Common Merit Position Report</a>

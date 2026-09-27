@@ -2,6 +2,7 @@
 
 namespace App\Services\NonCadre\Reporting;
 
+use App\Models\TabulationResult;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -124,6 +125,96 @@ final class NonCadreReportingService
         $rows->transform(function($row)use($postCode){$choices=json_decode((string)$row->allocation_ready_choices,true)?:[];$pos=array_search($postCode,$choices,true);$row->report_choice_position=$pos===false?null:$pos+1;return$row;});
         $post->allocated_post=DB::connection('exam')->table('non_cadre_allocation_results')->where('allocation_run_id',$run->id)->where('post_code',$postCode)->count();
         return compact('run','post','rows');
+    }
+
+    /** @return array{run:object,results:\Illuminate\Contracts\Pagination\LengthAwarePaginator,totalCandidates:int} */
+    public function candidateSearch(string $search = '', int $perPage = 100): array
+    {
+        $run = $this->requireReady();
+        $base = DB::connection('exam')->table('non_cadre_allocation_input_candidates as i')
+            ->where('i.allocation_run_id', $run->id);
+        $totalCandidates = (clone $base)->count();
+
+        $query = $base
+            ->join('registrations as r', 'r.id', '=', 'i.registration_id')
+            ->leftJoin('non_cadre_allocation_results as a', function ($join) use ($run): void {
+                $join->on('a.registration_id', '=', 'i.registration_id')
+                    ->where('a.allocation_run_id', '=', $run->id);
+            })
+            ->leftJoin('non_cadre_circular_posts as p', 'p.id', '=', 'a.circular_post_id')
+            ->select([
+                'i.registration_id','i.reg','i.common_merit_position','i.historical_excluded','i.historical_exclusion_reason',
+                'r.user_id','r.name','a.post_code','a.allocation_basis','a.decision_status','p.post_title',
+            ]);
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search): void {
+                $q->where('r.reg', 'like', '%'.$search.'%')
+                    ->orWhere('r.user_id', 'like', '%'.$search.'%')
+                    ->orWhere('r.name', 'like', '%'.$search.'%');
+            });
+        }
+
+        $results = $query->orderBy('i.common_merit_position')->orderBy('i.registration_id')
+            ->paginate($perPage)->withQueryString();
+
+        return compact('run', 'results', 'totalCandidates');
+    }
+
+    /** @return array<string,mixed> */
+    public function candidateDetail(string $reg): array
+    {
+        $run = $this->requireReady();
+        $input = DB::connection('exam')->table('non_cadre_allocation_input_candidates as i')
+            ->join('registrations as r', 'r.id', '=', 'i.registration_id')
+            ->where('i.allocation_run_id', $run->id)->where('i.reg', $reg)
+            ->select('i.*', 'r.user_id', 'r.name', 'r.birth_date', 'r.sex_code', 'r.district_code',
+                'r.bachelor_subject_code', 'r.post_related_subject_code')
+            ->first();
+        abort_if(! $input, 404);
+
+        $choice = DB::connection('exam')->table('non_cadre_choice_items')
+            ->where('choice_import_id', $run->choice_import_id)
+            ->where('registration_id', $input->registration_id)->first();
+        $allocation = DB::connection('exam')->table('non_cadre_allocation_results as a')
+            ->leftJoin('non_cadre_circular_posts as p', 'p.id', '=', 'a.circular_post_id')
+            ->where('a.allocation_run_id', $run->id)->where('a.registration_id', $input->registration_id)
+            ->select('a.*', 'p.post_title', 'p.entity', 'p.ministry', 'p.entity_bn', 'p.ministry_bn')->first();
+        $meritState = DB::connection('exam')->table('merit_processing_states')->where('id', 1)->first();
+        $meritRunId = $meritState && $meritState->status === 'finalized' && ! (bool) $meritState->is_stale
+            ? (int) ($meritState->latest_run_id ?: 0) : 0;
+        $merit = $meritRunId > 0 ? DB::connection('exam')->table('merit_results')
+            ->where('processing_run_id', $meritRunId)->where('registration_id', $input->registration_id)->first() : null;
+
+        // Keep the NC5 candidate review bound to the exact finalized Tabulation source that
+        // produced the finalized Merit run; never infer ranking inputs from live upstream rows.
+        $tabulation = null;
+        if ($meritRunId > 0) {
+            $meritRun = DB::connection('exam')->table('merit_processing_runs')->where('id', $meritRunId)->first();
+            $sourceSnapshot = json_decode((string) ($meritRun->source_snapshot ?? ''), true) ?: [];
+            $tabulationRunId = (int) data_get($sourceSnapshot, 'tabulation.processing_run_id', 0);
+            if ($tabulationRunId > 0) {
+                $tabulation = TabulationResult::query()
+                    ->where('processing_run_id', $tabulationRunId)
+                    ->where('registration_id', $input->registration_id)
+                    ->first();
+            }
+        }
+
+        $adjustments = $choice ? DB::connection('exam')->table('non_cadre_choice_adjustments')
+            ->where('choice_item_id', $choice->id)->orderByDesc('id')->get() : collect();
+
+        $decode = static fn ($value): array => array_values(array_filter(
+            json_decode((string) $value, true) ?: [], static fn ($v): bool => filled($v)
+        ));
+        $postCodes = collect($decode($choice?->original_choices))
+            ->merge($decode($choice?->validated_choices))->merge($decode($choice?->effective_choices))
+            ->merge($decode($input->allocation_ready_choices))->filter()->unique()->values();
+        $posts = $postCodes->isEmpty() ? collect() : DB::connection('exam')->table('non_cadre_circular_posts')
+            ->where('circular_version_id', $run->circular_version_id)->whereIn('post_code', $postCodes)
+            ->get()->keyBy(fn ($p) => (string) $p->post_code);
+
+        return compact('run','input','choice','allocation','merit','tabulation','adjustments','posts');
     }
 
     public function serialMeritReport(): array
