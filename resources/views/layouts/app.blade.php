@@ -8,7 +8,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
 </head>
-<body>
+<body class="{{ \App\Support\Ui\UiColorScheme::cssClass(auth()->user()?->ui_color_scheme) }}">
     @php
         $activeExamination = app(\App\Support\Examinations\ExaminationContext::class)->current();
     @endphp

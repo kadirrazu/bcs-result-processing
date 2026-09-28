@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserAppearanceController;
 use App\Http\Middleware\EnsureExaminationProcessingOpen;
 use App\Http\Middleware\ConfigureSelectedExaminationConnection;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,10 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('users', UserController::class)
         ->except('destroy');
+
+    Route::get('/settings/appearance', [UserAppearanceController::class, 'edit'])->name('settings.appearance.edit');
+    Route::put('/settings/appearance', [UserAppearanceController::class, 'update'])->name('settings.appearance.update');
+    Route::delete('/settings/appearance', [UserAppearanceController::class, 'reset'])->name('settings.appearance.reset');
 
     require __DIR__.'/examinations.php';
 

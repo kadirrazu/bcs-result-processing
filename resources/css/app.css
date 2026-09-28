@@ -56,3 +56,28 @@ body {
     .app-table-footer { align-items: flex-start; flex-direction: column; }
     .app-pagination { width: 100%; }
 }
+
+
+/* Per-user UI color schemes. These variables intentionally affect only the application shell/UI. */
+body.ui-scheme-soft-blue { --app-ui-page:#f0f6fc; --app-ui-surface:#fbfdff; --app-ui-soft:#dcebf8; --app-ui-border:#cbddec; --app-ui-accent:#3f78aa; --app-ui-accent-rgb:63,120,170; --app-ui-link:#326792; }
+body.ui-scheme-mist-teal { --app-ui-page:#eff8f7; --app-ui-surface:#fbfefd; --app-ui-soft:#d7eeea; --app-ui-border:#c6e2dd; --app-ui-accent:#3f8279; --app-ui-accent-rgb:63,130,121; --app-ui-link:#336f67; }
+body.ui-scheme-sage { --app-ui-page:#f3f7f0; --app-ui-surface:#fcfdfb; --app-ui-soft:#e0ebda; --app-ui-border:#d0dfc8; --app-ui-accent:#66805d; --app-ui-accent-rgb:102,128,93; --app-ui-link:#566f4e; }
+body.ui-scheme-warm-sand { --app-ui-page:#faf7f0; --app-ui-surface:#fffdf9; --app-ui-soft:#efe5d2; --app-ui-border:#e3d5bd; --app-ui-accent:#8b7656; --app-ui-accent-rgb:139,118,86; --app-ui-link:#766348; }
+body.ui-scheme-dusty-rose { --app-ui-page:#faf5f6; --app-ui-surface:#fffdfd; --app-ui-soft:#eedfe2; --app-ui-border:#e2cfd3; --app-ui-accent:#916b73; --app-ui-accent-rgb:145,107,115; --app-ui-link:#7b5961; }
+body.ui-scheme-slate-blue { --app-ui-page:#f3f6f8; --app-ui-surface:#fcfdfe; --app-ui-soft:#e1e8ed; --app-ui-border:#d1dce3; --app-ui-accent:#607789; --app-ui-accent-rgb:96,119,137; --app-ui-link:#506777; }
+body.ui-scheme-soft-indigo { --app-ui-page:#f7f4fa; --app-ui-surface:#fefcff; --app-ui-soft:#e8e0ef; --app-ui-border:#dbcee5; --app-ui-accent:#776b8f; --app-ui-accent-rgb:119,107,143; --app-ui-link:#655a7b; }
+body[class*="ui-scheme-"] { --tblr-primary:var(--app-ui-accent); --tblr-primary-rgb:var(--app-ui-accent-rgb); --tblr-link-color:var(--app-ui-link); background:var(--app-ui-page); }
+body[class*="ui-scheme-"] .page-wrapper, body[class*="ui-scheme-"] .page-body { background:var(--app-ui-page); }
+body[class*="ui-scheme-"] .app-topbar, body[class*="ui-scheme-"] .app-examination-nav, body[class*="ui-scheme-"] .dropdown-menu { background-color:var(--app-ui-surface); }
+body[class*="ui-scheme-"] .app-examination-nav { border-color:var(--app-ui-border); }
+body[class*="ui-scheme-"] .card { border-color:var(--app-ui-border); box-shadow:0 1px 3px rgba(31, 41, 55, .035); }
+body[class*="ui-scheme-"] .card-header, body[class*="ui-scheme-"] .card-footer { border-color:var(--app-ui-border); }
+body[class*="ui-scheme-"] .app-examination-menu .nav-item.active > .nav-link, body[class*="ui-scheme-"] .app-examination-menu .nav-link:hover { background:var(--app-ui-soft); border-radius:.375rem; }
+body[class*="ui-scheme-"] .btn-primary { --tblr-btn-bg:var(--app-ui-accent); --tblr-btn-border-color:var(--app-ui-accent); --tblr-btn-hover-bg:var(--app-ui-link); --tblr-btn-hover-border-color:var(--app-ui-link); }
+.app-scheme-option { display:flex; gap:.75rem; height:100%; padding:1rem; border:1px solid var(--tblr-border-color); border-radius:.5rem; cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease; }
+.app-scheme-option:hover { background:rgba(var(--tblr-primary-rgb), .025); border-color:rgba(var(--tblr-primary-rgb), .35); }
+.app-scheme-option.is-selected { border-color:rgba(var(--tblr-primary-rgb), .55); box-shadow:0 0 0 2px rgba(var(--tblr-primary-rgb), .08); }
+.app-scheme-option-body { min-width:0; flex:1; }
+.app-scheme-swatches { display:flex; height:1.5rem; overflow:hidden; margin:.65rem 0; border:1px solid var(--tblr-border-color); border-radius:.375rem; }
+.app-scheme-swatches span { flex:1 1 0; }
+@media print { body[class*="ui-scheme-"] { --tblr-primary:#206bc4; --tblr-primary-rgb:32,107,196; background:#fff !important; } }

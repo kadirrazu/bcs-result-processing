@@ -12,6 +12,10 @@
             <div class="small text-secondary">{{ auth()->user()->email }}</div>
         </div>
         <div class="dropdown-divider"></div>
+        <a href="{{ route('settings.appearance.edit') }}" class="dropdown-item">
+            <span class="me-2" aria-hidden="true">◐</span> Appearance
+        </a>
+        <div class="dropdown-divider"></div>
         <form method="POST" action="{{ route('logout') }}">
             @csrf
             <button type="submit" class="dropdown-item">Sign out</button>

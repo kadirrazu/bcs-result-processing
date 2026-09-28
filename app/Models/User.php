@@ -33,6 +33,7 @@ class User extends Authenticatable
         'role',
         'is_active',
         'last_login_at',
+        'ui_color_scheme',
     ];
 
     /**
