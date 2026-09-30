@@ -29,6 +29,7 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
             Route::get('/template', [NonCadreSeatBreakupController::class, 'template'])->name('template');
             Route::post('/upload', [NonCadreSeatBreakupController::class, 'upload'])->name('upload');
             Route::get('/version/{version}', [NonCadreSeatBreakupController::class, 'version'])->name('version');
+            Route::get('/version/{version}/pdf', [NonCadreSeatBreakupController::class, 'pdf'])->name('version.pdf');
             Route::post('/version/{version}/finalize', [NonCadreSeatBreakupController::class, 'finalize'])->name('finalize');
         });
         Route::prefix('choice')->name('choice.')->group(function (): void {

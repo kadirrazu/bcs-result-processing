@@ -20,6 +20,7 @@ final class NonCadreSeatBreakupNc2ContractTest extends TestCase
         $report = file_get_contents(app_path('Reports/Pdf/NonCadre/NonCadreSeatBreakupPdfReport.php'));
 
         self::assertStringContainsString("name('version.pdf')", $routes);
+        self::assertStringContainsString("Route::get('/version/{version}/pdf', [NonCadreSeatBreakupController::class, 'pdf'])->name('version.pdf')", $routes);
         self::assertStringContainsString('NonCadreSeatBreakupPdfReport', $controller);
         self::assertStringContainsString('Export PDF', $view);
         self::assertStringContainsString('Non-Cadre Seat Breakup', $report);
