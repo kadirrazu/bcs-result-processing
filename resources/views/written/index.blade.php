@@ -11,7 +11,7 @@
 @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
 
 <div class="row row-cards mb-3">
-@foreach(['results'=>'Written Results','warnings'=>'Warning Review','active'=>'Active','cancelled'=>'Cancelled','withheld'=>'Withheld','expelled'=>'Expelled'] as $key=>$label)
+@foreach(['results'=>'Written Results','passed'=>'Written Passed','warnings'=>'Warning Review','active'=>'Active','cancelled'=>'Cancelled','withheld'=>'Withheld','expelled'=>'Expelled'] as $key=>$label)
 <div class="col-sm-6 col-lg"><div class="card card-sm"><div class="card-body"><div class="text-secondary">{{ $label }}</div><div class="h2 mb-0 {{ $key === 'warnings' ? 'text-warning' : '' }}">{{ number_format($counts[$key]) }}</div></div></div></div>
 @endforeach
 </div>

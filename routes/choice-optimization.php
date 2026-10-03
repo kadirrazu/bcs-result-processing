@@ -38,6 +38,8 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
 
         Route::post('/historical/pull', [ChoiceOptimizationController::class, 'pullHistorical'])->name('historical.pull');
         Route::post('/historical/source-usage', [ChoiceOptimizationController::class, 'updateHistoricalSourceUsage'])->name('historical.source-usage');
+        Route::get('/historical/export/matches.xlsx', [ChoiceOptimizationController::class, 'exportHistoricalMatchesXlsx'])->name('historical.export.matches.xlsx');
+        Route::get('/historical/export/matches.dbf', [ChoiceOptimizationController::class, 'exportHistoricalMatchesDbf'])->name('historical.export.matches.dbf');
         Route::get('/historical/{source}', [ChoiceOptimizationController::class, 'showHistorical'])->name('historical.show');
         Route::get('/historical/{source}/status', [ChoiceOptimizationController::class, 'historicalStatus'])->name('historical.status');
         Route::get('/historical/{source}/matches/{match}', [ChoiceOptimizationController::class, 'showHistoricalMatch'])->name('historical.matches.show');

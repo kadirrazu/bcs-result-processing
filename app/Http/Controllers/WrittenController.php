@@ -60,6 +60,7 @@ final class WrittenController extends Controller
                 : ($state->is_stale ? null : WrittenProcessingRun::query()->latest('id')->first()),
             'counts' => [
                 'results' => WrittenResult::query()->count(),
+                'passed' => WrittenResult::query()->where('status', 'active')->whereNotNull('written_qualified_track')->count(),
                 'warnings' => WrittenResult::query()->where('validation_status', 'warning')->count(),
                 'active' => WrittenResult::query()->where('status', 'active')->count(),
                 'cancelled' => WrittenResult::query()->where('status', 'cancelled')->count(),
@@ -624,6 +625,7 @@ final class WrittenController extends Controller
                 ['id' => 1],
                 ['status' => WrittenProcessingStatus::NotStarted->value],
             ),
+            'passedCount' => WrittenResult::query()->where('status', 'active')->whereNotNull('written_qualified_track')->count(),
         ]);
     }
 

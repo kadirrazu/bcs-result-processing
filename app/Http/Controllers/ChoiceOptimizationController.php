@@ -28,6 +28,7 @@ use App\Services\ChoiceOptimization\ChoiceOptimizationOmrImportService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrResolutionService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationOmrTemplateService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalReviewService;
+use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalMatchExportService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalStalenessService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalChoiceFinalizationService;
 use App\Services\ChoiceOptimization\ChoiceOptimizationHistoricalInputService;
@@ -151,6 +152,27 @@ final class ChoiceOptimizationController extends Controller
             'googleFormRunAvailable' => $googleFormRunAvailable,
             'manualAdjustmentSummary' => $finalAllocationReadyChoices->adjustmentSummary(),
         ]);
+    }
+
+    public function exportHistoricalMatchesXlsx(ChoiceOptimizationHistoricalMatchExportService $exports): BinaryFileResponse
+    {
+        return $this->downloadHistoricalMatches($exports, 'xlsx');
+    }
+
+    public function exportHistoricalMatchesDbf(ChoiceOptimizationHistoricalMatchExportService $exports): BinaryFileResponse
+    {
+        return $this->downloadHistoricalMatches($exports, 'dbf');
+    }
+
+    private function downloadHistoricalMatches(ChoiceOptimizationHistoricalMatchExportService $exports, string $format): BinaryFileResponse
+    {
+        $directory = storage_path('app/private/choice-optimization/exports');
+        File::ensureDirectoryExists($directory);
+        $filename = 'previous-bcs-matched-viva-eligible-'.now()->format('Ymd-His').'.'.$format;
+        $path = $directory.DIRECTORY_SEPARATOR.$filename;
+        $exports->export($format, $path);
+
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
     }
 
     public function updateSetting(Request $request, ChoiceOptimizationSettingsService $settings): RedirectResponse

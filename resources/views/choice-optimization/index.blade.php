@@ -148,6 +148,10 @@
                         <button class="btn btn-primary" id="historical-pull-selected" type="submit" disabled>
                             Pull / Re-pull Selected
                         </button>
+                        <div class="btn-group">
+                            <a class="btn btn-outline-primary" href="{{ route('choice-optimization.historical.export.matches.xlsx') }}">Matched History XLSX</a>
+                            <a class="btn btn-outline-secondary" href="{{ route('choice-optimization.historical.export.matches.dbf') }}">DBF</a>
+                        </div>
                     </div>
                 </div>
 
