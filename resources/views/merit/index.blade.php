@@ -28,6 +28,10 @@
 
     @if($latestRun)
         <a class="btn btn-outline-secondary" href="{{ route('merit.results',['run'=>$latestRun->id]) }}">Review Results</a>
+        <a class="btn btn-outline-warning" href="{{ route('historical-punishments.screening.index',['phase'=>'merit_initial']) }}">Optional Current-Population Screening</a>
+        @if($state->status === 'finalized' && !$state->is_stale)
+            <a class="btn btn-outline-warning" href="{{ route('historical-punishments.screening.index',['phase'=>'merit_final']) }}">Optional Finalized Screening</a>
+        @endif
     @endif
 </div>
 

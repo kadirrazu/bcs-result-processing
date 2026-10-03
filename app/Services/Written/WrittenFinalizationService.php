@@ -38,6 +38,7 @@ final class WrittenFinalizationService
             throw new RuntimeException('The Written result is not ready for final review yet.');
         }
 
+        $this->assertRegistrationEligibilityIsCurrent();
         $this->assertProcessedFactsAreComplete();
         $actor = User::query()->findOrFail($actorId);
         $before = $this->stateSnapshot($state);
@@ -133,6 +134,19 @@ final class WrittenFinalizationService
                 processingRunId: $run->id,
             );
             throw $exception;
+        }
+    }
+
+    private function assertRegistrationEligibilityIsCurrent(): void
+    {
+        $invalid = DB::connection('exam')->table('written_results as w')
+            ->join('registrations as r', 'r.id', '=', 'w.registration_id')
+            ->where('w.status', 'active')
+            ->where('r.status', '<>', 'active')
+            ->whereNotNull('w.written_qualified_track');
+
+        if ($invalid->exists()) {
+            throw new RuntimeException('Registration status changed for one or more Written candidates. Regenerate reconciliation and reprocess Written rules before finalizing.');
         }
     }
 

@@ -42,7 +42,7 @@
 .allocation-stage-summary .summary-detail { flex:1; color:var(--tblr-secondary); }
 .allocation-stage-summary .summary-status { min-width:155px; text-align:right; }
 </style>
-<div class="page-header"><div class="container-xl"><h2 class="page-title">Allocation</h2><div class="text-secondary">Deterministic cadre allocation with strict upstream readiness, freeze and integrity gates.</div></div></div>
+<div class="page-header"><div class="container-xl"><div class="row align-items-center g-2"><div class="col"><h2 class="page-title">Allocation</h2><div class="text-secondary">Deterministic cadre allocation with strict upstream readiness, freeze and integrity gates.</div></div><div class="col-auto"><a class="btn btn-outline-warning" href="{{ route('historical-punishments.screening.index',['phase'=>'allocation_final']) }}">Optional Punishment Screening</a></div></div></div></div>
 <div class="page-body"><div class="container-xl">
 @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="alert alert-danger"><strong>Action blocked.</strong><div>{{ $errors->first() }}</div></div>@endif

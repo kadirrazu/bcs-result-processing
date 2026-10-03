@@ -23,6 +23,7 @@ use App\Services\Exports\AdministrativeExportCacheService;
 use App\Services\Preliminary\PreliminaryAuditService;
 use App\Services\Preliminary\PreliminaryCutoffService;
 use App\Services\Preliminary\PreliminaryDistributionService;
+use App\Services\Preliminary\PreliminaryDispositionService;
 use App\Services\Preliminary\PreliminaryImportService;
 use App\Services\Preliminary\PreliminaryReconciliationService;
 use App\Services\Preliminary\PreliminaryResultEditService;
@@ -36,6 +37,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class PreliminaryController extends Controller
@@ -823,6 +827,91 @@ final class PreliminaryController extends Controller
             // Registration number order is authoritative for the published list; mark order is never used here.
             ->orderBy('p.reg', 'asc')
             ->pluck('p.reg');
+    }
+
+
+    public function dispositions(Request $request): View
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $status = trim((string) $request->query('status', 'all'));
+        $search = trim((string) $request->query('search', ''));
+
+        return view('preliminary.dispositions', [
+            'rows' => $this->dispositionQuery($status, $search, true)->paginate(100)->withQueryString(),
+            'filters' => compact('status', 'search'),
+            'counts' => [
+                'cancelled' => $this->dispositionQuery('cancelled', '')->count(),
+                'withheld' => $this->dispositionQuery('withheld', '')->count(),
+            ],
+        ]);
+    }
+
+    public function updateDisposition(Request $request, PreliminaryResult $result, PreliminaryDispositionService $service): RedirectResponse
+    {
+        $this->authorize('process', PreliminaryResult::class);
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:active,cancelled,withheld'],
+            'reason' => ['required', 'string', 'min:5', 'max:2000'],
+        ]);
+        try {
+            $service->update($result, $validated['status'], $validated['reason'], $request->user());
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['status' => $e->getMessage()]);
+        }
+        return back()->with('success', 'Preliminary candidate disposition updated with audit trail. Reconciliation, distribution/cut-off review and finalization must be regenerated as applicable.');
+    }
+
+    public function dispositionsXlsx(Request $request): BinaryFileResponse
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $rows = $this->dispositionQuery((string) $request->query('status', 'all'), (string) $request->query('search', ''))->get();
+        $book = new Spreadsheet(); $sheet = $book->getActiveSheet(); $sheet->setTitle('Preliminary Dispositions');
+        $headers = ['User ID','Registration','Name','Preliminary Status','Mark','Reason / Source Note'];
+        foreach ($headers as $i => $header) { $sheet->setCellValue([$i + 1, 1], $header); }
+        $r = 2;
+        foreach ($rows as $row) {
+            $values = [$row->user_id,$row->reg,$row->name,$row->preliminary_status,$row->mark,$row->last_edit_reason ?: $row->raw_candidate_status];
+            foreach ($values as $i => $value) { $sheet->setCellValueExplicit([$i + 1, $r], (string) ($value ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); }
+            $r++;
+        }
+        foreach (range('A','F') as $column) { $sheet->getColumnDimension($column)->setAutoSize(true); }
+        $dir = storage_path('app/private/preliminary'); File::ensureDirectoryExists($dir);
+        $path = $dir.'/preliminary-cancelled-withheld-'.now()->format('Ymd-His').'.xlsx';
+        (new Xlsx($book))->save($path); $book->disconnectWorksheets();
+        return response()->download($path, basename($path))->deleteFileAfterSend(true);
+    }
+
+    public function dispositionsCsv(Request $request): StreamedResponse
+    {
+        $this->authorize('viewAny', PreliminaryResult::class);
+        $status = (string) $request->query('status', 'all'); $search = (string) $request->query('search', '');
+        return response()->streamDownload(function () use ($status, $search): void {
+            $out = fopen('php://output', 'wb'); fputcsv($out, ['User ID','Registration','Name','Preliminary Status','Mark','Reason / Source Note']);
+            $this->dispositionQuery($status, $search)->orderBy('p.id')->chunk(1000, function ($rows) use ($out): void {
+                foreach ($rows as $row) { fputcsv($out, [$row->user_id,$row->reg,$row->name,$row->preliminary_status,$row->mark,$row->last_edit_reason ?: $row->raw_candidate_status]); }
+            }); fclose($out);
+        }, 'preliminary-cancelled-withheld-'.now()->format('Ymd-His').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    private function dispositionQuery(string $status = 'all', string $search = '', bool $includeActiveSearch = false)
+    {
+        $search = trim($search);
+        $allowActiveSearch = $includeActiveSearch && $status === 'all' && $search !== '';
+
+        return DB::connection('exam')->table('preliminary_results as p')
+            ->join('registrations as r', 'r.id', '=', 'p.registration_id')
+            ->when(
+                ! $allowActiveSearch,
+                fn ($q) => $q->whereIn('p.candidate_status', ['cancelled','withheld'])
+            )
+            ->when(in_array($status, ['cancelled','withheld'], true), fn ($q) => $q->where('p.candidate_status', $status))
+            ->when($search !== '', function ($q) use ($search): void {
+                $needle = '%'.$search.'%';
+                $q->where(fn ($x) => $x->where('p.reg', 'like', $needle)->orWhere('p.user_id', 'like', $needle)->orWhere('r.name', 'like', $needle));
+            })
+            ->select(['p.id','p.user_id','p.reg','r.name','p.mark','p.raw_candidate_status','p.last_edit_reason'])
+            ->selectRaw('p.candidate_status as preliminary_status')
+            ->orderBy('p.reg');
     }
 
     public function results(Request $request): View

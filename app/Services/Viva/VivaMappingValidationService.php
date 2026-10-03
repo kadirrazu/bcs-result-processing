@@ -19,7 +19,7 @@ final class VivaMappingValidationService
             $total=(int)$batch->staged_rows;$done=$valid=$invalid=$conflicts=0;$chunk=max(500,(int)config('viva.mapping_validation_chunk_size',3000));
             DB::connection('exam')->table('viva_mapping_import_staging')->where('batch_id',$batchId)->orderBy('id')->chunkById($chunk,function($rows)use($batch,$total,&$done,&$valid,&$invalid,&$conflicts){
                 $regs=$rows->pluck('reg')->filter()->unique()->values()->all();$users=$rows->pluck('user_id')->filter()->unique()->values()->all();$codes=$rows->pluck('code')->filter()->unique()->values()->all();
-                $registrations=DB::connection('exam')->table('registrations')->whereIn('reg',$regs)->orWhereIn('user_id',$users)->get(['id','reg','user_id'])->keyBy('reg');
+                $registrations=DB::connection('exam')->table('registrations')->whereIn('reg',$regs)->orWhereIn('user_id',$users)->where('status','active')->get(['id','reg','user_id'])->keyBy('reg');
                 $written=DB::connection('exam')->table('written_results')->whereIn('reg',$regs)->where('status','active')->whereNotNull('written_qualified_track')->whereNotNull('finalized_at')->get(['id','registration_id','reg','user_id','written_qualified_track'])->keyBy('reg');
                 $dupes=DB::connection('exam')->table('viva_mapping_import_staging')->select('code',DB::raw('COUNT(*) c'))->where('batch_id',$batch->id)->whereIn('code',$codes)->whereNotNull('code')->groupBy('code')->having('c','>',1)->pluck('c','code');
                 $existing=DB::connection('exam')->table('viva_candidate_mappings')->whereIn('code',$codes)->get(['registration_id','code'])->keyBy('code');

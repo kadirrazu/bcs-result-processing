@@ -28,7 +28,7 @@ final class WrittenReconciliationService
         $allAbsentByCategory = [1 => 0, 2 => 0, 3 => 0];
         $partialMandatoryAbsentByCategory = [1 => 0, 2 => 0, 3 => 0];
 
-        DB::connection('exam')->table('written_results')->select(['id', 'cadre_category'])->orderBy('id')
+        DB::connection('exam')->table('written_results as w')->join('registrations as r', 'r.id', '=', 'w.registration_id')->where('r.status', 'active')->select(['w.id', 'w.cadre_category'])->orderBy('w.id')
             ->chunkById(1500, function ($rows) use (&$allAbsentByCategory, &$partialMandatoryAbsentByCategory): void {
                 $resultIds = $rows->pluck('id')->map(fn ($id) => (int) $id)->all();
                 $marks = DB::connection('exam')->table('written_candidate_marks')
@@ -51,7 +51,7 @@ final class WrittenReconciliationService
                         $partialMandatoryAbsentByCategory[$category]++;
                     }
                 }
-            }, 'id');
+            }, 'w.id', 'id');
 
         // A candidate with a Written row but ABS/AAA in every applicable subject did not actually appear.
         $appearedByCategory = $this->subtractCategory($writtenRowsByCategory, $allAbsentByCategory);
@@ -100,13 +100,14 @@ final class WrittenReconciliationService
             DB::connection('exam')->table('preliminary_results as p')
                 ->join('registrations as r', 'r.id', '=', 'p.registration_id')
                 ->where('p.result_status', 'pass')
+                ->where('r.status', 'active')
         );
     }
 
     /** @return array<int,int> */
     private function writtenByCategory(): array
     {
-        return $this->categoryCounts(DB::connection('exam')->table('written_results as r'), 'r.cadre_category');
+        return $this->categoryCounts(DB::connection('exam')->table('written_results as w')->join('registrations as r', 'r.id', '=', 'w.registration_id')->where('r.status', 'active'), 'w.cadre_category');
     }
 
     /** @return array<int,int> */
@@ -116,6 +117,7 @@ final class WrittenReconciliationService
             ->join('registrations as r', 'r.id', '=', 'p.registration_id')
             ->leftJoin('written_results as w', 'w.registration_id', '=', 'p.registration_id')
             ->where('p.result_status', 'pass')
+            ->where('r.status', 'active')
             ->whereNull('w.id');
 
         return $this->categoryCounts($query);

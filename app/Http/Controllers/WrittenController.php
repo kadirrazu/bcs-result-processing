@@ -21,6 +21,7 @@ use App\Services\Written\WrittenAuditService;
 use App\Services\Written\WrittenImportService;
 use App\Services\Written\WrittenReconciliationService;
 use App\Services\Written\WrittenResultEditService;
+use App\Services\Written\WrittenDispositionService;
 use App\Services\Written\WrittenSubjectConfig;
 use App\Services\Written\WrittenTemplateService;
 use App\Services\MasterData\CodeLabelService;
@@ -39,6 +40,8 @@ use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 final class WrittenController extends Controller
 {
@@ -60,11 +63,11 @@ final class WrittenController extends Controller
                 : ($state->is_stale ? null : WrittenProcessingRun::query()->latest('id')->first()),
             'counts' => [
                 'results' => WrittenResult::query()->count(),
-                'passed' => WrittenResult::query()->where('status', 'active')->whereNotNull('written_qualified_track')->count(),
+                'passed' => DB::connection('exam')->table('written_results as w')->join('registrations as r','r.id','=','w.registration_id')->where('w.status','active')->where('r.status','active')->whereNotNull('w.written_qualified_track')->count(),
                 'warnings' => WrittenResult::query()->where('validation_status', 'warning')->count(),
-                'active' => WrittenResult::query()->where('status', 'active')->count(),
-                'cancelled' => WrittenResult::query()->where('status', 'cancelled')->count(),
-                'withheld' => WrittenResult::query()->where('status', 'withheld')->count(),
+                'active' => DB::connection('exam')->table('written_results as w')->join('registrations as r','r.id','=','w.registration_id')->where('w.status','active')->where('r.status','active')->count(),
+                'cancelled' => $this->dispositionQuery('cancelled', '')->count(),
+                'withheld' => $this->dispositionQuery('withheld', '')->count(),
                 'expelled' => WrittenResult::query()->where('status', 'expelled')->count(),
                 'paper_crash' => DB::connection('exam')->table('written_candidate_marks')->where('paper_crashed', 1)->distinct()->count('written_result_id'),
                 'high_mark' => DB::connection('exam')->table('written_candidate_marks')->where('warning_codes', 'like', '%HIGH_MARK_REVIEW:%')->distinct()->count('written_result_id'),
@@ -629,6 +632,74 @@ final class WrittenController extends Controller
         ]);
     }
 
+    public function dispositions(Request $request): View
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $status = trim((string) $request->query('status', 'all'));
+        $search = trim((string) $request->query('search', ''));
+        $query = $this->dispositionQuery($status, $search, true);
+
+        return view('written.dispositions', [
+            'rows' => $query->paginate(100)->withQueryString(),
+            'filters' => compact('status', 'search'),
+            'counts' => [
+                'cancelled' => $this->dispositionQuery('cancelled', '')->count(),
+                'withheld' => $this->dispositionQuery('withheld', '')->count(),
+            ],
+        ]);
+    }
+
+    public function updateDisposition(Request $request, WrittenResult $result, WrittenDispositionService $service): RedirectResponse
+    {
+        $this->authorize('process', WrittenResult::class);
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:active,cancelled,withheld'],
+            'reason' => ['required', 'string', 'min:5', 'max:2000'],
+        ]);
+        try {
+            $service->update($result, $validated['status'], $validated['reason'], $request->user());
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['status' => $e->getMessage()]);
+        }
+        return back()->with('success', 'Written candidate disposition updated with audit trail. Reconciliation and Written rules must be regenerated before finalization.');
+    }
+
+    public function dispositionsXlsx(Request $request): BinaryFileResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $rows = $this->dispositionQuery((string) $request->query('status', 'all'), (string) $request->query('search', ''))->get();
+        $book = new Spreadsheet();
+        $sheet = $book->getActiveSheet();
+        $sheet->setTitle('Written Dispositions');
+        $headers = ['User ID','Registration','Name','Registration Status','Written Status','Effective Disposition','Source','Reason / Comment'];
+        foreach ($headers as $i => $header) { $sheet->setCellValue([$i + 1, 1], $header); }
+        $r = 2;
+        foreach ($rows as $row) {
+            $values = [$row->user_id,$row->reg,$row->name,$row->registration_status,$row->written_status,$row->effective_disposition,$row->disposition_source,$row->last_edit_reason ?: $row->comment];
+            foreach ($values as $i => $value) { $sheet->setCellValueExplicit([$i + 1, $r], (string) ($value ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); }
+            $r++;
+        }
+        foreach (range('A','H') as $column) { $sheet->getColumnDimension($column)->setAutoSize(true); }
+        $dir = storage_path('app/private/written'); File::ensureDirectoryExists($dir);
+        $path = $dir.'/written-cancelled-withheld-'.now()->format('Ymd-His').'.xlsx';
+        (new Xlsx($book))->save($path); $book->disconnectWorksheets();
+        return response()->download($path, basename($path))->deleteFileAfterSend(true);
+    }
+
+    public function dispositionsCsv(Request $request): StreamedResponse
+    {
+        $this->authorize('viewAny', WrittenResult::class);
+        $status = (string) $request->query('status', 'all'); $search = (string) $request->query('search', '');
+        return response()->streamDownload(function () use ($status, $search): void {
+            $out = fopen('php://output', 'wb');
+            fputcsv($out, ['User ID','Registration','Name','Registration Status','Written Status','Effective Disposition','Source','Reason / Comment']);
+            $this->dispositionQuery($status, $search)->orderBy('w.id')->chunk(1000, function ($rows) use ($out): void {
+                foreach ($rows as $row) { fputcsv($out, [$row->user_id,$row->reg,$row->name,$row->registration_status,$row->written_status,$row->effective_disposition,$row->disposition_source,$row->last_edit_reason ?: $row->comment]); }
+            });
+            fclose($out);
+        }, 'written-cancelled-withheld-'.now()->format('Ymd-His').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
     public function administrativeExportXlsx(
         Request $request,
         ExaminationContext $context,
@@ -1188,12 +1259,42 @@ final class WrittenController extends Controller
     /** @param list<string>|null $tracks */
     private function qualifiedRegistrations(?array $tracks = null)
     {
-        return DB::connection('exam')->table('written_results')
-            ->where('status', 'active')
-            ->whereNotNull('written_qualified_track')
-            ->when($tracks !== null, fn ($query) => $query->whereIn('written_qualified_track', $tracks))
-            ->orderByRaw('CAST(reg AS UNSIGNED) ASC')
-            ->pluck('reg');
+        return DB::connection('exam')->table('written_results as w')
+            ->join('registrations as r', 'r.id', '=', 'w.registration_id')
+            ->where('w.status', 'active')
+            ->where('r.status', 'active')
+            ->whereNotNull('w.written_qualified_track')
+            ->when($tracks !== null, fn ($query) => $query->whereIn('w.written_qualified_track', $tracks))
+            ->orderByRaw('CAST(w.reg AS UNSIGNED) ASC')
+            ->pluck('w.reg');
+    }
+
+    private function dispositionQuery(string $status = 'all', string $search = '', bool $includeActiveSearch = false)
+    {
+        $status = in_array($status, ['cancelled','withheld'], true) ? $status : 'all';
+        $search = trim($search);
+        $allowActiveSearch = $includeActiveSearch && $status === 'all' && $search !== '';
+
+        $query = DB::connection('exam')->table('written_results as w')
+            ->join('registrations as r', 'r.id', '=', 'w.registration_id')
+            ->when(! $allowActiveSearch, function ($q): void {
+                $q->where(function ($x): void {
+                    $x->whereIn('w.status', ['cancelled','withheld'])
+                        ->orWhereIn('r.status', ['cancelled','withheld']);
+                });
+            })
+            ->when($status !== 'all', function ($q) use ($status): void {
+                $q->where(function ($x) use ($status): void { $x->where('w.status', $status)->orWhere('r.status', $status); });
+            })
+            ->when($search !== '', function ($q) use ($search): void {
+                $needle = '%'.$search.'%';
+                $q->where(function ($x) use ($needle): void { $x->where('w.reg', 'like', $needle)->orWhere('w.user_id', 'like', $needle)->orWhere('r.name', 'like', $needle); });
+            })
+            ->select(['w.id','w.user_id','w.reg','r.name','r.status as registration_status','w.status as written_status','w.comment','w.last_edit_reason'])
+            ->selectRaw("CASE WHEN w.status IN ('cancelled','withheld') THEN w.status WHEN r.status IN ('cancelled','withheld') THEN r.status ELSE 'active' END as effective_disposition")
+            ->selectRaw("CASE WHEN w.status IN ('cancelled','withheld') AND r.status IN ('cancelled','withheld') THEN 'Written + Registration' WHEN w.status IN ('cancelled','withheld') THEN 'Written' WHEN r.status IN ('cancelled','withheld') THEN 'Registration' ELSE '—' END as disposition_source")
+            ->orderByRaw('CAST(w.reg AS UNSIGNED) ASC');
+        return $query;
     }
 
     private function csvMessages(mixed $value): string

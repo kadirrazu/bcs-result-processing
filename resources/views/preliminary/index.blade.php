@@ -6,7 +6,7 @@
 <div class="page-header d-print-none">
     <div class="container-xl"><div class="row g-2 align-items-center">
         <div class="col"><h2 class="page-title">Preliminary Processing</h2><div class="text-secondary">Import → Validation → Approval → Reconciliation → Cut-off → Finalization</div></div>
-        <div class="col-auto ms-auto d-flex gap-2"><a href="{{ route('preliminary.results.index') }}" class="btn btn-outline-primary">Preliminary Results</a><a href="{{ route('preliminary.template') }}" class="btn btn-outline-secondary">Download Import Template</a></div>
+        <div class="col-auto ms-auto d-flex gap-2"><a href="{{ route('preliminary.dispositions') }}" class="btn btn-outline-danger">Cancelled / Withheld <span class="badge bg-red-lt text-red ms-1">{{ number_format($counts['cancelled']) }}</span><span class="badge bg-yellow-lt text-yellow ms-1">{{ number_format($counts['withheld']) }}</span></a><a href="{{ route('preliminary.results.index') }}" class="btn btn-outline-primary">Preliminary Results</a><a href="{{ route('preliminary.template') }}" class="btn btn-outline-secondary">Download Import Template</a></div>
     </div></div>
 </div>
 
@@ -56,7 +56,7 @@
         <div class="card-header bg-light"><div><h3 class="card-title mb-1">Processing Status Board</h3><div class="text-secondary small">A quick view of where the Preliminary result currently stands · GMT+6 (Asia/Dhaka)</div></div></div>
         <div class="card-body py-2"><div class="row g-3 align-items-center"><div class="col-md-6"><span class="text-secondary me-2">Current Phase</span><span class="badge {{ \App\Support\PreliminaryStatusPresenter::badgeClass($state->status) }}">{{ \App\Support\PreliminaryStatusPresenter::label($state->status) }}</span></div><div class="col-md-6 text-md-end"><span class="text-secondary me-2">Latest background task</span><span class="badge {{ \App\Support\PreliminaryStatusPresenter::badgeClass($prelimRunStatus) }}">{{ $prelimRunStatus ? \App\Support\PreliminaryStatusPresenter::label($prelimRunStatus) : 'Not started' }}</span></div></div></div>
         <div class="table-responsive"><table class="table table-vcenter card-table mb-0"><tbody>
-            <tr><td class="fw-medium">Preliminary Import</td><td><span class="badge {{ \App\Support\PreliminaryStatusPresenter::badgeClass($latestBatch?->status) }}">{{ \App\Support\PreliminaryStatusPresenter::label($latestBatch?->status ?? 'not_started') }}</span></td><td>{{ $latestBatch ? number_format((int)$latestBatch->approved_rows).' approved rows' : '—' }}</td></tr>
+            <tr><td class="fw-medium">Preliminary Import</td><td><span class="badge {{ \App\Support\PreliminaryStatusPresenter::badgeClass($latestBatch?->status) }}">{{ \App\Support\PreliminaryStatusPresenter::label($latestBatch?->status ?? 'not_started') }}</span></td><td><div class="d-flex gap-2 flex-wrap align-items-center"><span>{{ $latestBatch ? number_format((int)$latestBatch->approved_rows).' approved rows' : '—' }}</span>@if($latestBatch && \App\Support\PreliminaryStatusPresenter::value($latestBatch->status)==='approved')<a href="{{ route('historical-punishments.screening.index',['phase'=>'preliminary_initial']) }}" class="btn btn-sm btn-outline-warning">Optional Initial Screening</a>@endif</div></td></tr>
             <tr><td class="fw-medium">Present / Absent Reconciliation</td><td><span class="badge {{ \App\Support\PreliminaryStatusPresenter::badgeClass($state->reconciliation_generated_at ? 'generated' : ($stateValue === 'reopened' ? 'reopened' : 'pending')) }}">{{ $state->reconciliation_generated_at ? 'Ready' : ($stateValue === 'reopened' ? 'Needs regeneration' : 'Pending') }}</span></td><td><div class="d-flex gap-2 flex-wrap">
 @can('process', App\Models\PreliminaryResult::class)
 @if($latestBatch && \App\Support\PreliminaryStatusPresenter::value($latestBatch->status)==='approved')<form method="post" action="{{ route('preliminary.reconciliation.generate') }}">@csrf<button class="btn btn-sm {{ $state->reconciliation_generated_at ? 'btn-outline-secondary' : 'btn-primary' }}">{{ $state->reconciliation_generated_at ? 'Regenerate' : 'Generate' }}</button></form>
@@ -94,7 +94,7 @@
 @else<span class="badge bg-secondary-lt text-secondary">Pending</span>
 @endif
 </td><td id="finalization-board-completed-at"><div class="d-flex gap-2 flex-wrap">
-@if($state->result_finalized_at)<a class="btn btn-sm btn-outline-success" href="{{ route('preliminary.final-result.combined') }}">Combined Result</a><a class="btn btn-sm btn-outline-success" href="{{ route('preliminary.final-result.category') }}">Category-wise Result</a><a class="btn btn-sm btn-outline-secondary" href="{{ route('preliminary.final-result.template') }}">Fill Result Template</a>
+@if($state->result_finalized_at)<a class="btn btn-sm btn-outline-success" href="{{ route('preliminary.final-result.combined') }}">Combined Result</a><a class="btn btn-sm btn-outline-success" href="{{ route('preliminary.final-result.category') }}">Category-wise Result</a><a class="btn btn-sm btn-outline-secondary" href="{{ route('preliminary.final-result.template') }}">Fill Result Template</a><a class="btn btn-sm btn-outline-warning" href="{{ route('historical-punishments.screening.index',['phase'=>'preliminary_final']) }}">Optional Finalized Screening</a>
 @else<span class="text-secondary">Complete the current Preliminary steps first.</span>
 @endif
 </div></td></tr>
@@ -123,6 +123,7 @@
     <div class="card mb-3">
         <div class="card-header"><div><h3 class="card-title mb-1">Reports &amp; Exports</h3><div class="text-secondary small">Common result, publishing and administrative outputs in one place. The same actions remain available on their detailed pages.</div></div></div>
         <div class="card-body">
+            <div class="d-flex gap-2 flex-wrap mb-3"><a class="btn btn-outline-danger" href="{{ route('preliminary.dispositions') }}">Cancelled / Withheld Candidates <span class="badge bg-red-lt text-red ms-1">{{ number_format($counts['cancelled']) }}</span><span class="badge bg-yellow-lt text-yellow ms-1">{{ number_format($counts['withheld']) }}</span></a></div>
             
 @if($state->result_finalized_at && !$state->cutoff_requires_review)
                 <div class="d-flex gap-2 flex-wrap mb-3"><a class="btn btn-outline-success" href="{{ route('preliminary.final-result.combined') }}">Combined Result</a><a class="btn btn-outline-success" href="{{ route('preliminary.final-result.category') }}">Category-wise Result</a><a class="btn btn-outline-secondary" href="{{ route('preliminary.final-result.template') }}">Fill Result Template</a></div>

@@ -49,6 +49,7 @@ final class WrittenRuleProcessingService
                 ->orderBy('id')
                 ->chunkById($chunkSize, function ($rows) use ($connection, $run, $total, $markWriteChunk, &$processed): void {
                     $ids = $rows->pluck('id')->map(fn ($id) => (int) $id)->all();
+                    $registrationStatuses = $connection->table('registrations')->whereIn('id', $rows->pluck('registration_id')->map(fn ($id) => (int) $id)->all())->pluck('status', 'id');
                     $allMarks = $connection->table('written_candidate_marks')
                         ->whereIn('written_result_id', $ids)
                         ->orderBy('written_result_id')
@@ -63,7 +64,7 @@ final class WrittenRuleProcessingService
 
                     foreach ($rows as $row) {
                         $marks = $allMarks->get((int) $row->id, collect())->keyBy('subject_code');
-                        [$candidateMarkPayload, $resultUpdate] = $this->processCandidateInMemory($row, $marks, $timestamp, $isoTimestamp);
+                        [$candidateMarkPayload, $resultUpdate] = $this->processCandidateInMemory($row, $marks, $timestamp, $isoTimestamp, (string) ($registrationStatuses[(int) $row->registration_id] ?? 'missing'));
                         array_push($markPayload, ...$candidateMarkPayload);
                         $resultPayload[] = $resultUpdate;
                         $processed++;
@@ -136,7 +137,7 @@ final class WrittenRuleProcessingService
      *
      * @return array{0:list<array<string,mixed>>,1:array<string,mixed>}
      */
-    private function processCandidateInMemory(object $row, $marks, string $timestamp, string $isoTimestamp): array
+    private function processCandidateInMemory(object $row, $marks, string $timestamp, string $isoTimestamp, string $registrationStatus): array
     {
         $category = (int) $row->cadre_category;
         $applicable = match ($category) {
@@ -146,7 +147,8 @@ final class WrittenRuleProcessingService
             default => [],
         };
 
-        $candidateIsActive = (string) $row->status === 'active';
+        $candidateIsActive = (string) $row->status === 'active' && $registrationStatus === 'active';
+        $effectiveExcludedStatus = (string) $row->status !== 'active' ? (string) $row->status : ($registrationStatus !== 'active' ? 'registration_'.$registrationStatus : null);
         $crashes = [];
 
         foreach ($marks as $code => $mark) {
@@ -195,8 +197,9 @@ final class WrittenRuleProcessingService
         $completelyAbsent = $allApplicable->isNotEmpty()
             && $allApplicable->every(fn ($mark) => $mark->attendance_status === 'absent');
 
-        $general = $this->evaluateTrack('general', $category, $marks, $completelyAbsent, (string) $row->status);
-        $technical = $this->evaluateTrack('technical', $category, $marks, $completelyAbsent, (string) $row->status);
+        $effectiveStatus = $candidateIsActive ? 'active' : ($effectiveExcludedStatus ?? 'excluded');
+        $general = $this->evaluateTrack('general', $category, $marks, $completelyAbsent, $effectiveStatus);
+        $technical = $this->evaluateTrack('technical', $category, $marks, $completelyAbsent, $effectiveStatus);
         $qualified = $this->qualifiedTrack($category, $general['status'], $technical['status']);
 
         $existingFlags = json_decode((string) ($row->processing_flags ?? ''), true) ?: [];
@@ -204,7 +207,8 @@ final class WrittenRuleProcessingService
             'paper_crash' => array_values(array_unique($crashes)),
             'completely_absent' => $completelyAbsent,
             'processing_excluded' => ! $candidateIsActive,
-            'processing_excluded_status' => $candidateIsActive ? null : (string) $row->status,
+            'processing_excluded_status' => $candidateIsActive ? null : $effectiveExcludedStatus,
+            'registration_status_at_processing' => $registrationStatus,
             'general' => $general['flags'],
             'technical' => $technical['flags'],
             'rules_processed_at' => $isoTimestamp,

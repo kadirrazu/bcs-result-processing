@@ -11,7 +11,7 @@
         @endcan
 
         @can('viewAny', \App\Models\CadreMaster::class)
-            <li class="nav-item dropdown {{ request()->routeIs(['cadre-masters.*', 'cadre-sub-masters.*', 'bachelor-subjects.*', 'post-related-subjects.*', 'master-data.*', 'registration-masters.*', 'previous-bcs-repository.*']) ? 'active' : '' }}">
+            <li class="nav-item dropdown {{ request()->routeIs(['cadre-masters.*', 'cadre-sub-masters.*', 'bachelor-subjects.*', 'post-related-subjects.*', 'master-data.*', 'registration-masters.*', 'previous-bcs-repository.*', 'historical-punishments.*']) ? 'active' : '' }}">
                 <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" role="button" aria-expanded="false">
                     <span class="nav-link-title">Master Data</span>
                 </a>
@@ -32,6 +32,7 @@
                     <div class="dropdown-divider"></div>
                     <h6 class="dropdown-header">Historical Data</h6>
                     <a class="dropdown-item {{ request()->routeIs('previous-bcs-repository.*') ? 'active' : '' }}" href="{{ route('previous-bcs-repository.index') }}">Previous BCS Repository</a>
+                    <a class="dropdown-item {{ request()->routeIs('historical-punishments.*') ? 'active' : '' }}" href="{{ route('historical-punishments.index') }}">Historical Punishment Repository</a>
                 </div>
             </li>
             

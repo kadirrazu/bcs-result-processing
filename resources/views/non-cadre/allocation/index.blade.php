@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('content')
 <div class="container-xl">
-    <div class="page-header mb-4"><div class="row align-items-center"><div class="col"><div class="page-pretitle">Non-Cadre Processing · NC4</div><h2 class="page-title">NC4 — Non-Cadre Allocation</h2><div class="text-secondary mt-1">Input Freeze → Phase-1 MQ + Quota → Phase-2 Shifting + NM → Validation → Finalization</div></div></div></div>
+    <div class="page-header mb-4"><div class="row align-items-center g-2"><div class="col"><div class="page-pretitle">Non-Cadre Processing · NC4</div><h2 class="page-title">NC4 — Non-Cadre Allocation</h2><div class="text-secondary mt-1">Input Freeze → Phase-1 MQ + Quota → Phase-2 Shifting + NM → Validation → Finalization</div></div><div class="col-auto"><a class="btn btn-outline-warning" href="{{ route('historical-punishments.screening.index',['phase'=>'noncadre_final']) }}">Optional Punishment Screening</a></div></div></div>
     @if(session('success'))<div class="alert alert-success mb-4">{{ session('success') }}</div>@endif
     @if($errors->any())<div class="alert alert-danger mb-4">{{ $errors->first() }}</div>@endif
 

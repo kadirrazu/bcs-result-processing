@@ -27,9 +27,12 @@ Route::middleware('auth')->group(function () {
 
     require __DIR__.'/previous-bcs-repository.php';
 
+    require __DIR__.'/historical-punishments.php';
+
     require __DIR__.'/registration-masters.php';
 
     Route::middleware(EnsureExaminationProcessingOpen::class)->group(function (): void {
+        require __DIR__.'/historical-punishment-screening.php';
         require __DIR__.'/overview.php';
         require __DIR__.'/registrations.php';
         require __DIR__.'/preliminary.php';

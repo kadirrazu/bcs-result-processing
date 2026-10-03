@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
         <tr>
             <td class="fw-medium">Written Marks Import</td>
             <td><span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass($latestBatch?->status) }}">{{ \App\Support\WrittenStatusPresenter::label($latestBatch?->status ?? 'not_started') }}</span></td>
-            <td>{{ $latestBatch ? number_format((int)$latestBatch->approved_rows).' approved rows' : '—' }}</td>
+            <td>{{ $latestBatch ? number_format((int)$latestBatch->approved_rows).' approved rows' : '—' }} @if($latestBatch && strtolower((string)$latestBatch->status)==='approved')<a href="{{ route('historical-punishments.screening.index',['phase'=>'written_initial']) }}" class="btn btn-sm btn-outline-warning ms-2">Optional Initial Screening</a>@endif</td>
         </tr>
         <tr>
             <td class="fw-medium">Eligible / Appeared / Absent</td>
@@ -68,11 +68,12 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
         <tr>
             <td class="fw-medium">Paper Crash &amp; Track Processing</td>
             <td>@if(in_array($runStatus, ['queued','running'], true))<span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass($runStatus) }}">{{ \App\Support\WrittenStatusPresenter::label($runStatus) }}</span>@elseif($runStatus === 'failed')<span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass('failed') }}">Failed</span>@elseif($state->paper_crash_processed_at)<span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass('completed') }}">Completed</span>@else<span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass('pending') }}">Pending</span>@endif</td>
-            <td class="d-flex gap-2 flex-wrap">@if($state->reconciliation_generated_at && !$state->paper_crash_processed_at && !in_array($runStatus,['queued','running'],true))<form method="post" action="{{ route('written.rules.process') }}">@csrf<button class="btn btn-sm btn-primary">Process Written Rules</button></form>@endif @if($state->paper_crash_processed_at)<a href="{{ route('written.paper-crashes') }}" class="btn btn-sm btn-outline-warning">Paper Crash Report</a><a href="{{ route('written.high-marks') }}" class="btn btn-sm btn-outline-azure">High-mark Review</a><a href="{{ route('written.results') }}" class="btn btn-sm btn-outline-primary">Processed Results</a>@if(!in_array($runStatus,['queued','running'],true))<form method="post" action="{{ route('written.rules.process') }}">@csrf<button class="btn btn-sm btn-outline-secondary">Reprocess Rules</button></form>@endif @endif</td>
+            <td><div class="d-flex gap-2 flex-wrap">@if($state->reconciliation_generated_at && !$state->paper_crash_processed_at && !in_array($runStatus,['queued','running'],true))<form method="post" action="{{ route('written.rules.process') }}">@csrf<button class="btn btn-sm btn-primary">Process Written Rules</button></form>@endif @if($state->paper_crash_processed_at)<a href="{{ route('written.paper-crashes') }}" class="btn btn-sm btn-outline-warning">Paper Crash Report</a><a href="{{ route('written.high-marks') }}" class="btn btn-sm btn-outline-azure">High-mark Review</a><a href="{{ route('written.results') }}" class="btn btn-sm btn-outline-primary">Processed Results</a>@if(!in_array($runStatus,['queued','running'],true))<form method="post" action="{{ route('written.rules.process') }}">@csrf<button class="btn btn-sm btn-outline-secondary">Reprocess Rules</button></form>@endif @endif</div></td>
         </tr>
         <tr>
             <td class="fw-medium">Final Written Result</td>
             <td>
+                <div class="mb-2"><a class="btn btn-sm btn-outline-danger" href="{{ route('written.dispositions') }}">Cancelled / Withheld Candidates <span class="badge bg-red-lt text-red ms-1">{{ number_format($counts['cancelled']) }}</span><span class="badge bg-yellow-lt text-yellow ms-1">{{ number_format($counts['withheld']) }}</span></a></div>
                 @if($state->result_finalized_at && !$state->is_stale)
                     <span class="badge {{ \App\Support\WrittenStatusPresenter::badgeClass('completed') }}">Finalized</span>
                 @elseif($state->paper_crash_processed_at && !$state->is_stale)
@@ -86,7 +87,7 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
                     <div class="d-flex gap-2 flex-wrap">
                         <a class="btn btn-sm btn-outline-primary" href="{{ route('written.final-result.combined') }}">Combined Result</a>
                         <a class="btn btn-sm btn-outline-primary" href="{{ route('written.final-result.category') }}">Category-wise Result</a>
-                        <a class="btn btn-sm btn-outline-secondary" href="{{ route('written.failure-reasons') }}">Failure Reasons</a><a class="btn btn-sm btn-outline-success" href="{{ route('written.final-result.template') }}">Fill Result Template</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ route('written.failure-reasons') }}">Failure Reasons</a><a class="btn btn-sm btn-outline-success" href="{{ route('written.final-result.template') }}">Fill Result Template</a><a class="btn btn-sm btn-outline-warning" href="{{ route('historical-punishments.screening.index',['phase'=>'written_final']) }}">Optional Finalized Screening</a>
                     </div>
                 @elseif($state->paper_crash_processed_at && !$state->is_stale && !in_array($runStatus,['queued','running'],true))
                     <form method="post" action="{{ route('written.finalize') }}" class="row g-2 align-items-end">@csrf
@@ -105,6 +106,7 @@ document.addEventListener('DOMContentLoaded',()=>{const panel=document.getElemen
 <div class="card-header"><div><h3 class="card-title mb-1">Reports &amp; Exports</h3><div class="text-secondary small">Central shortcuts for result, review and administrative outputs. The same actions remain available on their detailed pages.</div></div></div>
 <div class="card-body">
     <div class="d-flex gap-2 flex-wrap mb-3">
+        <a class="btn btn-outline-danger" href="{{ route('written.dispositions') }}">Cancelled / Withheld Candidates <span class="badge bg-red-lt text-red ms-1">{{ number_format($counts['cancelled']) }}</span><span class="badge bg-yellow-lt text-yellow ms-1">{{ number_format($counts['withheld']) }}</span></a>
         @if($state->paper_crash_processed_at)
             <a class="btn btn-outline-warning" href="{{ route('written.paper-crashes') }}">Paper Crash Report</a>
             <a class="btn btn-outline-azure" href="{{ route('written.high-marks') }}">High-mark Review</a>

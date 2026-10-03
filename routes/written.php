@@ -39,6 +39,10 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::get('/high-mark-review/export.xlsx', [WrittenController::class, 'highMarksXlsx'])->name('high-marks.xlsx');
         Route::get('/high-mark-review/export.csv', [WrittenController::class, 'highMarksCsv'])->name('high-marks.csv');
         Route::get('/exports/xlsx', [WrittenController::class, 'administrativeExportXlsx'])->name('exports.xlsx');
+        Route::get('/dispositions', [WrittenController::class, 'dispositions'])->name('dispositions');
+        Route::get('/dispositions/export.xlsx', [WrittenController::class, 'dispositionsXlsx'])->name('dispositions.xlsx');
+        Route::get('/dispositions/export.csv', [WrittenController::class, 'dispositionsCsv'])->name('dispositions.csv');
+        Route::put('/dispositions/{result}', [WrittenController::class, 'updateDisposition'])->name('dispositions.update');
         Route::get('/results', [WrittenController::class, 'results'])->name('results');
         Route::get('/results/{result}', [WrittenController::class, 'show'])->name('results.show');
         Route::get('/results/{result}/edit', [WrittenController::class, 'edit'])->name('results.edit');

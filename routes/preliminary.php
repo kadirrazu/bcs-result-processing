@@ -40,6 +40,11 @@ Route::middleware([EnsureExaminationSelected::class, ConfigureExaminationConnect
         Route::post('/final-result/fill-template', [PreliminaryController::class, 'generateFinalResultTemplate'])->name('final-result.template.generate');
         Route::get('/exports/xlsx', [PreliminaryController::class, 'administrativeExportXlsx'])->name('exports.xlsx');
 
+        Route::get('/dispositions', [PreliminaryController::class, 'dispositions'])->name('dispositions');
+        Route::get('/dispositions/export.xlsx', [PreliminaryController::class, 'dispositionsXlsx'])->name('dispositions.xlsx');
+        Route::get('/dispositions/export.csv', [PreliminaryController::class, 'dispositionsCsv'])->name('dispositions.csv');
+        Route::put('/dispositions/{result}', [PreliminaryController::class, 'updateDisposition'])->name('dispositions.update');
+
         Route::get('/results', [PreliminaryController::class, 'results'])->name('results.index');
         Route::get('/results/{result}/edit', [PreliminaryController::class, 'edit'])->name('results.edit');
         Route::put('/results/{result}', [PreliminaryController::class, 'update'])->name('results.update');
