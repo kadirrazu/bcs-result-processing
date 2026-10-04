@@ -131,3 +131,64 @@ php artisan serve
 
 Then open the application in your browser and select/configure the
 examination you want to work with.
+
+## Stable Development Workflow
+
+For normal day-to-day development, keep dependency versions reproducible by using the committed lock files. After pulling the latest project changes, use the following workflow:
+
+```bash
+git pull origin master
+
+composer install
+npm install
+
+php artisan migrate
+php artisan examination:migrate   # Run when new examination migrations are available
+php artisan optimize:clear
+```
+
+When you want a stricter clean frontend dependency installation from the committed `package-lock.json`, you may use `npm ci` instead of `npm install`:
+
+```bash
+npm ci
+```
+
+After dependency or frontend-related changes, verify the project before committing/pushing:
+
+```bash
+php artisan test
+npm run build
+```
+
+### Dependency Update Rule
+
+Do **not** run `composer update` or `npm update` as a routine step on every pull or development session.
+
+- `composer install` installs the versions recorded in `composer.lock`.
+- `npm install` installs dependencies using `package-lock.json` and is appropriate for normal local development.
+- `npm ci` performs a clean, reproducible installation strictly from `package-lock.json` and is useful for clean verification/CI-style installs.
+- `composer update` intentionally resolves newer allowed Composer package versions and may modify `composer.lock`.
+- `npm update` intentionally updates allowed npm package versions and may modify `package-lock.json`.
+
+Treat `composer update` and `npm update` as deliberate dependency-maintenance tasks. When they are intentionally run, review the changed lock files and run the full verification commands before committing them:
+
+```bash
+php artisan optimize:clear
+php artisan test
+npm run build
+
+git status
+git add composer.lock package-lock.json
+git commit -m "Update Composer and npm dependencies"
+git push origin master
+```
+
+If a dependency update was accidental and you do not want to keep the resulting lock-file changes, restore the repository versions before pulling other changes:
+
+```bash
+git restore composer.lock package-lock.json
+composer install
+npm install
+```
+
+Always review `git status` before committing or pulling so that unintended local changes are not lost or allowed to block a later `git pull`.
